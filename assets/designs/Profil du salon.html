@@ -1,0 +1,714 @@
+<html lang="en">
+
+  <head>
+    <script>
+      window.FontAwesomeConfig = {
+        autoReplaceSvg: 'nest'
+      };
+    </script>
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salon Élite 2 - Salon Profile Page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme:
+        {
+          extend:
+          {
+            colors:
+            {
+              brand:
+              {
+                primary: '#1d4ed8',
+                /* Consistent Blue */
+                secondary: '#f59e0b',
+                /* Consistent Amber */
+                dark: '#0f172a',
+                /* Slate 900 */
+                light: '#f8fafc',
+                /* Slate 50 */
+                surface: '#ffffff',
+                /* Pure White */
+                border: '#e2e8f0',
+                /* Slate 200 */
+                text: '#334155',
+                /* Slate 700 */
+                muted: '#64748b',
+                /* Slate 500 */
+                success: '#10b981',
+                danger: '#ef4444'
+              }
+            },
+            fontFamily:
+            {
+              sans: ['Inter', 'sans-serif'],
+            },
+            boxShadow:
+            {
+              'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+              'glow': '0 0 15px rgba(29, 78, 216, 0.15)',
+              'float': '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01)',
+            }
+          }
+        }
+      }
+    </script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"
+      crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap"
+      rel="stylesheet">
+    <style>
+      body
+      {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafc;
+        /* Slate 50 - Light Background */
+        color: #1e293b;
+        /* Slate 800 - Dark Text */
+        overflow-x: hidden;
+      }
+
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar
+      {
+        width: 6px;
+        height: 6px;
+      }
+
+      ::-webkit-scrollbar-track
+      {
+        background: #e2e8f0;
+      }
+
+      ::-webkit-scrollbar-thumb
+      {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover
+      {
+        background: #94a3b8;
+      }
+
+      .hide-scrollbar::-webkit-scrollbar
+      {
+        display: none;
+      }
+
+      .hide-scrollbar
+      {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      /* Map Grayscale Override */
+      .map-grayscale
+      {
+        filter: grayscale(100%) opacity(0.6);
+      }
+    </style>
+    <style data-grapesjs-styles="true">
+      #ituj9j
+      {
+        background-image: url("https://images.unsplash.com/photo-1560066984-138dadb4c035?q=80&w=2070&auto=format&fit=crop");
+      }
+
+      #ivo4qg
+      {
+        background-image: url("https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1000&auto=format&fit=crop");
+      }
+    </style>
+  </head>
+
+  <body
+    class="antialiased selection:bg-brand-primary/10 selection:text-brand-primary h-screen flex flex-col lg:flex-row overflow-hidden bg-[#f8fafc]">
+    <!-- Mobile Navigation Overlay -->
+    <div id="mobile-menu-overlay"
+      class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden lg:hidden transition-opacity">
+    </div><!-- Mobile Bottom Navigation -->
+    <div
+      class="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-brand-border z-50 px-6 py-3 flex justify-between items-center shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+      <a href="#"
+        class="flex flex-col items-center gap-1 text-brand-muted hover:text-brand-primary transition-colors"><i
+          class="fa-solid fa-grid-2 text-xl"></i><span
+          class="text-[10px] font-medium">Home</span></a><a href="#"
+        class="flex flex-col items-center gap-1 text-brand-muted hover:text-brand-primary transition-colors"><i
+          class="fa-regular fa-calendar text-xl"></i><span
+          class="text-[10px] font-medium">Calendar</span></a>
+      <div class="relative -mt-8"><button
+          class="w-12 h-12 rounded-full bg-white border border-brand-border text-brand-muted shadow-lg flex items-center justify-center transition-transform active:scale-95"><i
+            class="fa-solid fa-users text-lg"></i></button></div><a href="#"
+        class="flex flex-col items-center gap-1 text-brand-muted hover:text-brand-primary transition-colors"><i
+          class="fa-solid fa-message text-xl"></i><span
+          class="text-[10px] font-medium">Messages</span></a><a href="#"
+        class="flex flex-col items-center gap-1 text-brand-muted hover:text-brand-primary transition-colors"><i
+          class="fa-solid fa-gear text-xl"></i><span
+          class="text-[10px] font-medium">Settings</span></a>
+    </div><!-- Sidebar Navigation -->
+    <aside id="sidebar"
+      class="fixed lg:relative top-0 left-0 z-50 h-full w-72 bg-white border-r border-brand-border transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col flex-shrink-0 shadow-soft">
+      <!-- Logo Area -->
+      <div
+        class="p-6 border-b border-brand-border flex items-center justify-between bg-white">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center text-white font-bold text-xl shadow-glow">
+            SÉ
+          </div>
+          <div>
+            <h1 class="font-bold text-lg tracking-tight text-brand-dark">Salon
+              Élite</h1>
+            <p class="text-xs text-brand-muted">Owner Portal</p>
+          </div>
+        </div><button id="close-sidebar"
+          class="lg:hidden text-brand-muted hover:text-brand-dark transition-colors"><i
+            class="fa-solid fa-xmark text-xl"></i></button>
+      </div><!-- Navigation Links -->
+      <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-1 bg-white">
+        <div
+          class="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4 px-2">
+          Main Menu</div><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-solid fa-grid-2 w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Owner
+            Dashboard</span></a><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-regular fa-calendar w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Appointment
+            Calendar</span></a><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-solid fa-chart-pie w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Analytics
+            Overview</span></a><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-solid fa-boxes-stacked w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Inventory
+            &amp; Stock</span></a><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-regular fa-message w-5 text-center group-hover:text-brand-primary transition-colors"></i>
+          <div class="flex-1 flex justify-between items-center"><span>Messages
+              Inbox</span><span
+              class="bg-brand-light text-brand-text text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-brand-border">3</span>
+          </div>
+        </a><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-solid fa-users w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Customer
+            CRM</span></a>
+        <div
+          class="mt-8 text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4 px-2">
+          System</div><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl text-brand-text hover:bg-brand-light hover:text-brand-primary transition-all group"><i
+            class="fa-solid fa-gear w-5 text-center group-hover:text-brand-primary transition-colors"></i><span>Settings</span></a>
+        <!-- Active State for Profile Page --><a href="#"
+          class="flex items-center gap-3 px-4 py-3 rounded-xl bg-brand-primary text-white font-medium shadow-glow transition-all group"><i
+            class="fa-solid fa-store w-5 text-center"></i><span>Salon Profile
+            Page</span></a>
+      </nav><!-- User Profile -->
+      <div class="p-4 border-t border-brand-border bg-white"><button
+          class="flex items-center gap-3 w-full p-2 rounded-xl hover:bg-brand-light transition-colors text-left"><img
+            src="https://storage.googleapis.com/uxpilot-auth.appspot.com/59699417a2-8f041314155cedef0aa2.png"
+            alt="Owner Avatar"
+            class="w-10 h-10 rounded-full border-2 border-brand-light object-cover">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-brand-dark truncate">Sarah
+              Jenkins</p>
+            <p class="text-xs text-brand-muted truncate">Owner • Salon Élite</p>
+          </div><i
+            class="fa-solid fa-chevron-right text-xs text-brand-muted"></i>
+        </button></div>
+    </aside><!-- Main Content Area -->
+    <main
+      class="flex-1 flex flex-col h-full relative bg-[#f8fafc] overflow-hidden">
+      <!-- Header -->
+      <header id="header"
+        class="flex-shrink-0 bg-white/90 backdrop-blur-md border-b border-brand-border px-4 md:px-6 h-16 flex items-center justify-between z-30">
+        <div class="flex items-center gap-3 md:gap-4"><button
+            id="mobile-menu-btn"
+            class="lg:hidden text-brand-text hover:text-brand-dark p-2 -ml-2 rounded-lg hover:bg-brand-light"><i
+              class="fa-solid fa-bars text-lg"></i></button>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-semibold text-brand-dark">Salon Profile Page
+            </h1><span
+              class="hidden sm:inline-block px-2 py-0.5 rounded-full bg-brand-success/10 border border-brand-success/20 text-brand-success text-[10px] font-bold uppercase tracking-wider">Live
+              Preview</span>
+          </div>
+        </div><!-- Header Actions -->
+        <div class="flex items-center gap-3"><button
+            class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-brand-border bg-white text-xs font-medium text-brand-text hover:text-brand-dark hover:bg-brand-light transition-colors shadow-sm"><i
+              class="fa-solid fa-share-nodes"></i>
+            Share Profile
+          </button><button
+            class="w-9 h-9 rounded-lg flex items-center justify-center text-brand-primary hover:bg-brand-primary/10 hover:text-brand-primary transition-colors border border-brand-primary/30 bg-white"><i
+              class="fa-solid fa-pen"></i></button></div>
+      </header><!-- Scrollable Content -->
+      <div class="flex-1 overflow-y-auto relative">
+        <!-- Hero Section -->
+        <div id="hero-section"
+          class="relative h-[400px] sm:h-64 md:h-80 w-full bg-brand-light">
+          <!-- Cover Image -->
+          <div id="ituj9j" class="absolute inset-0 bg-cover bg-center"></div>
+          <!-- Stronger Gradient Overlay for Contrast -->
+          <div
+            class="absolute inset-0 bg-gradient-to-t from-[#f8fafc] via-[#f8fafc]/95 to-[#0f172a]/40">
+          </div><!-- Profile Overlay Content -->
+          <div id="ijwj81"
+            class="absolute bottom-0 left-0 right-0 px-4 md:px-8 pb-6 md:pb-8 pt-20 sm:pt-0">
+            <div
+              class="max-w-5xl mx-auto flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <!-- Logo Avatar -->
+              <div class="relative shrink-0">
+                <div
+                  class="w-24 h-24 md:w-32 md:h-32 rounded-2xl bg-white border-4 border-white shadow-2xl overflow-hidden flex items-center justify-center relative z-10">
+                  <span
+                    class="text-3xl md:text-4xl font-bold text-brand-primary">SÉ</span>
+                </div>
+                <div title="Open Now"
+                  class="absolute bottom-2 right-2 w-5 h-5 bg-brand-success border-2 border-white rounded-full z-20">
+                </div>
+              </div>
+              <!-- Text Info with Shadow/Background for extra legibility -->
+              <div class="flex-1">
+                <div
+                  class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+                  <div
+                    class="bg-white/90 backdrop-blur-md p-4 rounded-xl border border-white/60 shadow-lg">
+                    <h1
+                      class="text-2xl md:text-3xl lg:text-4xl font-bold text-brand-dark mb-1 drop-shadow-sm">
+                      Salon Élite</h1>
+                    <div
+                      class="flex items-center gap-2 text-xs md:text-sm text-brand-text mb-2 md:mb-3">
+                      <i
+                        class="fa-solid fa-location-dot text-brand-primary"></i><span
+                        class="line-clamp-1">123 Fashion Ave, Suite 400, New
+                        York, NY</span></div>
+                    <div
+                      class="flex flex-wrap items-center gap-3 md:gap-4 text-xs">
+                      <div class="flex items-center gap-1 text-brand-secondary">
+                        <i class="fa-solid fa-star"></i><span
+                          class="font-bold text-brand-dark">4.9</span><span
+                          class="text-brand-muted">(128 reviews)</span></div>
+                      <span
+                        class="hidden sm:inline text-brand-border">|</span><span
+                        class="text-brand-success font-medium">Open
+                        Now</span><span class="text-brand-muted">• Closes 8
+                        PM</span>
+                    </div>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-3"><button
+                      class="w-full sm:w-auto bg-white hover:bg-brand-light text-brand-dark border border-brand-border px-6 py-3 md:py-3.5 rounded-xl text-sm font-medium transition-colors shadow-sm active:scale-95"><i
+                        class="fa-regular fa-heart mr-1.5 text-brand-muted"></i>
+                      Save
+                    </button><button
+                      class="w-full sm:w-auto bg-brand-primary hover:bg-blue-700 text-white px-8 py-3 md:py-3.5 rounded-xl text-sm font-semibold transition-colors shadow-glow flex items-center justify-center gap-2 active:scale-95">
+                      Book Now <i
+                        class="fa-solid fa-chevron-right text-xs"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div><!-- Main Content Grid -->
+        <div
+          class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 md:mt-0 mt-3.5"
+          id="i6p6lv">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column (Description, Gallery, Reviews) -->
+            <div class="lg:col-span-2 space-y-8">
+              <!-- About Section -->
+              <section
+                class="bg-white rounded-2xl p-6 border border-brand-border shadow-soft">
+                <h2 class="text-lg font-bold text-brand-dark mb-3">About Us</h2>
+                <p class="text-brand-muted text-sm leading-relaxed mb-4">
+                  Welcome to Salon Élite, where luxury meets style. Our team of
+                  expert stylists is dedicated to providing you with the
+                  ultimate beauty experience. From precision cuts to vibrant
+                  coloring and rejuvenating spa treatments, we tailor every
+                  service to your unique needs. Step into our modern, relaxing
+                  atmosphere and let us transform your look today.
+                </p>
+                <div class="flex flex-wrap gap-2"><span
+                    class="px-3 py-1 rounded-full bg-brand-light border border-brand-border text-xs text-brand-text">Free
+                    Wi-Fi</span><span
+                    class="px-3 py-1 rounded-full bg-brand-light border border-brand-border text-xs text-brand-text">Parking
+                    Available</span><span
+                    class="px-3 py-1 rounded-full bg-brand-light border border-brand-border text-xs text-brand-text">Wheelchair
+                    Accessible</span><span
+                    class="px-3 py-1 rounded-full bg-brand-light border border-brand-border text-xs text-brand-text">Credit
+                    Cards Accepted</span></div>
+              </section><!-- Gallery Section -->
+              <section
+                class="bg-white rounded-2xl p-6 border border-brand-border shadow-soft">
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-lg font-bold text-brand-dark">Gallery</h2>
+                  <button
+                    class="text-xs text-brand-primary hover:text-blue-700 font-medium transition-colors">View
+                    All</button>
+                </div>
+                <div
+                  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div
+                    class="aspect-square rounded-xl overflow-hidden cursor-pointer group relative border border-brand-border">
+                    <img
+                      src="https://images.unsplash.com/photo-1522337360705-292cb1c37f3e?q=80&amp;w=1000&amp;auto=format&amp;fit=crop"
+                      alt="Salon Interior"
+                      class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                  </div>
+                  <div
+                    class="aspect-square rounded-xl overflow-hidden cursor-pointer group relative border border-brand-border">
+                    <img
+                      src="https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&amp;w=1000&amp;auto=format&amp;fit=crop"
+                      alt="Hair Products"
+                      class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                  </div>
+                  <div
+                    class="aspect-square rounded-xl overflow-hidden cursor-pointer group relative border border-brand-border">
+                    <img
+                      src="https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?q=80&amp;w=1000&amp;auto=format&amp;fit=crop"
+                      alt="Styling Tools"
+                      class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                  </div>
+                  <div
+                    class="aspect-square rounded-xl overflow-hidden cursor-pointer group relative border border-brand-border bg-brand-light flex items-center justify-center">
+                    <span
+                      class="text-xs font-medium text-brand-text group-hover:text-brand-primary transition-colors">+12
+                      more</span></div>
+                </div>
+              </section><!-- Services Menu -->
+              <section
+                class="bg-white rounded-2xl p-6 border border-brand-border shadow-soft">
+                <div class="flex items-center justify-between mb-6">
+                  <h2 class="text-lg font-bold text-brand-dark">Services Menu
+                  </h2>
+                </div><!-- Category Tabs -->
+                <div class="relative group mb-6">
+                  <div
+                    class="flex overflow-x-auto hide-scrollbar gap-2 pb-2 scroll-smooth">
+                    <button
+                      class="px-5 py-2.5 rounded-full bg-brand-primary text-white text-xs font-bold whitespace-nowrap shadow-sm">All
+                      Services</button><button
+                      class="px-5 py-2.5 rounded-full bg-white border border-brand-border text-brand-text hover:border-brand-primary hover:text-brand-primary text-xs font-medium whitespace-nowrap transition-colors">Haircuts</button><button
+                      class="px-5 py-2.5 rounded-full bg-white border border-brand-border text-brand-text hover:border-brand-primary hover:text-brand-primary text-xs font-medium whitespace-nowrap transition-colors">Coloring</button><button
+                      class="px-5 py-2.5 rounded-full bg-white border border-brand-border text-brand-text hover:border-brand-primary hover:text-brand-primary text-xs font-medium whitespace-nowrap transition-colors">Styling</button><button
+                      class="px-5 py-2.5 rounded-full bg-white border border-brand-border text-brand-text hover:border-brand-primary hover:text-brand-primary text-xs font-medium whitespace-nowrap transition-colors">Treatments</button>
+                  </div>
+                  <div
+                    class="absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none md:hidden">
+                  </div>
+                </div><!-- Service List -->
+                <div class="space-y-3">
+                  <!-- Service Item 1 -->
+                  <div
+                    class="group bg-brand-light hover:bg-blue-50/50 border border-brand-border hover:border-brand-primary/30 rounded-xl p-4 transition-all cursor-pointer">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                          <h3
+                            class="font-semibold text-brand-dark group-hover:text-brand-primary transition-colors">
+                            Women's Haircut &amp; Blow Dry</h3><span
+                            class="font-bold text-brand-dark">$85.00</span>
+                        </div>
+                        <p class="text-xs text-brand-muted mb-2 line-clamp-2">
+                          Includes consultation, shampoo, conditioning,
+                          precision cut, and professional blow-dry styling.</p>
+                        <div
+                          class="flex items-center gap-3 text-xs text-brand-muted">
+                          <span class="flex items-center gap-1"><i
+                              class="fa-regular fa-clock"></i> 60
+                            min</span><span
+                            class="w-1 h-1 rounded-full bg-brand-border"></span><span
+                            class="flex items-center gap-1"><i
+                              class="fa-solid fa-user-check"></i> Sarah,
+                            Mike</span></div>
+                      </div>
+                      <div class="ml-4 flex flex-col justify-center h-full">
+                        <button
+                          class="w-8 h-8 rounded-full bg-white border border-brand-border text-brand-primary shadow-sm hover:bg-brand-primary hover:text-white transition-colors flex items-center justify-center"><i
+                            class="fa-solid fa-plus"></i></button></div>
+                    </div>
+                  </div><!-- Service Item 2 -->
+                  <div
+                    class="group bg-brand-light hover:bg-blue-50/50 border border-brand-border hover:border-brand-primary/30 rounded-xl p-4 transition-all cursor-pointer">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                          <h3
+                            class="font-semibold text-brand-dark group-hover:text-brand-primary transition-colors">
+                            Full Balayage</h3><span
+                            class="font-bold text-brand-dark">$210.00</span>
+                        </div>
+                        <p class="text-xs text-brand-muted mb-2 line-clamp-2">
+                          Hand-painted highlights for a natural, sun-kissed
+                          look. Includes toner and blow-dry.</p>
+                        <div
+                          class="flex items-center gap-3 text-xs text-brand-muted">
+                          <span class="flex items-center gap-1"><i
+                              class="fa-regular fa-clock"></i> 180
+                            min</span><span
+                            class="w-1 h-1 rounded-full bg-brand-border"></span><span
+                            class="flex items-center gap-1"><i
+                              class="fa-solid fa-user-check"></i> Sarah</span>
+                        </div>
+                      </div>
+                      <div class="ml-4 flex flex-col justify-center h-full">
+                        <button
+                          class="w-8 h-8 rounded-full bg-white border border-brand-border text-brand-primary shadow-sm hover:bg-brand-primary hover:text-white transition-colors flex items-center justify-center"><i
+                            class="fa-solid fa-plus"></i></button></div>
+                    </div>
+                  </div><!-- Service Item 3 -->
+                  <div
+                    class="group bg-brand-light hover:bg-blue-50/50 border border-brand-border hover:border-brand-primary/30 rounded-xl p-4 transition-all cursor-pointer">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                          <h3
+                            class="font-semibold text-brand-dark group-hover:text-brand-primary transition-colors">
+                            Men's Haircut</h3><span
+                            class="font-bold text-brand-dark">$45.00</span>
+                        </div>
+                        <p class="text-xs text-brand-muted mb-2 line-clamp-2">
+                          Precision clipper or scissor cut, wash, and style.</p>
+                        <div
+                          class="flex items-center gap-3 text-xs text-brand-muted">
+                          <span class="flex items-center gap-1"><i
+                              class="fa-regular fa-clock"></i> 30
+                            min</span><span
+                            class="w-1 h-1 rounded-full bg-brand-border"></span><span
+                            class="flex items-center gap-1"><i
+                              class="fa-solid fa-user-check"></i> Mike</span>
+                        </div>
+                      </div>
+                      <div class="ml-4 flex flex-col justify-center h-full">
+                        <button
+                          class="w-8 h-8 rounded-full bg-white border border-brand-border text-brand-primary shadow-sm hover:bg-brand-primary hover:text-white transition-colors flex items-center justify-center"><i
+                            class="fa-solid fa-plus"></i></button></div>
+                    </div>
+                  </div>
+                </div><button
+                  class="w-full mt-4 py-3 text-xs font-medium text-brand-text hover:text-brand-primary border border-dashed border-brand-border hover:border-brand-primary rounded-xl transition-colors bg-white">
+                  Show all 24 services
+                </button>
+              </section><!-- Reviews Section -->
+              <section
+                class="bg-white rounded-2xl p-6 border border-brand-border shadow-soft">
+                <div class="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 class="text-lg font-bold text-brand-dark">Reviews</h2>
+                    <div class="flex items-center gap-2 mt-1">
+                      <div class="flex text-brand-secondary text-xs"><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i></div><span
+                        class="text-sm font-bold text-brand-dark">4.9</span><span
+                        class="text-xs text-brand-muted">• 128 reviews</span>
+                    </div>
+                  </div><button
+                    class="text-xs bg-white hover:bg-brand-light border border-brand-border text-brand-dark px-3 py-1.5 rounded-lg transition-colors shadow-sm">Write
+                    a Review</button>
+                </div>
+                <div class="space-y-4">
+                  <!-- Review 1 -->
+                  <div
+                    class="bg-brand-light rounded-xl p-4 border border-brand-border">
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-3">
+                        <div
+                          class="w-8 h-8 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-xs font-bold">
+                          JD</div>
+                        <div>
+                          <h4 class="text-sm font-medium text-brand-dark">Jane
+                            Doe</h4>
+                          <p class="text-[10px] text-brand-muted">2 days ago</p>
+                        </div>
+                      </div>
+                      <div class="flex text-brand-secondary text-[10px]"><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i></div>
+                    </div>
+                    <p class="text-xs text-brand-text leading-relaxed">Sarah is
+                      amazing! She understood exactly what I wanted and the
+                      result is better than I imagined. The salon atmosphere is
+                      so relaxing.</p>
+                  </div><!-- Review 2 -->
+                  <div
+                    class="bg-brand-light rounded-xl p-4 border border-brand-border">
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-3"><img
+                          src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg"
+                          class="w-8 h-8 rounded-full object-cover border border-brand-border">
+                        <div>
+                          <h4 class="text-sm font-medium text-brand-dark">Mark
+                            Smith</h4>
+                          <p class="text-[10px] text-brand-muted">1 week ago</p>
+                        </div>
+                      </div>
+                      <div class="flex text-brand-secondary text-[10px]"><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star"></i><i
+                          class="fa-solid fa-star-half-stroke"></i></div>
+                    </div>
+                    <p class="text-xs text-brand-text leading-relaxed">Great
+                      haircut, very professional staff. A bit pricey but worth
+                      it for the quality.</p>
+                  </div>
+                </div><button
+                  class="w-full mt-4 text-xs text-brand-primary hover:text-blue-700 font-medium transition-colors">View
+                  all reviews</button>
+              </section>
+            </div><!-- Right Column (Info Card, Map, Hours) -->
+            <div class="lg:col-span-1 space-y-6">
+              <!-- Contact Info Card -->
+              <div
+                class="bg-white border border-brand-border rounded-2xl p-5 md:p-6 shadow-soft sticky top-6">
+                <h3 class="text-sm font-bold text-brand-dark mb-4">Contact &amp;
+                  Location</h3>
+                <!-- Map Placeholder - Updated to show Map Image -->
+                <div
+                  class="w-full h-40 bg-brand-light rounded-xl mb-6 relative overflow-hidden group cursor-pointer border border-brand-border">
+                  <img
+                    src="https://api.mapbox.com/styles/v1/mapbox/light-v10/static/-73.9857,40.7484,14,0/600x300?access_token=placeholder"
+                    alt="Map" id="ivo4qg"
+                    class="absolute inset-0 w-full h-full object-cover map-grayscale group-hover:grayscale-0 transition-all duration-300">
+                  <div
+                    class="absolute inset-0 flex items-center justify-center">
+                    <div
+                      class="w-8 h-8 bg-brand-primary rounded-full flex items-center justify-center text-white shadow-glow animate-bounce">
+                      <i class="fa-solid fa-location-dot"></i></div>
+                  </div>
+                </div>
+                <div class="space-y-4">
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-brand-light flex items-center justify-center text-brand-muted shrink-0 border border-brand-border">
+                      <i class="fa-solid fa-location-dot"></i></div>
+                    <div>
+                      <p class="text-xs font-medium text-brand-dark">123 Fashion
+                        Ave, Suite 400</p>
+                      <p class="text-xs text-brand-muted">New York, NY 10001</p>
+                      <a href="#"
+                        class="text-[10px] text-brand-primary hover:underline mt-0.5 inline-block">Get
+                        Directions</a>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-brand-light flex items-center justify-center text-brand-muted shrink-0 border border-brand-border">
+                      <i class="fa-solid fa-phone"></i></div>
+                    <div>
+                      <p class="text-xs font-medium text-brand-dark">+1 (555)
+                        012-3456</p>
+                      <p class="text-[10px] text-brand-muted">Call for inquiries
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-brand-light flex items-center justify-center text-brand-muted shrink-0 border border-brand-border">
+                      <i class="fa-solid fa-globe"></i></div>
+                    <div>
+                      <p class="text-xs font-medium text-brand-dark">
+                        www.salonelite.com</p><a href="#"
+                        class="text-[10px] text-brand-primary hover:underline">Visit
+                        Website</a>
+                    </div>
+                  </div>
+                </div>
+                <hr class="border-brand-border my-5">
+                <h3 class="text-sm font-bold text-brand-dark mb-3">Opening Hours
+                </h3>
+                <div class="space-y-2 text-xs">
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Monday</span><span
+                      class="font-medium text-brand-dark">09:00 AM - 06:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Tuesday</span><span
+                      class="font-medium text-brand-dark">09:00 AM - 06:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Wednesday</span><span
+                      class="font-medium text-brand-dark">09:00 AM - 06:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Thursday</span><span
+                      class="font-medium text-brand-dark">09:00 AM - 08:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Friday</span><span
+                      class="font-medium text-brand-dark">09:00 AM - 08:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-text">
+                    <span>Saturday</span><span
+                      class="font-medium text-brand-dark">10:00 AM - 05:00
+                      PM</span></div>
+                  <div
+                    class="flex justify-between items-center text-brand-danger">
+                    <span>Sunday</span><span>Closed</span></div>
+                </div>
+                <div class="mt-6 pt-4 border-t border-brand-border">
+                  <h3 class="text-sm font-bold text-brand-dark mb-3">Social
+                    Media</h3>
+                  <div class="flex gap-3"><a href="#"
+                      class="w-8 h-8 rounded-lg bg-brand-light border border-brand-border flex items-center justify-center text-brand-text hover:text-brand-primary hover:border-brand-primary transition-colors"><i
+                        class="fa-brands fa-instagram"></i></a><a href="#"
+                      class="w-8 h-8 rounded-lg bg-brand-light border border-brand-border flex items-center justify-center text-brand-text hover:text-brand-primary hover:border-brand-primary transition-colors"><i
+                        class="fa-brands fa-facebook-f"></i></a><a href="#"
+                      class="w-8 h-8 rounded-lg bg-brand-light border border-brand-border flex items-center justify-center text-brand-text hover:text-brand-primary hover:border-brand-primary transition-colors"><i
+                        class="fa-brands fa-tiktok"></i></a></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div><!-- Floating Mobile Book Button -->
+        <div class="lg:hidden fixed bottom-20 left-4 right-4 z-30"><button
+            class="w-full bg-brand-primary text-white font-bold py-3.5 rounded-xl shadow-glow flex items-center justify-center gap-2">
+            Book Appointment
+            <i class="fa-solid fa-chevron-right text-sm"></i></button></div>
+        <!-- Footer Spacer -->
+        <div class="h-24 lg:h-8"></div>
+      </div>
+    </main>
+    <script>
+      // Mobile Menu Logic
+      const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+      const closeSidebarBtn = document.getElementById('close-sidebar');
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobile-menu-overlay');
+
+      function toggleMenu()
+      {
+        const isClosed = sidebar.classList.contains('-translate-x-full');
+        if (isClosed)
+        {
+          sidebar.classList.remove('-translate-x-full');
+          overlay.classList.remove('hidden');
+        }
+        else
+        {
+          sidebar.classList.add('-translate-x-full');
+          overlay.classList.add('hidden');
+        }
+      }
+
+      if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleMenu);
+      if (closeSidebarBtn) closeSidebarBtn.addEventListener('click',
+        toggleMenu);
+      if (overlay) overlay.addEventListener('click', toggleMenu);
+    </script>
+  </body>
+
+</html>

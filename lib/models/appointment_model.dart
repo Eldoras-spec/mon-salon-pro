@@ -1,0 +1,77 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class AppointmentModel {
+  final String id;
+  final String clientId;
+  final String salonId;
+  final String salonName;
+  final String serviceName;
+  final double price;
+  final DateTime dateTime;
+  final String status; // 'upcoming', 'completed', 'cancelled'
+  final DateTime createdAt;
+  final int durationMinutes;
+  final String? clientName;
+  final String? clientPhone;
+  final String? assignedMemberId;
+  final String? assignedMemberName;
+  final String? groupId; // links multi-service bookings together
+
+  AppointmentModel({
+    required this.id,
+    required this.clientId,
+    required this.salonId,
+    required this.salonName,
+    required this.serviceName,
+    required this.price,
+    required this.dateTime,
+    required this.status,
+    required this.createdAt,
+    this.durationMinutes = 30,
+    this.clientName,
+    this.clientPhone,
+    this.assignedMemberId,
+    this.assignedMemberName,
+    this.groupId,
+  });
+
+  factory AppointmentModel.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+    return AppointmentModel(
+      id: doc.id,
+      clientId: data['clientId'] ?? '',
+      salonId: data['salonId'] ?? '',
+      salonName: data['salonName'] ?? '',
+      serviceName: data['serviceName'] ?? '',
+      price: (data['price'] ?? 0.0).toDouble(),
+      dateTime: (data['dateTime'] as Timestamp).toDate(),
+      status: data['status'] ?? 'upcoming',
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      durationMinutes: data['durationMinutes'] ?? 30,
+      clientName: data['clientName'],
+      clientPhone: data['clientPhone'],
+      assignedMemberId: data['assignedMemberId'],
+      assignedMemberName: data['assignedMemberName'],
+      groupId: data['groupId'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'clientId': clientId,
+      'salonId': salonId,
+      'salonName': salonName,
+      'serviceName': serviceName,
+      'price': price,
+      'dateTime': Timestamp.fromDate(dateTime),
+      'status': status,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'durationMinutes': durationMinutes,
+      if (clientName != null) 'clientName': clientName,
+      if (clientPhone != null) 'clientPhone': clientPhone,
+      if (assignedMemberId != null) 'assignedMemberId': assignedMemberId,
+      if (assignedMemberName != null) 'assignedMemberName': assignedMemberName,
+      if (groupId != null) 'groupId': groupId,
+    };
+  }
+}

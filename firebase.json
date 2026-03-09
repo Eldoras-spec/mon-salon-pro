@@ -1,0 +1,29 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "monsalon",
+                    "appId": "1:402750428517:android:749b648b67a5da3123bd8c",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "monsalon",
+                    "configurations": {
+                        "android": "1:402750428517:android:749b648b67a5da3123bd8c",
+                        "ios": "1:402750428517:ios:837cab90ce985e8223bd8c"
+                    }
+                }
+            }
+        }
+    },
+    "functions": {
+        "source": "functions",
+        "runtime": "nodejs20",
+        "predeploy": [
+            "npm --prefix \"$RESOURCE_DIR\" run build"
+        ]
+    }
+}

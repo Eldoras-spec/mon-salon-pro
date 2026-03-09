@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salon Setup - Salon Élite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script> window.FontAwesomeConfig = { autoReplaceSvg: 'nest'};</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fdf2f8',
+                            100: '#fce7f3',
+                            200: '#fbcfe8',
+                            300: '#f9a8d4',
+                            400: '#f472b6',
+                            500: '#ec4899', // Pink base
+                            600: '#db2777',
+                            700: '#be185d',
+                            800: '#9d174d',
+                            900: '#831843',
+                            950: '#500724',
+                        },
+                        secondary: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Playfair Display"', 'serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(236, 72, 153, 0.15)',
+                        'input': '0 2px 10px rgba(0, 0, 0, 0.03)',
+                        'input-focus': '0 0 0 2px #fbcfe8, 0 4px 12px rgba(236, 72, 153, 0.1)',
+                        'card-hover': '0 10px 40px -10px rgba(236, 72, 153, 0.2)',
+                        'floating': '0 20px 40px -5px rgba(0, 0, 0, 0.1), 0 10px 20px -5px rgba(236, 72, 153, 0.1)',
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { display: none;}
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+        .animate-slide-up {
+            animation: slideUp 0.6s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .form-input {
+            transition: all 0.3s ease;
+        }
+        .form-input:focus {
+            border-color: #f472b6;
+            box-shadow: 0 0 0 4px rgba(244, 114, 182, 0.1);
+        }
+        /* Map placeholder pattern */
+        .bg-map-pattern {
+            background-color: #f8fafc;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23cbd5e1' fill-opacity='0.2'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+    </style>
+</head>
+<body class="bg-secondary-50 min-h-screen font-sans text-secondary-800">
+
+    <!-- Main Container: Full screen height, split layout for Desktop -->
+    <div id="setup-container" class="min-h-screen flex flex-col lg:flex-row w-full overflow-hidden relative">
+        
+        <!-- Left Side: Brand Visual (Consistent with login) -->
+        <div id="brand-section" class="relative w-full lg:w-1/2 h-[25vh] md:h-[35vh] lg:h-auto lg:min-h-screen bg-brand-900 overflow-hidden group">
+            <!-- Background Image with Overlay -->
+            <div class="absolute inset-0 bg-gradient-to-b from-brand-900/50 to-brand-950/80 z-10"></div>
+            <div class="absolute inset-0 z-0 scale-105 group-hover:scale-100 transition-transform duration-[3s] ease-out">
+               <img class="w-full h-full object-cover opacity-80 mix-blend-overlay" src="https://images.unsplash.com/photo-1633681926022-84c23e8cb2d6?q=80&w=2574&auto=format&fit=crop" alt="Elegant salon interior with modern design and warm lighting" />
+            </div>
+
+            <!-- Brand Content Overlay -->
+            <div class="relative z-20 h-full flex flex-col justify-between p-6 md:p-10 lg:p-16 text-white">
+                <!-- Logo Area -->
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-lg">
+                        <i class="fa-solid fa-spa text-white text-sm lg:text-lg"></i>
+                    </div>
+                    <span class="font-serif text-xl lg:text-3xl font-bold tracking-wide">Salon Élite</span>
+                </div>
+
+                <!-- Welcome Text (Desktop Only) -->
+                <div class="hidden lg:block mb-12 animate-fade-in">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
+                        <span class="w-2 h-2 rounded-full bg-brand-400 animate-pulse"></span>
+                        <span class="text-xs font-medium tracking-wide uppercase text-brand-100">Partner Onboarding</span>
+                    </div>
+                    <h1 class="font-serif text-4xl xl:text-5xl font-bold mb-6 leading-tight text-white">
+                        Let's build your <br> digital storefront.
+                    </h1>
+                    <p class="text-brand-100 text-lg max-w-md font-light leading-relaxed">
+                        Showcase your unique style and connect with clients who are looking for exactly what you offer.
+                    </p>
+                    
+                    <!-- Testimonial Mini Card -->
+                    <div class="mt-10 p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 max-w-sm animate-float">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="flex text-yellow-400 text-xs">
+                                <i class="fa-solid fa-star"></i>
+                                <i class="fa-solid fa-star"></i>
+                                <i class="fa-solid fa-star"></i>
+                                <i class="fa-solid fa-star"></i>
+                                <i class="fa-solid fa-star"></i>
+                            </div>
+                        </div>
+                        <p class="text-sm italic text-white/90 mb-3">"Setting up my profile was seamless. I started getting bookings within 24 hours of going live!"</p>
+                        <div class="flex items-center gap-2">
+                            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sarah J." class="w-6 h-6 rounded-full border border-white/50">
+                            <span class="text-xs font-medium text-white/80">Sarah J., Studio Owner</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Links (Desktop Only) -->
+                <div class="hidden lg:flex justify-between text-xs text-brand-200/80 font-medium tracking-wide">
+                    <span>Step 1 of 4: Basic Information</span>
+                    <div class="flex gap-4">
+                        <a href="#" class="hover:text-white transition-colors">Help Center</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Multi-step Form -->
+        <div id="form-section" class="w-full lg:w-1/2 flex flex-col bg-white h-full overflow-y-auto relative">
+            
+            <!-- Mobile Header Curve Design (Matches previous screen) -->
+            <div class="lg:hidden absolute top-0 left-0 w-full h-8 bg-brand-900 z-0"></div>
+            <div class="lg:hidden absolute top-0 left-0 w-full h-8 bg-white rounded-t-[30px] z-10 -mt-4 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"></div>
+
+            <div class="flex-grow flex flex-col px-4 sm:px-8 lg:px-16 xl:px-24 py-8 lg:py-12">
+                
+                <!-- Top Navigation & Progress -->
+                <div class="w-full max-w-lg mx-auto mb-8 flex flex-col gap-6 animate-slide-up" style="animation-delay: 0.05s;">
+                    <!-- Nav Row -->
+                    <div class="flex flex-row justify-between items-center">
+                        <a href="#" class="group flex items-center gap-2 text-sm font-semibold text-secondary-500 hover:text-brand-700 transition-colors">
+                            <div class="w-9 h-9 rounded-full bg-secondary-50 border border-secondary-100 group-hover:border-brand-200 group-hover:bg-brand-50 flex items-center justify-center transition-all duration-300 shadow-sm">
+                                <i class="fa-solid fa-arrow-left text-xs group-hover:-translate-x-0.5 transition-transform"></i>
+                            </div>
+                            <span class="hidden sm:inline">Back</span>
+                        </a>
+                        
+                        <a href="#" class="text-sm font-medium text-secondary-400 hover:text-brand-600 transition-colors">
+                            Save & Exit
+                        </a>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-end">
+                            <span class="text-sm font-bold text-brand-900">Salon Details</span>
+                            <span class="text-xs font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md">Step 1 of 4</span>
+                        </div>
+                        <div class="h-1.5 w-full bg-secondary-100 rounded-full overflow-hidden flex">
+                            <div class="h-full bg-brand-500 w-1/4 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]"></div>
+                            <!-- Upcoming steps visual placeholders -->
+                            <div class="h-full border-l-2 border-white w-1/4 bg-transparent"></div>
+                            <div class="h-full border-l-2 border-white w-1/4 bg-transparent"></div>
+                            <div class="h-full border-l-2 border-white w-1/4 bg-transparent"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full max-w-lg mx-auto">
+                    <!-- Section Header -->
+                    <div class="mb-8 animate-slide-up" style="animation-delay: 0.1s;">
+                        <h2 class="font-serif text-3xl md:text-4xl font-bold text-brand-950 mb-3">Tell us about your salon</h2>
+                        <p class="text-secondary-500 text-base leading-relaxed">Start by adding your business name, location, and a short description. This is what clients will see first.</p>
+                    </div>
+
+                    <!-- Form Content -->
+                    <form class="space-y-6 animate-slide-up" style="animation-delay: 0.2s;" action="#" method="POST">
+                        
+                        <!-- Salon Name -->
+                        <div class="space-y-1.5">
+                            <label for="salon_name" class="block text-sm font-bold text-secondary-700">Salon Name <span class="text-brand-500">*</span></label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-secondary-400 group-focus-within:text-brand-500 transition-colors">
+                                    <i class="fa-solid fa-store"></i>
+                                </div>
+                                <input type="text" id="salon_name" name="salon_name" placeholder="e.g. Luxe Beauty Lounge" required
+                                    class="form-input w-full pl-11 pr-4 py-3.5 rounded-xl border border-secondary-200 text-secondary-900 placeholder-secondary-400 focus:outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100 transition-all text-base bg-white shadow-input">
+                            </div>
+                        </div>
+
+                        <!-- Location Section -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <label for="location_search" class="block text-sm font-bold text-secondary-700">Location <span class="text-brand-500">*</span></label>
+                                <button type="button" class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1">
+                                    <i class="fa-solid fa-location-crosshairs"></i> Use current location
+                                </button>
+                            </div>
+                            
+                            <!-- Search Input -->
+                            <div class="relative group z-20">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-secondary-400 group-focus-within:text-brand-500 transition-colors">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </div>
+                                <input type="text" id="location_search" name="location_search" placeholder="Search address, city or zip code" 
+                                    class="form-input w-full pl-11 pr-4 py-3.5 rounded-xl border border-secondary-200 text-secondary-900 placeholder-secondary-400 focus:outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100 transition-all text-base bg-white shadow-input">
+                            </div>
+
+                            <!-- Map Preview (Interactive Placeholder) -->
+                            <div class="relative w-full h-48 md:h-64 rounded-xl overflow-hidden border border-secondary-200 shadow-sm group cursor-pointer">
+                                <div class="absolute inset-0 bg-map-pattern opacity-60"></div>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <div class="w-8 h-8 rounded-full bg-brand-500 shadow-lg shadow-brand-500/40 flex items-center justify-center animate-bounce">
+                                        <i class="fa-solid fa-location-dot text-white text-sm"></i>
+                                    </div>
+                                </div>
+                                <div class="absolute bottom-3 right-3 bg-white/90 backdrop-blur px-3 py-2 rounded-lg text-xs font-semibold text-secondary-600 shadow-sm border border-secondary-100 group-hover:bg-brand-50 group-hover:text-brand-700 transition-colors">
+                                    <i class="fa-solid fa-map-pin mr-1"></i> Adjust Pin
+                                </div>
+                            </div>
+                            <p class="text-xs text-secondary-400 flex items-start gap-1.5">
+                                <i class="fa-solid fa-circle-info text-brand-400 mt-0.5"></i>
+                                <span>Your precise location helps clients find you on the map. You can adjust the pin manually if needed.</span>
+                            </p>
+                        </div>
+
+                        <!-- Description -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label for="description" class="block text-sm font-bold text-secondary-700">Description</label>
+                                <span id="char-count" class="text-xs font-medium text-secondary-400">0/500</span>
+                            </div>
+                            <div class="relative">
+                                <textarea id="description" name="description" rows="4" placeholder="Tell clients what makes your salon special..." 
+                                    class="form-input w-full px-4 py-3.5 rounded-xl border border-secondary-200 text-secondary-900 placeholder-secondary-400 focus:outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100 transition-all text-base bg-white shadow-input resize-none"></textarea>
+                                <div class="absolute bottom-3 right-3 pointer-events-none text-secondary-300">
+                                    <i class="fa-solid fa-pen-nib"></i>
+                                </div>
+                            </div>
+                            <!-- Improved Mobile-Friendly Action Buttons -->
+                            <div class="flex flex-col sm:flex-row gap-2 mt-3 flex-wrap">
+                                <button type="button" class="w-full sm:w-auto text-sm px-4 py-2.5 rounded-full bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 font-semibold transition-all flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Generate with AI
+                                </button>
+                                <div class="flex gap-2 w-full sm:w-auto">
+                                    <button type="button" class="flex-1 sm:flex-none text-sm px-4 py-2.5 rounded-full bg-secondary-50 border border-secondary-200 text-secondary-600 hover:bg-secondary-100 font-medium transition-all">
+                                        Modern
+                                    </button>
+                                    <button type="button" class="flex-1 sm:flex-none text-sm px-4 py-2.5 rounded-full bg-secondary-50 border border-secondary-200 text-secondary-600 hover:bg-secondary-100 font-medium transition-all">
+                                        Cozy
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="pt-6 flex flex-col gap-4">
+                            <button type="submit" class="w-full py-4 px-6 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white font-bold rounded-xl shadow-soft hover:shadow-lg hover:shadow-brand-500/30 transform hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 group text-base">
+                                <span>Next Step</span>
+                                <i class="fa-solid fa-arrow-right text-sm group-hover:translate-x-1 transition-transform"></i>
+                            </button>
+                            
+                            <div class="text-center">
+                                <button type="button" class="text-sm font-semibold text-secondary-400 hover:text-brand-600 transition-colors">
+                                    Skip for now
+                                </button>
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Mobile Bottom Spacer -->
+            <div class="h-6 lg:hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Character Counter Logic
+            const textarea = document.getElementById('description');
+            const charCount = document.getElementById('char-count');
+            const maxChars = 500;
+
+            textarea.addEventListener('input', function() {
+                const currentLength = this.value.length;
+                charCount.textContent = `${currentLength}/${maxChars}`;
+                
+                if (currentLength > maxChars) {
+                    charCount.classList.add('text-red-500');
+                    charCount.classList.remove('text-secondary-400');
+                    this.classList.add('border-red-300', 'focus:border-red-500', 'focus:ring-red-100');
+                    this.classList.remove('focus:border-brand-400', 'focus:ring-brand-100');
+                } else {
+                    charCount.classList.remove('text-red-500');
+                    charCount.classList.add('text-secondary-400');
+                    this.classList.remove('border-red-300', 'focus:border-red-500', 'focus:ring-red-100');
+                    this.classList.add('focus:border-brand-400', 'focus:ring-brand-100');
+                }
+            });
+
+            // Form Submit Animation
+            const form = document.querySelector('form');
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const btn = this.querySelector('button[type="submit"]');
+                const originalContent = btn.innerHTML;
+                
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Saving...';
+                btn.classList.add('opacity-80', 'cursor-not-allowed');
+                
+                setTimeout(() => {
+                    // Simulate navigation to next step
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
+                    btn.classList.remove('from-brand-500', 'to-brand-600');
+                    btn.classList.add('bg-emerald-500');
+                    
+                    setTimeout(() => {
+                        alert('Proceeding to Step 2: Services & Pricing');
+                        btn.innerHTML = originalContent;
+                        btn.classList.add('from-brand-500', 'to-brand-600');
+                        btn.classList.remove('bg-emerald-500', 'opacity-80', 'cursor-not-allowed');
+                    }, 800);
+                }, 1200);
+            });
+
+            // AI Generate button interaction (Mock)
+            const aiBtn = document.querySelector('button:contains("Generate with AI")') || document.querySelector('.fa-pen-nib').closest('div').nextElementSibling.querySelector('button');
+            
+            if(aiBtn) {
+                aiBtn.addEventListener('click', function() {
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Writing...';
+                    
+                    setTimeout(() => {
+                        textarea.value = "Welcome to Luxe Beauty Lounge, where elegance meets expertise. Our team of certified professionals is dedicated to providing top-tier beauty services in a relaxing, modern atmosphere. We specialize in hair styling, premium skincare, and bespoke nail artistry.";
+                        
+                        // Trigger input event to update counter
+                        const event = new Event('input', { bubbles: true });
+                        textarea.dispatchEvent(event);
+                        
+                        this.innerHTML = originalText;
+                    }, 1500);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

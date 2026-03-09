@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Salon Élite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script> window.FontAwesomeConfig = { autoReplaceSvg: 'nest'};</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fdf2f8',
+                            100: '#fce7f3',
+                            200: '#fbcfe8',
+                            300: '#f9a8d4',
+                            400: '#f472b6',
+                            500: '#ec4899', // Pink base
+                            600: '#db2777',
+                            700: '#be185d',
+                            800: '#9d174d',
+                            900: '#831843',
+                            950: '#500724',
+                        },
+                        secondary: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Playfair Display"', 'serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(236, 72, 153, 0.15)',
+                        'input': '0 2px 10px rgba(0, 0, 0, 0.03)',
+                        'input-focus': '0 0 0 2px #fbcfe8, 0 4px 12px rgba(236, 72, 153, 0.1)',
+                        'card-hover': '0 10px 40px -10px rgba(236, 72, 153, 0.2)',
+                        'nav': '0 -4px 20px rgba(0,0,0,0.05)',
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { display: none;}
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .category-scroll-mask {
+            mask-image: linear-gradient(to right, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+        }
+
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-secondary-50 font-sans text-secondary-800 antialiased pb-24 md:pb-0">
+
+    <!-- Location Permission Modal (Initially hidden) -->
+    <div id="location-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-secondary-900/40 backdrop-blur-sm px-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-[scaleIn_0.3s_ease-out]">
+            <div class="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center mb-4 text-brand-600 mx-auto">
+                <i class="fa-solid fa-location-dot text-xl"></i>
+            </div>
+            <h3 class="text-xl font-serif font-bold text-center mb-2 text-secondary-900">Enable Location</h3>
+            <p class="text-secondary-500 text-center text-sm mb-6">Allow Salon Élite to access your location to find the best beauty services near you.</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="document.getElementById('location-modal').classList.add('hidden')" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-semibold transition-colors shadow-lg shadow-brand-500/30">Allow Access</button>
+                <button onclick="document.getElementById('location-modal').classList.add('hidden')" class="w-full py-3 text-secondary-500 font-medium hover:text-secondary-700">Not Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Desktop Navigation (Hidden on Mobile) -->
+    <nav class="hidden md:block sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-secondary-200">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <!-- Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-spa text-white text-lg"></i>
+                </div>
+                <span class="font-serif text-2xl font-bold tracking-wide text-secondary-900">Salon Élite</span>
+            </div>
+
+            <!-- Desktop Menu -->
+            <div class="flex items-center gap-8">
+                <a href="#" class="text-brand-600 font-semibold border-b-2 border-brand-600 py-1">Discovery</a>
+                <a href="#" class="text-secondary-500 hover:text-brand-600 font-medium transition-colors">Bookings</a>
+                <a href="#" class="text-secondary-500 hover:text-brand-600 font-medium transition-colors">Favorites</a>
+                <a href="#" class="text-secondary-500 hover:text-brand-600 font-medium transition-colors">Profile</a>
+            </div>
+
+            <!-- User Profile & Action -->
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <button class="w-10 h-10 rounded-full bg-secondary-100 flex items-center justify-center text-secondary-600 hover:bg-brand-50 hover:text-brand-600 transition-colors">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-3 pl-4 border-l border-secondary-200">
+                    <div class="text-right hidden lg:block">
+                        <p class="text-sm font-bold text-secondary-900">Sarah Johnson</p>
+                        <p class="text-xs text-secondary-500">Premium Member</p>
+                    </div>
+                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" alt="Profile" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-md">
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto md:px-6 md:py-8 min-h-screen">
+        
+        <!-- Mobile Header (Hidden on Desktop) -->
+        <header class="md:hidden pt-12 pb-4 px-6 bg-white sticky top-0 z-30 shadow-sm rounded-b-3xl">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <p class="text-secondary-500 text-sm font-medium mb-0.5">Good Morning,</p>
+                    <h1 class="font-serif text-2xl font-bold text-secondary-900">Sarah Johnson</h1>
+                </div>
+                <div class="flex gap-3">
+                    <button class="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center text-secondary-600 shadow-sm bg-white">
+                        <i class="fa-regular fa-bell"></i>
+                    </button>
+                    <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-1.jpg" alt="Profile" class="w-10 h-10 rounded-full object-cover border border-secondary-100 shadow-sm">
+                </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="relative group">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fa-solid fa-magnifying-glass text-secondary-400 group-focus-within:text-brand-500 transition-colors"></i>
+                </div>
+                <input type="text" 
+                    class="block w-full pl-11 pr-12 py-3.5 bg-secondary-50 border-none rounded-2xl text-secondary-900 placeholder-secondary-400 focus:ring-2 focus:ring-brand-200 focus:bg-white transition-all shadow-inner text-sm" 
+                    placeholder="Find salon, service or location...">
+                <div class="absolute inset-y-0 right-0 pr-1.5 flex items-center">
+                    <button class="p-2 bg-white rounded-xl shadow-sm text-secondary-600 hover:text-brand-600 transition-colors">
+                        <i class="fa-solid fa-sliders"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Desktop Hero & Search Section -->
+        <div class="hidden md:block relative rounded-3xl overflow-hidden mb-10 h-[320px] lg:h-[400px] shadow-2xl">
+            <img src="https://storage.googleapis.com/uxpilot-auth.appspot.com/f0e856fedb-2199ac55601432ae5ca2.png" alt="Hero Background" class="absolute inset-0 w-full h-full object-cover">
+            <div class="absolute inset-0 bg-gradient-to-r from-brand-900/90 to-brand-800/40"></div>
+            
+            <div class="relative z-10 h-full flex flex-col justify-center px-12 max-w-3xl">
+                <span class="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-semibold tracking-wider mb-4 w-fit border border-white/20">PREMIUM EXPERIENCE</span>
+                <h1 class="font-serif text-5xl font-bold text-white mb-4 leading-tight">Discover your perfect <br>beauty sanctuary</h1>
+                <p class="text-brand-100 text-lg mb-8 max-w-lg">Book appointments with the best salons and spas in your city.</p>
+                
+                <!-- Desktop Search Bar -->
+                <div class="bg-white p-2 rounded-2xl shadow-xl flex items-center gap-2 max-w-2xl">
+                    <div class="flex-1 flex items-center px-4 border-r border-secondary-100">
+                        <i class="fa-solid fa-magnifying-glass text-secondary-400 mr-3"></i>
+                        <input type="text" placeholder="Service or salon name" class="w-full py-3 outline-none text-secondary-700 placeholder-secondary-400">
+                    </div>
+                    <div class="flex-1 flex items-center px-4">
+                        <i class="fa-solid fa-location-dot text-brand-500 mr-3"></i>
+                        <input type="text" placeholder="New York, NY" class="w-full py-3 outline-none text-secondary-700 placeholder-secondary-400" value="Downtown Area">
+                    </div>
+                    <button class="bg-brand-600 hover:bg-brand-700 text-white px-8 py-3.5 rounded-xl font-semibold transition-colors shadow-lg shadow-brand-500/30">
+                        Search
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 md:px-0 space-y-8 md:space-y-12 pb-24">
+            
+            <!-- Quick Categories -->
+            <section id="categories">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="font-serif text-xl md:text-2xl font-bold text-secondary-900">Browse Categories</h2>
+                    <a href="#" class="text-brand-600 text-sm font-semibold hover:text-brand-700">View All</a>
+                </div>
+                
+                <div class="flex gap-4 overflow-x-auto hide-scrollbar pb-4 md:grid md:grid-cols-6 category-scroll-mask md:mask-none">
+                    <!-- Category 1: Hair -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white border border-secondary-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-brand-200 group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-solid fa-scissors text-2xl text-secondary-400 group-hover:text-brand-500 transition-colors"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-medium text-secondary-600 group-hover:text-brand-600">Hair</span>
+                    </a>
+
+                    <!-- Category 2: Nails -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-solid fa-hand-sparkles text-2xl text-brand-500"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-bold text-brand-600">Nails</span>
+                    </a>
+
+                    <!-- Category 3: Facial -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white border border-secondary-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-brand-200 group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-regular fa-face-smile-beam text-2xl text-secondary-400 group-hover:text-brand-500 transition-colors"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-medium text-secondary-600 group-hover:text-brand-600">Facial</span>
+                    </a>
+
+                    <!-- Category 4: Massage -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white border border-secondary-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-brand-200 group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-solid fa-spa text-2xl text-secondary-400 group-hover:text-brand-500 transition-colors"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-medium text-secondary-600 group-hover:text-brand-600">Massage</span>
+                    </a>
+
+                    <!-- Category 5: Makeup -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white border border-secondary-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-brand-200 group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-solid fa-wand-magic-sparkles text-2xl text-secondary-400 group-hover:text-brand-500 transition-colors"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-medium text-secondary-600 group-hover:text-brand-600">Makeup</span>
+                    </a>
+
+                    <!-- Category 6: Other -->
+                    <a href="#" class="flex flex-col items-center gap-3 min-w-[80px] group">
+                        <div class="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white border border-secondary-100 flex items-center justify-center shadow-sm group-hover:shadow-md group-hover:border-brand-200 group-hover:-translate-y-1 transition-all duration-300">
+                            <i class="fa-solid fa-ellipsis text-2xl text-secondary-400 group-hover:text-brand-500 transition-colors"></i>
+                        </div>
+                        <span class="text-xs md:text-sm font-medium text-secondary-600 group-hover:text-brand-600">More</span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Featured Salons -->
+            <section id="featured">
+                <div class="flex justify-between items-end mb-4">
+                    <div>
+                        <h2 class="font-serif text-xl md:text-2xl font-bold text-secondary-900">Featured Salons</h2>
+                        <p class="text-xs md:text-sm text-secondary-500 mt-1">Top rated beauty spots near you</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="w-8 h-8 rounded-full border border-secondary-200 flex items-center justify-center text-secondary-400 hover:border-brand-500 hover:text-brand-500 transition-colors hidden md:flex">
+                            <i class="fa-solid fa-chevron-left text-xs"></i>
+                        </button>
+                        <button class="w-8 h-8 rounded-full border border-secondary-200 flex items-center justify-center text-secondary-400 hover:border-brand-500 hover:text-brand-500 transition-colors hidden md:flex">
+                            <i class="fa-solid fa-chevron-right text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 overflow-x-auto hide-scrollbar pb-6 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0">
+                    
+                    <!-- Card 1 -->
+                    <div class="min-w-[280px] md:min-w-0 bg-white rounded-2xl shadow-sm hover:shadow-card-hover border border-secondary-100 overflow-hidden transition-all duration-300 group">
+                        <div class="relative h-40 md:h-48 overflow-hidden">
+                            <img src="https://images.unsplash.com/photo-1560066984-138dadb4c035?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Salon Interior" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                            <div class="absolute top-3 right-3 bg-white/90 backdrop-blur rounded-lg px-2 py-1 flex items-center gap-1 shadow-sm">
+                                <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                <span class="text-xs font-bold text-secondary-800">4.9</span>
+                            </div>
+                            <button class="absolute top-3 left-3 w-8 h-8 bg-black/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-brand-500 transition-colors">
+                                <i class="fa-regular fa-heart text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 class="font-serif text-lg font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Lumière Beauty</h3>
+                                    <p class="text-xs text-secondary-500 flex items-center gap-1 mt-1">
+                                        <i class="fa-solid fa-location-dot text-brand-400 text-[10px]"></i>
+                                        1.2 km • Downtown
+                                    </p>
+                                </div>
+                                <span class="px-2 py-1 bg-green-50 text-green-600 text-[10px] font-bold uppercase tracking-wider rounded">Open</span>
+                            </div>
+                            <div class="flex gap-2 mt-4">
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Hair</span>
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Nails</span>
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">+3</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="min-w-[280px] md:min-w-0 bg-white rounded-2xl shadow-sm hover:shadow-card-hover border border-secondary-100 overflow-hidden transition-all duration-300 group">
+                        <div class="relative h-40 md:h-48 overflow-hidden">
+                            <img src="https://images.unsplash.com/photo-1633681926022-84c23e8cb2d6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Salon Interior" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                            <div class="absolute top-3 right-3 bg-white/90 backdrop-blur rounded-lg px-2 py-1 flex items-center gap-1 shadow-sm">
+                                <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                <span class="text-xs font-bold text-secondary-800">4.8</span>
+                            </div>
+                            <button class="absolute top-3 left-3 w-8 h-8 bg-black/20 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-brand-500 transition-colors">
+                                <i class="fa-regular fa-heart text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 class="font-serif text-lg font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Elite Spa & Wellness</h3>
+                                    <p class="text-xs text-secondary-500 flex items-center gap-1 mt-1">
+                                        <i class="fa-solid fa-location-dot text-brand-400 text-[10px]"></i>
+                                        2.5 km • West Side
+                                    </p>
+                                </div>
+                                <span class="px-2 py-1 bg-green-50 text-green-600 text-[10px] font-bold uppercase tracking-wider rounded">Open</span>
+                            </div>
+                            <div class="flex gap-2 mt-4">
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Massage</span>
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Facial</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3 -->
+                    <div class="min-w-[280px] md:min-w-0 bg-white rounded-2xl shadow-sm hover:shadow-card-hover border border-secondary-100 overflow-hidden transition-all duration-300 group">
+                        <div class="relative h-40 md:h-48 overflow-hidden">
+                            <img src="https://images.unsplash.com/photo-1522337660859-02fbefca4702?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Salon Interior" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                            <div class="absolute top-3 right-3 bg-white/90 backdrop-blur rounded-lg px-2 py-1 flex items-center gap-1 shadow-sm">
+                                <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                <span class="text-xs font-bold text-secondary-800">5.0</span>
+                            </div>
+                            <button class="absolute top-3 left-3 w-8 h-8 bg-brand-500 text-white rounded-full flex items-center justify-center hover:bg-brand-600 transition-colors">
+                                <i class="fa-solid fa-heart text-xs"></i>
+                            </button>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <h3 class="font-serif text-lg font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Rose Gold Studio</h3>
+                                    <p class="text-xs text-secondary-500 flex items-center gap-1 mt-1">
+                                        <i class="fa-solid fa-location-dot text-brand-400 text-[10px]"></i>
+                                        0.8 km • Central Park
+                                    </p>
+                                </div>
+                                <span class="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider rounded">Closed</span>
+                            </div>
+                            <div class="flex gap-2 mt-4">
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Makeup</span>
+                                <span class="px-2 py-1 bg-secondary-50 text-secondary-500 text-xs rounded-md border border-secondary-100">Hair</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Promo Banner -->
+            <section class="relative rounded-2xl overflow-hidden bg-brand-900 text-white shadow-lg">
+                <div class="absolute inset-0 opacity-20">
+                    <img src="https://images.unsplash.com/photo-1562322140-8baeececf3df?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" alt="Pattern" class="w-full h-full object-cover">
+                </div>
+                <div class="relative z-10 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div class="text-center md:text-left">
+                        <span class="text-brand-200 text-xs font-bold uppercase tracking-wider mb-1 block">Special Offer</span>
+                        <h3 class="font-serif text-2xl md:text-3xl font-bold mb-1">Get 20% Off First Booking</h3>
+                        <p class="text-brand-100 text-sm md:text-base max-w-xs">Use code <span class="font-mono bg-white/10 px-2 py-0.5 rounded text-white font-bold">ELITE20</span> at checkout.</p>
+                    </div>
+                    <button class="w-full md:w-auto bg-white text-brand-900 px-8 py-3 rounded-xl text-sm font-bold hover:bg-brand-50 transition-colors shadow-lg">
+                        Claim Now
+                    </button>
+                </div>
+            </section>
+
+            <!-- Recommended Services (List Layout) -->
+            <section id="services">
+                <div class="flex justify-between items-end mb-4">
+                    <h2 class="font-serif text-xl md:text-2xl font-bold text-secondary-900">Recommended For You</h2>
+                    <a href="#" class="text-brand-600 text-sm font-semibold hover:text-brand-700">View All</a>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Service Item 1 -->
+                    <div class="bg-white p-3 rounded-2xl border border-secondary-100 shadow-sm flex flex-col sm:flex-row gap-4 hover:border-brand-200 transition-colors cursor-pointer group">
+                        <div class="w-full sm:w-24 h-48 sm:h-24 rounded-xl overflow-hidden flex-shrink-0">
+                            <img src="https://images.unsplash.com/photo-1580618672591-eb180b1a973f?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80" alt="Service" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                        </div>
+                        <div class="flex-grow flex flex-col justify-between py-1">
+                            <div>
+                                <div class="flex justify-between items-start">
+                                    <h4 class="font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Classic Manicure</h4>
+                                    <span class="font-bold text-brand-600">$35</span>
+                                </div>
+                                <p class="text-xs text-secondary-500 mt-1">Lumière Beauty • 45 mins</p>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                    <span class="text-xs font-medium text-secondary-700">4.9 (120 reviews)</span>
+                                </div>
+                                <button class="px-3 py-1.5 bg-secondary-50 text-secondary-900 text-xs font-semibold rounded-lg hover:bg-brand-500 hover:text-white transition-colors">
+                                    Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service Item 2 -->
+                    <div class="bg-white p-3 rounded-2xl border border-secondary-100 shadow-sm flex gap-4 hover:border-brand-200 transition-colors cursor-pointer group">
+                        <div class="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                            <img src="https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80" alt="Service" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                        </div>
+                        <div class="flex-grow flex flex-col justify-between py-1">
+                            <div>
+                                <div class="flex justify-between items-start">
+                                    <h4 class="font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Deep Tissue Massage</h4>
+                                    <span class="font-bold text-brand-600">$85</span>
+                                </div>
+                                <p class="text-xs text-secondary-500 mt-1">Elite Spa & Wellness • 60 mins</p>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                    <span class="text-xs font-medium text-secondary-700">4.8 (85 reviews)</span>
+                                </div>
+                                <button class="px-3 py-1.5 bg-secondary-50 text-secondary-900 text-xs font-semibold rounded-lg hover:bg-brand-500 hover:text-white transition-colors">
+                                    Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service Item 3 -->
+                    <div class="bg-white p-3 rounded-2xl border border-secondary-100 shadow-sm flex gap-4 hover:border-brand-200 transition-colors cursor-pointer group">
+                        <div class="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                            <img src="https://images.unsplash.com/photo-1562886812-41775a01195d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80" alt="Service" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                        </div>
+                        <div class="flex-grow flex flex-col justify-between py-1">
+                            <div>
+                                <div class="flex justify-between items-start">
+                                    <h4 class="font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">Haircut & Styling</h4>
+                                    <span class="font-bold text-brand-600">$60</span>
+                                </div>
+                                <p class="text-xs text-secondary-500 mt-1">Rose Gold Studio • 50 mins</p>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                    <span class="text-xs font-medium text-secondary-700">5.0 (210 reviews)</span>
+                                </div>
+                                <button class="px-3 py-1.5 bg-secondary-50 text-secondary-900 text-xs font-semibold rounded-lg hover:bg-brand-500 hover:text-white transition-colors">
+                                    Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                     <!-- Service Item 4 -->
+                     <div class="bg-white p-3 rounded-2xl border border-secondary-100 shadow-sm flex gap-4 hover:border-brand-200 transition-colors cursor-pointer group">
+                        <div class="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
+                            <img src="https://images.unsplash.com/photo-1596704017254-9b121068fb31?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80" alt="Service" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">
+                        </div>
+                        <div class="flex-grow flex flex-col justify-between py-1">
+                            <div>
+                                <div class="flex justify-between items-start">
+                                    <h4 class="font-bold text-secondary-900 group-hover:text-brand-600 transition-colors">HydraFacial Treatment</h4>
+                                    <span class="font-bold text-brand-600">$120</span>
+                                </div>
+                                <p class="text-xs text-secondary-500 mt-1">Glow Aesthetics • 75 mins</p>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-star text-yellow-400 text-xs"></i>
+                                    <span class="text-xs font-medium text-secondary-700">4.9 (45 reviews)</span>
+                                </div>
+                                <button class="px-3 py-1.5 bg-secondary-50 text-secondary-900 text-xs font-semibold rounded-lg hover:bg-brand-500 hover:text-white transition-colors">
+                                    Book
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-secondary-100 z-50 shadow-nav pb-safe">
+        <div class="flex justify-around items-center h-16 sm:h-20 px-2">
+            <!-- Home (Active) -->
+            <a href="#" class="flex flex-col items-center gap-1 w-16 group">
+                <div class="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center text-brand-600 transition-colors">
+                    <i class="fa-solid fa-house text-lg"></i>
+                </div>
+                <span class="text-[10px] font-bold text-brand-600">Home</span>
+            </a>
+
+            <!-- Bookings -->
+            <a href="#" class="flex flex-col items-center gap-1 w-16 group">
+                <div class="w-10 h-10 rounded-full hover:bg-secondary-50 flex items-center justify-center text-secondary-400 group-hover:text-secondary-600 transition-colors">
+                    <i class="fa-regular fa-calendar text-lg"></i>
+                </div>
+                <span class="text-[10px] font-medium text-secondary-400 group-hover:text-secondary-600">Bookings</span>
+            </a>
+
+            <!-- FAB (Search/Action) -->
+            <div class="relative -top-5">
+                <button class="w-14 h-14 bg-brand-900 rounded-full shadow-lg shadow-brand-900/40 flex items-center justify-center text-white transform transition-transform active:scale-95 border-4 border-secondary-50">
+                    <i class="fa-solid fa-plus text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Favorites -->
+            <a href="#" class="flex flex-col items-center gap-1 w-16 group">
+                <div class="w-10 h-10 rounded-full hover:bg-secondary-50 flex items-center justify-center text-secondary-400 group-hover:text-secondary-600 transition-colors">
+                    <i class="fa-regular fa-heart text-lg"></i>
+                </div>
+                <span class="text-[10px] font-medium text-secondary-400 group-hover:text-secondary-600">Favorites</span>
+            </a>
+
+            <!-- Profile -->
+            <a href="#" class="flex flex-col items-center gap-1 w-16 group">
+                <div class="w-10 h-10 rounded-full hover:bg-secondary-50 flex items-center justify-center text-secondary-400 group-hover:text-secondary-600 transition-colors">
+                    <i class="fa-regular fa-user text-lg"></i>
+                </div>
+                <span class="text-[10px] font-medium text-secondary-400 group-hover:text-secondary-600">Profile</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Desktop Footer -->
+    <footer class="hidden md:block bg-white border-t border-secondary-200 py-12 mt-12">
+        <div class="max-w-7xl mx-auto px-6 grid grid-cols-4 gap-8">
+            <div class="col-span-1">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white">
+                        <i class="fa-solid fa-spa text-xs"></i>
+                    </div>
+                    <span class="font-serif text-xl font-bold text-secondary-900">Salon Élite</span>
+                </div>
+                <p class="text-sm text-secondary-500 mb-4">Elevating your beauty experience with premium salon management and booking.</p>
+                <div class="flex gap-3">
+                    <a href="#" class="w-8 h-8 rounded-full bg-secondary-100 flex items-center justify-center text-secondary-600 hover:bg-brand-500 hover:text-white transition-colors">
+                        <i class="fa-brands fa-instagram text-sm"></i>
+                    </a>
+                    <a href="#" class="w-8 h-8 rounded-full bg-secondary-100 flex items-center justify-center text-secondary-600 hover:bg-brand-500 hover:text-white transition-colors">
+                        <i class="fa-brands fa-facebook-f text-sm"></i>
+                    </a>
+                    <a href="#" class="w-8 h-8 rounded-full bg-secondary-100 flex items-center justify-center text-secondary-600 hover:bg-brand-500 hover:text-white transition-colors">
+                        <i class="fa-brands fa-twitter text-sm"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div>
+                <h4 class="font-bold text-secondary-900 mb-4">Discover</h4>
+                <ul class="space-y-2 text-sm text-secondary-500">
+                    <li><a href="#" class="hover:text-brand-600">Salons Near Me</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Top Rated Spas</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Beauty Services</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Gift Cards</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h4 class="font-bold text-secondary-900 mb-4">For Partners</h4>
+                <ul class="space-y-2 text-sm text-secondary-500">
+                    <li><a href="#" class="hover:text-brand-600">Partner Login</a></li>
+                    <li><a href="#" class="hover:text-brand-600">List Your Business</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Business Resources</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Pricing</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h4 class="font-bold text-secondary-900 mb-4">Support</h4>
+                <ul class="space-y-2 text-sm text-secondary-500">
+                    <li><a href="#" class="hover:text-brand-600">Help Center</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Privacy Policy</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Terms of Service</a></li>
+                    <li><a href="#" class="hover:text-brand-600">Contact Us</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-secondary-100 text-center text-xs text-secondary-400">
+            &copy; 2023 Salon Élite. All rights reserved.
+        </div>
+    </footer>
+
+    <script>
+        // Simulate loading location prompt after a short delay
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const modal = document.getElementById('location-modal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                }
+            }, 1500);
+        });
+    </script>
+</body>
+</html>

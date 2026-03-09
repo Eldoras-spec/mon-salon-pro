@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>402750428517-2b98pk371no1lr7ngnonijccncm431qe.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.402750428517-2b98pk371no1lr7ngnonijccncm431qe</string>
+	<key>API_KEY</key>
+	<string>AIzaSyANc3Tykt3XwLDn_rC81hebY1c-QjzpdHc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>402750428517</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.blagence.monsalon</string>
+	<key>PROJECT_ID</key>
+	<string>monsalon</string>
+	<key>STORAGE_BUCKET</key>
+	<string>monsalon.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:402750428517:ios:334d7cb94957935023bd8c</string>
+</dict>
+</plist>

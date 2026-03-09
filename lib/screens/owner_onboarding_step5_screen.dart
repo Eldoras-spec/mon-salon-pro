@@ -1,0 +1,567 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../models/team_member_model.dart';
+import '../providers/team_providers.dart';
+import '../services/database_service.dart';
+import '../theme/app_colors.dart';
+import 'owner_onboarding_step4_screen.dart';
+
+class OwnerOnboardingStep5Screen extends StatefulWidget {
+  const OwnerOnboardingStep5Screen({super.key, required this.salonData});
+  final Map<String, dynamic> salonData;
+
+  @override
+  State<OwnerOnboardingStep5Screen> createState() =>
+      _OwnerOnboardingStep5ScreenState();
+}
+
+class _OwnerOnboardingStep5ScreenState
+    extends State<OwnerOnboardingStep5Screen> {
+  final List<TeamMemberModel> _members = [];
+
+  String get _salonId =>
+      (widget.salonData['ownerId'] as String?) ?? '';
+
+  void _goToServices() {
+    if (_members.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez ajouter au moins un employé'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OwnerOnboardingStep4Screen(
+          salonData: widget.salonData,
+          teamMembers: _members,
+        ),
+      ),
+    );
+  }
+
+  void _showAddMemberSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _OnboardingMemberSheet(
+        salonId: _salonId,
+        onAdded: (member) {
+          setState(() => _members.add(member));
+        },
+      ),
+    );
+  }
+
+  void _deleteMember(int index) async {
+    final member = _members[index];
+    try {
+      if (member.id.isNotEmpty) {
+        await DatabaseService()
+            .deleteTeamMember(_salonId, member.id);
+      }
+      setState(() => _members.removeAt(index));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Progress bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            size: 18, color: AppColors.brand950),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Étape 4 sur 5',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.secondary400,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: 0.8,
+                      minHeight: 5,
+                      backgroundColor: AppColors.secondary100,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.brand600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    Text(
+                      'Votre Équipe',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brand950,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ajoutez au moins un membre à votre équipe. Ils seront assignés aux services à l\'étape suivante.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.secondary500,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Members list
+                    if (_members.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 32, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.secondary200),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(Icons.groups_outlined,
+                                size: 40, color: AppColors.secondary300),
+                            SizedBox(height: 12),
+                            Text(
+                              'Aucun membre ajouté',
+                              style: TextStyle(
+                                color: AppColors.secondary400,
+                                fontSize: 14,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Au moins un employé est requis pour continuer',
+                              style: TextStyle(
+                                color: AppColors.secondary400,
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      ..._members.asMap().entries.map(
+                        (entry) {
+                          final i = entry.key;
+                          final m = entry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: AppColors.secondary200),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: AppColors.brand50,
+                                  child: Text(
+                                    m.name.isNotEmpty
+                                        ? m.name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      color: AppColors.brand600,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        m.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                          color: AppColors.brand950,
+                                        ),
+                                      ),
+                                      Text(
+                                        m.role == 'gerant'
+                                            ? 'Gérant(e)'
+                                            : 'Employé(e)',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.secondary500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close,
+                                      size: 18,
+                                      color: AppColors.secondary400),
+                                  onPressed: () => _deleteMember(i),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+
+                    const SizedBox(height: 20),
+
+                    // Add member button
+                    OutlinedButton.icon(
+                      onPressed: _showAddMemberSheet,
+                      icon: const Icon(Icons.person_add_outlined, size: 18),
+                      label: const Text('Ajouter un membre'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brand600,
+                        side: const BorderSide(color: AppColors.brand300),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        textStyle: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _goToServices,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _members.isEmpty
+                        ? AppColors.secondary200
+                        : AppColors.brand700,
+                    foregroundColor: _members.isEmpty
+                        ? AppColors.secondary400
+                        : Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 15),
+                  ),
+                  child: const Text('Continuer vers les services'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Inline Form Sheet for Onboarding ────────────────────────────────────────
+
+class _OnboardingMemberSheet extends StatefulWidget {
+  const _OnboardingMemberSheet(
+      {required this.salonId, required this.onAdded});
+  final String salonId;
+  final void Function(TeamMemberModel) onAdded;
+
+  @override
+  State<_OnboardingMemberSheet> createState() =>
+      _OnboardingMemberSheetState();
+}
+
+class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
+  final _pinConfirmCtrl = TextEditingController();
+  String _role = 'member';
+  bool _saving = false;
+  bool _showPin = false;
+
+  bool get _needsPin => _role == 'gerant';
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _pinCtrl.dispose();
+    _pinConfirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final draft = TeamMemberModel(
+        id: '',
+        salonId: widget.salonId,
+        name: _nameCtrl.text.trim(),
+        role: _role,
+        pinHash: _needsPin ? hashPin(_pinCtrl.text.trim()) : '',
+        phone: _phoneCtrl.text.trim().isEmpty
+            ? null
+            : _phoneCtrl.text.trim(),
+        isActive: true,
+        createdAt: DateTime.now(),
+      );
+      final saved = await DatabaseService().addTeamMember(draft);
+      widget.onAdded(saved);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Erreur: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary200,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Ajouter un membre',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brand950,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _label('Nom complet *'),
+                TextFormField(
+                  controller: _nameCtrl,
+                  decoration: _inputDeco('Ex: Sophie Martin'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Requis' : null,
+                ),
+                const SizedBox(height: 14),
+                _label('Rôle *'),
+                DropdownButtonFormField<String>(
+                  initialValue: _role,
+                  decoration: _inputDeco(null),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'member', child: Text('Employé(e)')),
+                    DropdownMenuItem(
+                        value: 'gerant', child: Text('Gérant(e)')),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _role = v ?? 'member';
+                    if (!_needsPin) {
+                      _pinCtrl.clear();
+                      _pinConfirmCtrl.clear();
+                    }
+                  }),
+                ),
+                const SizedBox(height: 14),
+                _label('Téléphone (optionnel)'),
+                TextFormField(
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: _inputDeco('Ex: 06 12 34 56 78'),
+                ),
+                // PIN fields only for gérant
+                if (_needsPin) ...[
+                  const SizedBox(height: 14),
+                  _label('PIN 6 chiffres *'),
+                  TextFormField(
+                    controller: _pinCtrl,
+                    obscureText: !_showPin,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    decoration: _inputDeco('••••••').copyWith(
+                      suffixIcon: IconButton(
+                        icon: Icon(_showPin
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () =>
+                            setState(() => _showPin = !_showPin),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (!_needsPin) return null;
+                      if (v == null || v.length != 6) {
+                        return 'Le PIN doit contenir exactement 6 chiffres';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  _label('Confirmer le PIN *'),
+                  TextFormField(
+                    controller: _pinConfirmCtrl,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    decoration: _inputDeco('••••••'),
+                    validator: (v) {
+                      if (!_needsPin) return null;
+                      if (v != _pinCtrl.text) {
+                        return 'Les PINs ne correspondent pas';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brand700,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Ajouter le membre'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(text,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondary700,
+            )),
+      );
+
+  InputDecoration _inputDeco(String? hint) => InputDecoration(
+        hintText: hint,
+        hintStyle:
+            const TextStyle(color: AppColors.secondary400, fontSize: 13),
+        filled: true,
+        fillColor: AppColors.secondary50,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.secondary200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.secondary200),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: AppColors.brand500, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFDC2626)),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      );
+}

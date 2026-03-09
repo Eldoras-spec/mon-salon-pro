@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "402750428517",
+    "project_id": "monsalon",
+    "storage_bucket": "monsalon.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:402750428517:android:a6b7b705fe0304b823bd8c",
+        "android_client_info": {
+          "package_name": "com.blagence.monsalon"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD90uVqWVyhSPBX8NLdpYRxEWV088Nc-3E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "402750428517-kksbl6mvlo3vo33s4emaj30itqsqk7h1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.monsalon.monSalon"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:402750428517:android:749b648b67a5da3123bd8c",
+        "android_client_info": {
+          "package_name": "com.example.monsalon.mon_salon"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD90uVqWVyhSPBX8NLdpYRxEWV088Nc-3E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "402750428517-kksbl6mvlo3vo33s4emaj30itqsqk7h1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.monsalon.monSalon"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
