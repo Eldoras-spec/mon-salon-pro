@@ -49,7 +49,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             _buildSection(
               '2. Données collectées',
               'Nous collectons les données suivantes :\n\n'
-                  '• Informations de compte : nom, prénom, email, numéro de téléphone, ville.\n\n'
+                  '• Informations de compte : nom, prénom, email.\n\n'
                   '• Données de réservation : historique des rendez-vous, services choisis, salons visités.\n\n'
                   '• Données de localisation : uniquement pour vous proposer des salons à proximité (avec votre accord).\n\n'
                   '• Données techniques : type d\'appareil, système d\'exploitation, pour améliorer l\'application.',

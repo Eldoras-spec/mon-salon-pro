@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyD90uVqWVyhSPBX8NLdpYRxEWV088Nc-3E',
-    appId: '1:402750428517:android:a6b7b705fe0304b823bd8c',
+    appId: '1:402750428517:android:5cb094a96962c85323bd8c',
     messagingSenderId: '402750428517',
     projectId: 'monsalon',
     storageBucket: 'monsalon.firebasestorage.app',
@@ -59,10 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyANc3Tykt3XwLDn_rC81hebY1c-QjzpdHc',
-    appId: '1:402750428517:ios:334d7cb94957935023bd8c',
+    appId: '1:402750428517:ios:c397732f761c3ff423bd8c',
     messagingSenderId: '402750428517',
     projectId: 'monsalon',
     storageBucket: 'monsalon.firebasestorage.app',
-    iosBundleId: 'com.blagence.monsalon',
+    iosBundleId: 'com.blagence.monsalonpro',
   );
 }

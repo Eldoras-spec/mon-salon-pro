@@ -296,7 +296,7 @@ class _OwnerOnboardingStep3ScreenState
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
-                        'Étape 3 sur 5',
+                        'Étape 4 sur 6',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,

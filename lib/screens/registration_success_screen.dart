@@ -70,95 +70,9 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.secondary50,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.4,
-              child: _buildBrandSection(),
-            ),
-            _buildContentSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBrandSection() {
-    return Container(
-      color: AppColors.brand900,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.network(
-            'https://storage.googleapis.com/uxpilot-auth.appspot.com/f0e856fedb-2199ac55601432ae5ca2.png',
-            fit: BoxFit.cover,
-            color: AppColors.brand950.withValues(alpha: 0.8),
-            colorBlendMode: BlendMode.overlay,
-            errorBuilder: (_, _, _) => Container(color: AppColors.brand900),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.spa,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Mon Salon',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox.shrink(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContentSection() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 40,
-            offset: Offset(0, -10),
-          ),
-        ],
-      ),
-      child: Center(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: ConstrainedBox(
@@ -364,6 +278,7 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

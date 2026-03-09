@@ -4,10 +4,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'screens/main_app_scaffold.dart';
 import 'screens/member_home_screen.dart';
 import 'screens/team_profile_selector_screen.dart';
@@ -85,7 +87,29 @@ class MonSalonProApp extends ConsumerWidget {
     return authState.when(
         data: (user) {
           if (user == null) {
-            return const LoginScreen();
+            return FutureBuilder<bool>(
+              future: SharedPreferences.getInstance().then(
+                (prefs) => prefs.getBool('has_launched_before') ?? false,
+              ),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(
+                    body: Center(
+                      child: CircularProgressIndicator(color: AppColors.brand600),
+                    ),
+                  );
+                }
+                final hasLaunchedBefore = snap.data ?? false;
+                if (!hasLaunchedBefore) {
+                  // First launch → registration
+                  SharedPreferences.getInstance().then(
+                    (prefs) => prefs.setBool('has_launched_before', true),
+                  );
+                  return const WelcomeScreen();
+                }
+                return const LoginScreen();
+              },
+            );
           }
           final userModelAsync = ref.watch(userModelProvider);
           return userModelAsync.when(

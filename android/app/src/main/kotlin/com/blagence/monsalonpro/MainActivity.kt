@@ -1,4 +1,4 @@
-package com.blagence.monsalon
+package com.blagence.monsalonpro
 
 import io.flutter.embedding.android.FlutterActivity
 

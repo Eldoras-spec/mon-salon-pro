@@ -107,8 +107,8 @@ class _BasicRegistrationScreenState
             password: _passwordController.text,
             fullName:
                 '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
-            phone: '$_selectedCountryCode${_phoneController.text.trim()}',
-            city: _cityController.text.trim(),
+            phone: widget.isClient ? '$_selectedCountryCode${_phoneController.text.trim()}' : '',
+            city: widget.isClient ? _cityController.text.trim() : '',
             isClient: widget.isClient,
           );
 
@@ -220,18 +220,20 @@ class _BasicRegistrationScreenState
                       ),
                       const SizedBox(height: 14),
 
-                      // Phone
-                      _buildPhoneField(),
-                      const SizedBox(height: 14),
+                      if (widget.isClient) ...[
+                        // Phone
+                        _buildPhoneField(),
+                        const SizedBox(height: 14),
 
-                      CustomTextField(
-                        label: 'Ville',
-                        hintText: 'Casablanca',
-                        icon: Icons.location_on_outlined,
-                        controller: _cityController,
-                        validator: (v) =>
-                            v == null || v.isEmpty ? 'Ville requise' : null,
-                      ),
+                        CustomTextField(
+                          label: 'Ville',
+                          hintText: 'Casablanca',
+                          icon: Icons.location_on_outlined,
+                          controller: _cityController,
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'Ville requise' : null,
+                        ),
+                      ],
                       const SizedBox(height: 28),
 
                       // ── Section : Sécurité
@@ -367,7 +369,7 @@ class _BasicRegistrationScreenState
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            'Étape 2 sur 3',
+            widget.isClient ? 'Étape 2 sur 3' : 'Étape 1 sur 6',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w600,

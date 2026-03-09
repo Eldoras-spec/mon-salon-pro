@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class VersionService {
-  static const String currentVersion = '1.0.0';
+  static const String currentVersion = '1.1.0';
 
   static Future<bool> needsForceUpdate() async {
     try {

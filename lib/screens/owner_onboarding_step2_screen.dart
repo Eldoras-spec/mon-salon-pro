@@ -219,7 +219,7 @@ class _OwnerOnboardingStep2ScreenState
                       decoration: BoxDecoration(
                           color: AppColors.brand50,
                           borderRadius: BorderRadius.circular(6)),
-                      child: const Text('Étape 2 sur 4',
+                      child: const Text('Étape 3 sur 6',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,

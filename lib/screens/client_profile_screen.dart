@@ -70,6 +70,82 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final confirm1 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer votre compte ?'),
+        content: const Text(
+          'Cette action est irréversible. Toutes vos données, '
+          'réservations et conversations seront définitivement supprimées.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm1 != true || !mounted) return;
+
+    final confirm2 = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Êtes-vous vraiment sûr ?'),
+        content: const Text(
+          'Votre compte et toutes vos données seront supprimés de façon permanente. '
+          'Cette action ne peut pas être annulée.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Non, garder mon compte'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Oui, supprimer définitivement',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm2 != true || !mounted) return;
+
+    try {
+      await AuthService().deleteAccount();
+      if (mounted) {
+        ref.invalidate(authStateProvider);
+        ref.invalidate(userModelProvider);
+        Navigator.of(context, rootNavigator: true)
+            .popUntil((route) => route.isFirst);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String msg = 'Erreur lors de la suppression.';
+      if (e.code == 'requires-recent-login') {
+        msg = 'Veuillez vous reconnecter puis réessayer la suppression.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(userStreamProvider);
@@ -129,15 +205,6 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     // ── Paramètres ─────────────────────────────────────────
                     _SettingsCard(
                       user: user,
-                      onAccountDeleted: () {
-                        ref.read(authServiceProvider).signOut();
-                        ref.invalidate(authStateProvider);
-                        ref.invalidate(userModelProvider);
-                        if (mounted) {
-                          Navigator.of(context, rootNavigator: true)
-                              .popUntil((route) => route.isFirst);
-                        }
-                      },
                     ),
 
                     const SizedBox(height: 24),
@@ -166,9 +233,35 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       ),
                     ),
 
+                    const SizedBox(height: 12),
+
+                    // ── Supprimer le compte ──────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          onPressed: _deleteAccount,
+                          icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                          label: const Text('Supprimer mon compte'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626),
+                            side: const BorderSide(
+                                color: Color(0xFFFEE2E2), width: 1.5),
+                            backgroundColor: const Color(0xFFFFF5F5),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 16),
                     Text(
-                      'Mon Salon v1.0.0',
+                      'Mon Salon v1.1.0',
                       style: TextStyle(
                           fontSize: 11, color: AppColors.secondary300),
                     ),
@@ -899,9 +992,8 @@ class _SalonStat extends StatelessWidget {
 // ── Settings card ─────────────────────────────────────────────────────────────
 
 class _SettingsCard extends StatefulWidget {
-  const _SettingsCard({required this.user, required this.onAccountDeleted});
+  const _SettingsCard({required this.user});
   final UserModel user;
-  final VoidCallback onAccountDeleted;
 
   @override
   State<_SettingsCard> createState() => _SettingsCardState();
@@ -933,7 +1025,6 @@ class _SettingsCardState extends State<_SettingsCard> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _SecuritySheet(
         userEmail: widget.user.email,
-        onAccountDeleted: widget.onAccountDeleted,
       ),
     );
   }
@@ -1097,9 +1188,8 @@ class _SettingsRow extends StatelessWidget {
 // ── Security sheet ────────────────────────────────────────────────────────────
 
 class _SecuritySheet extends StatefulWidget {
-  const _SecuritySheet({required this.userEmail, required this.onAccountDeleted});
+  const _SecuritySheet({required this.userEmail});
   final String userEmail;
-  final VoidCallback onAccountDeleted;
 
   @override
   State<_SecuritySheet> createState() => _SecuritySheetState();
@@ -1108,7 +1198,6 @@ class _SecuritySheet extends StatefulWidget {
 class _SecuritySheetState extends State<_SecuritySheet> {
   bool _loading = false;
   bool _sent = false;
-  bool _deleting = false;
 
   Future<void> _resetPassword() async {
     setState(() => _loading = true);
@@ -1119,87 +1208,6 @@ class _SecuritySheetState extends State<_SecuritySheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    // First confirmation
-    final confirm1 = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Supprimer votre compte ?'),
-        content: const Text(
-          'Cette action est irréversible. Toutes vos données, '
-          'réservations et conversations seront définitivement supprimées.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-    if (confirm1 != true || !mounted) return;
-
-    // Second confirmation
-    final confirm2 = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Êtes-vous vraiment sûr ?'),
-        content: const Text(
-          'Votre compte et toutes vos données seront supprimés de façon permanente. '
-          'Cette action ne peut pas être annulée.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Non, garder mon compte'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Oui, supprimer définitivement',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-    if (confirm2 != true || !mounted) return;
-
-    setState(() => _deleting = true);
-    try {
-      await AuthService().deleteAccount();
-      if (mounted) {
-        Navigator.pop(context);
-        widget.onAccountDeleted();
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        setState(() => _deleting = false);
-        String msg = 'Erreur lors de la suppression.';
-        if (e.code == 'requires-recent-login') {
-          msg = 'Veuillez vous reconnecter puis réessayer la suppression.';
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _deleting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
         );
@@ -1318,47 +1326,6 @@ class _SecuritySheetState extends State<_SecuritySheet> {
             ),
           ],
 
-          // ── Supprimer le compte ────────────────────────────────
-          const SizedBox(height: 28),
-          const Divider(height: 1),
-          const SizedBox(height: 20),
-          Text('Zone dangereuse',
-              style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFDC2626))),
-          const SizedBox(height: 8),
-          Text(
-            'La suppression de votre compte est définitive et irréversible.',
-            style: const TextStyle(fontSize: 12, color: AppColors.secondary500),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: _deleting ? null : _deleteAccount,
-              icon: _deleting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          color: Color(0xFFDC2626), strokeWidth: 2))
-                  : const Icon(Icons.delete_forever_rounded, size: 18),
-              label: Text(_deleting
-                  ? 'Suppression en cours...'
-                  : 'Supprimer mon compte'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFDC2626),
-                side: const BorderSide(color: Color(0xFFFEE2E2), width: 1.5),
-                backgroundColor: const Color(0xFFFFF5F5),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-            ),
-          ),
         ],
       ),
     );

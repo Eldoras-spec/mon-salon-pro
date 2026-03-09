@@ -100,7 +100,7 @@ class _OwnerOnboardingStep5ScreenState
                       ),
                       const Spacer(),
                       Text(
-                        'Étape 4 sur 5',
+                        'Étape 5 sur 6',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.secondary400,

@@ -399,7 +399,7 @@ class _OwnerOnboardingStep1ScreenState
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
-                        'Étape 1 sur 4',
+                        'Étape 2 sur 6',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -690,24 +690,6 @@ class _OwnerOnboardingStep1ScreenState
                           width: 2,
                         ),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                OutlinedButton.icon(
-                  onPressed: () {
-                    _descriptionController.text =
-                        "Bienvenue chez Luxe Beauty Lounge, où l'élégance rencontre l'expertise. Notre équipe de professionnels certifiés est dédiée à offrir des services de beauté haut de gamme dans une atmosphère moderne et relaxante.";
-                  },
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('Générer avec l\'IA'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.brand700,
-                    backgroundColor: AppColors.brand50,
-                    side: const BorderSide(color: AppColors.brand200),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
                     ),
                   ),
                 ),

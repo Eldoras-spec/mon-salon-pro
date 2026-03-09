@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>402750428517-2b98pk371no1lr7ngnonijccncm431qe.apps.googleusercontent.com</string>
+	<string>402750428517-81ogmemgigrioc6aagdrmqqf0ld1s4l4.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.402750428517-2b98pk371no1lr7ngnonijccncm431qe</string>
+	<string>com.googleusercontent.apps.402750428517-81ogmemgigrioc6aagdrmqqf0ld1s4l4</string>
 	<key>API_KEY</key>
 	<string>AIzaSyANc3Tykt3XwLDn_rC81hebY1c-QjzpdHc</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.blagence.monsalon</string>
+	<string>com.blagence.monsalonpro</string>
 	<key>PROJECT_ID</key>
 	<string>monsalon</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:402750428517:ios:334d7cb94957935023bd8c</string>
+	<string>1:402750428517:ios:c397732f761c3ff423bd8c</string>
 </dict>
 </plist>
