@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_colors.dart';
 import '../models/user_model.dart';
-import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../providers/auth_providers.dart';
 import 'basic_registration_screen.dart';
@@ -18,7 +17,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -26,14 +26,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _rememberMe = false;
 
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
   @override
   void initState() {
     super.initState();
     _loadSavedEmail();
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    ));
+    _animController.forward();
   }
 
   @override
   void dispose() {
+    _animController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -93,8 +115,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           return;
         }
 
-        if (mounted) {
-          setState(() => _isLoading = false);
+        // Auth state changed → main.dart will rebuild via authStateProvider.
+        // Pop this screen if it was pushed (e.g. from WelcomeScreen).
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
         }
       }
     } catch (e) {
@@ -137,198 +161,284 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Logo mark
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Image.asset(
-                          'assets/icone.png',
-                          width: 60,
-                          height: 60,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Heading
-                    Text(
-                      'Mon Salon Pro',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brand950,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Connectez-vous pour gérer votre salon.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14,
-                        color: AppColors.secondary500,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Email
-                    CustomTextField(
-                      label: 'Email',
-                      hintText: 'karim@exemple.com',
-                      controller: _emailController,
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Veuillez entrer votre email';
-                        }
-                        if (!value.contains('@')) {
-                          return 'Veuillez entrer un email valide';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password
-                    CustomTextField(
-                      label: 'Mot de passe',
-                      hintText: '••••••••••••',
-                      controller: _passwordController,
-                      isPassword: true,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Veuillez entrer votre mot de passe';
-                        }
-                        if (value.length < 6) {
-                          return 'Le mot de passe doit faire au moins 6 caractères';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Remember & Forgot Password
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFF3E8FF), // light purple
+              Colors.white,
+              Colors.white,
+            ],
+            stops: [0.0, 0.4, 1.0],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: SlideTransition(
+                  position: _slideAnim,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        GestureDetector(
-                          onTap: () =>
-                              setState(() => _rememberMe = !_rememberMe),
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(5),
-                                  color: _rememberMe
-                                      ? AppColors.brand600
-                                      : Colors.white,
-                                  border: Border.all(
-                                    color: _rememberMe
-                                        ? AppColors.brand600
-                                        : AppColors.secondary300,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: _rememberMe
-                                    ? const Icon(
-                                        Icons.check_rounded,
-                                        color: Colors.white,
-                                        size: 13,
-                                      )
-                                    : null,
+                        // Logo
+                        Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Image.asset(
+                              'assets/icone.png',
+                              width: 72,
+                              height: 72,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // Heading
+                        Text(
+                          'Mon Salon Pro',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.brand950,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Connectez-vous pour gérer votre salon.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            color: AppColors.secondary500,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 36),
+
+                        // Form card
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.secondary100,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
                               ),
-                              const SizedBox(width: 8),
+                            ],
+                          ),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              children: [
+                                // Email
+                                CustomTextField(
+                                  label: 'Email',
+                                  hintText: 'karim@exemple.com',
+                                  controller: _emailController,
+                                  icon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Veuillez entrer votre email';
+                                    }
+                                    if (!value.contains('@')) {
+                                      return 'Veuillez entrer un email valide';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Password
+                                CustomTextField(
+                                  label: 'Mot de passe',
+                                  hintText: '••••••••••••',
+                                  controller: _passwordController,
+                                  isPassword: true,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Veuillez entrer votre mot de passe';
+                                    }
+                                    if (value.length < 6) {
+                                      return 'Le mot de passe doit faire au moins 6 caractères';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Remember & Forgot Password
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _rememberMe = !_rememberMe),
+                                      child: Row(
+                                        children: [
+                                          AnimatedContainer(
+                                            duration: const Duration(milliseconds: 200),
+                                            width: 20,
+                                            height: 20,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(5),
+                                              color: _rememberMe
+                                                  ? const Color(0xFF7C3AED)
+                                                  : Colors.white,
+                                              border: Border.all(
+                                                color: _rememberMe
+                                                    ? const Color(0xFF7C3AED)
+                                                    : AppColors.secondary300,
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child: _rememberMe
+                                                ? const Icon(
+                                                    Icons.check_rounded,
+                                                    color: Colors.white,
+                                                    size: 13,
+                                                  )
+                                                : null,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Se souvenir de moi',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: AppColors.secondary600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _handleForgotPassword,
+                                      style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                                      child: Text(
+                                        'Mot de passe oublié ?',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF7C3AED),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+
+                        // CTA
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleLogin,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Se connecter',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      SizedBox(width: 8),
+                                      Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Create account link
+                        Center(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                               Text(
-                                'Se souvenir de moi',
+                                'Pas encore de compte ?',
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.secondary600,
+                                  color: AppColors.secondary500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const BasicRegistrationScreen(isClient: false),
+                                    ),
+                                  );
+                                },
+                                child: Text(
+                                  'Créer un compte',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: const Color(0xFF7C3AED),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        TextButton(
-                          onPressed: _handleForgotPassword,
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                          child: Text(
-                            'Mot de passe oublié ?',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.brand700,
-                            ),
-                          ),
-                        ),
+
+                        const SizedBox(height: 16),
                       ],
                     ),
-                    const SizedBox(height: 24),
-
-                    // CTA
-                    CustomButton(
-                      text: 'Se connecter',
-                      onPressed: _handleLogin,
-                      isLoading: _isLoading,
-                      icon: Icons.arrow_forward_rounded,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Create account link
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Pas encore de compte ?',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.secondary500,
-                              fontSize: 14,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const BasicRegistrationScreen(isClient: false),
-                                ),
-                              );
-                            },
-                            child: Text(
-                              'Créer un compte',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: AppColors.brand700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-                  ],
+                  ),
                 ),
               ),
             ),
