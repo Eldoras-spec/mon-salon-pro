@@ -89,37 +89,47 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.secondary200,
-                borderRadius: BorderRadius.circular(2),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Actions rapides',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brand950,
-                    fontFamily: 'DmSans',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Actions rapides',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brand950,
+                      fontFamily: 'DmSans',
+                    ),
                   ),
                 ),
               ),
-            ),
-            const Divider(height: 1),
+              const Divider(height: 1),
 
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: EdgeInsets.zero,
+                  children: [
             _buildMenuTile(
               icon: Icons.calendar_view_day_outlined,
               iconBg: AppColors.brand50,
@@ -261,7 +271,11 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               },
             ),
             const SizedBox(height: 8),
-          ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
