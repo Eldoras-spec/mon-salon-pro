@@ -246,6 +246,13 @@ class _AddItemSheetState extends State<_AddItemSheet> {
         createdAt: DateTime.now(),
       ));
       if (mounted) Navigator.pop(context);
+    } catch (e) {
+      debugPrint('❌ addInventoryItem error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

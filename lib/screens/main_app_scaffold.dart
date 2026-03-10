@@ -186,6 +186,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                     builder: (_) => ConversationsScreen(
                       currentUserId: widget.userModel.id,
                       isClient: false,
+                      salonId: widget.userModel.id,
                     ),
                   ),
                 );
