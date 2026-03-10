@@ -405,7 +405,7 @@ class _OwnerOnboardingStep4ScreenState
                         if (service.price > 0) ...[
                           const SizedBox(width: 8),
                           Text(
-                            '${service.price.toStringAsFixed(2)} \$',
+                            '${service.price.toStringAsFixed(0)} MAD',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
