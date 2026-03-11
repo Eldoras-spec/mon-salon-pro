@@ -186,6 +186,9 @@ class _OwnerOnboardingStep1ScreenState
       'address': fullAddress,
       'description': _descriptionController.text.trim(),
       'city': city,
+      'country': _countryController.text.trim().isNotEmpty
+          ? _countryController.text.trim()
+          : 'Maroc',
       'category': 'Beauté',
       'latitude': lat,
       'longitude': lng,

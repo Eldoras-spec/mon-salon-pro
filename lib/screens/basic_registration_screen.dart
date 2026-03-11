@@ -8,7 +8,6 @@ import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../providers/auth_providers.dart';
 import 'owner_onboarding_step1_screen.dart';
-import 'registration_success_screen.dart';
 import 'terms_screen.dart';
 import 'privacy_policy_screen.dart';
 
@@ -28,12 +27,9 @@ class _BasicRegistrationScreenState
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _cityController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  String _selectedCountryCode = '+212';
   bool _acceptTerms = false;
   int _passwordStrength = 0;
   bool _isLoading = false;
@@ -49,8 +45,6 @@ class _BasicRegistrationScreenState
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
-    _cityController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -90,14 +84,12 @@ class _BasicRegistrationScreenState
       if (existingUserId != null) {
         if (mounted) {
           setState(() => _isLoading = false);
-          if (!widget.isClient) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const OwnerOnboardingStep1Screen(),
-              ),
-            );
-          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const OwnerOnboardingStep1Screen(),
+            ),
+          );
         }
         return;
       }
@@ -107,29 +99,19 @@ class _BasicRegistrationScreenState
             password: _passwordController.text,
             fullName:
                 '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
-            phone: widget.isClient ? '$_selectedCountryCode${_phoneController.text.trim()}' : '',
-            city: widget.isClient ? _cityController.text.trim() : '',
-            isClient: widget.isClient,
+            phone: '',
+            city: '',
+            isClient: false,
           );
 
       if (mounted) {
         setState(() => _isLoading = false);
-        if (widget.isClient) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  const RegistrationSuccessScreen(isOwner: false),
-            ),
-          );
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const OwnerOnboardingStep1Screen(),
-            ),
-          );
-        }
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OwnerOnboardingStep1Screen(),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -220,20 +202,6 @@ class _BasicRegistrationScreenState
                       ),
                       const SizedBox(height: 14),
 
-                      if (widget.isClient) ...[
-                        // Phone
-                        _buildPhoneField(),
-                        const SizedBox(height: 14),
-
-                        CustomTextField(
-                          label: 'Ville',
-                          hintText: 'Casablanca',
-                          icon: Icons.location_on_outlined,
-                          controller: _cityController,
-                          validator: (v) =>
-                              v == null || v.isEmpty ? 'Ville requise' : null,
-                        ),
-                      ],
                       const SizedBox(height: 28),
 
                       // ── Section : Sécurité
@@ -278,9 +246,7 @@ class _BasicRegistrationScreenState
                       const SizedBox(height: 28),
 
                       CustomButton(
-                        text: widget.isClient
-                            ? 'Créer mon compte'
-                            : 'Continuer',
+                        text: 'Continuer',
                         onPressed: _handleRegistration,
                         isLoading: _isLoading,
                         icon: Icons.arrow_forward_rounded,
@@ -417,90 +383,6 @@ class _BasicRegistrationScreenState
         ),
         const SizedBox(width: 10),
         const Expanded(child: Divider(color: AppColors.secondary100)),
-      ],
-    );
-  }
-
-  Widget _buildPhoneField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 6),
-          child: Text(
-            'Téléphone',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brand950,
-            ),
-          ),
-        ),
-        // IntrinsicHeight ensures dropdown and input share the same height
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedCountryCode,
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 16,
-                      color: AppColors.secondary400,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: '+212',
-                        child: Text('🇲🇦 +212', style: TextStyle(fontSize: 14)),
-                      ),
-                      DropdownMenuItem(
-                        value: '+33',
-                        child: Text('🇫🇷 +33', style: TextStyle(fontSize: 14)),
-                      ),
-                      DropdownMenuItem(
-                        value: '+1',
-                        child: Text('🇺🇸 +1', style: TextStyle(fontSize: 14)),
-                      ),
-                      DropdownMenuItem(
-                        value: '+44',
-                        child: Text('🇬🇧 +44', style: TextStyle(fontSize: 14)),
-                      ),
-                      DropdownMenuItem(
-                        value: '+49',
-                        child: Text('🇩🇪 +49', style: TextStyle(fontSize: 14)),
-                      ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => _selectedCountryCode = val!),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  style: const TextStyle(color: AppColors.secondary800),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Téléphone requis';
-                    if (v.length < 8) return 'Numéro trop court';
-                    return null;
-                  },
-                  decoration: const InputDecoration(
-                    hintText: '6 12 34 56 78',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }

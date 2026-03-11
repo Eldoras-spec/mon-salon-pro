@@ -76,6 +76,7 @@ class DatabaseService {
       name: salon.name,
       address: salon.address,
       city: salon.city,
+      country: salon.country,
       description: salon.description,
       category: salon.category,
       rating: salon.rating,

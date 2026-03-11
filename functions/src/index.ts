@@ -1018,31 +1018,21 @@ Donne un résumé encourageant avec un conseil actionnable si pertinent (ex: cr�
 });
 
 // ============================================================
-// 12. AI AUTO-PROMOTIONS: Daily cron to generate targeted promos
+// 12. SMART AUTO-PROMOTIONS: Daily cron to generate targeted promos (rule-based)
 // ============================================================
-export const generateAiPromotions = functions.pubsub
+export const generateSmartPromotions = functions.pubsub
     .schedule("0 8 * * *") // Every day at 08:00
     .timeZone("Europe/Paris")
     .onRun(async () => {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.log("GEMINI_API_KEY not set, skipping AI promotions.");
-            return;
-        }
-
-        // Find all salons with AI promos enabled
         const salonsSnap = await db.collection("salons").get();
         const enabledSalons = salonsSnap.docs.filter(
             (d) => d.data().aiPromosEnabled === true
         );
 
         if (enabledSalons.length === 0) {
-            console.log("No salons have AI promos enabled.");
+            console.log("No salons have smart promos enabled.");
             return;
         }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         for (const salonDoc of enabledSalons) {
             try {
@@ -1094,21 +1084,21 @@ export const generateAiPromotions = functions.pubsub
                 const now = Date.now();
                 const dayMs = 24 * 60 * 60 * 1000;
 
-                // Check for existing AI promos created today to avoid duplicates
+                // Check for existing smart promos created today to avoid duplicates
                 const todayStart = new Date();
                 todayStart.setHours(0, 0, 0, 0);
                 const existingPromos = await db.collection("promotions")
                     .where("salonId", "==", salonId)
                     .get();
-                const todayAiPromos = existingPromos.docs.filter((d) => {
+                const todaySmartPromos = existingPromos.docs.filter((d) => {
                     const data = d.data();
                     if (!data.isAiGenerated) return false;
                     const created = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(0);
                     return created >= todayStart;
                 });
 
-                if (todayAiPromos.length >= 3) {
-                    console.log(`Salon ${salonId}: already has ${todayAiPromos.length} AI promos today, skipping.`);
+                if (todaySmartPromos.length >= 3) {
+                    console.log(`Salon ${salonId}: already has ${todaySmartPromos.length} smart promos today, skipping.`);
                     continue;
                 }
 
@@ -1120,55 +1110,86 @@ export const generateAiPromotions = functions.pubsub
                 const loyalPct = cfg.loyalPercent || 15;
                 const loyalMin = cfg.loyalMinVisits || 10;
 
-                // Build client summary for Gemini
-                const topByVisits = [...clients].sort((a, b) => b.visits - a.visits).slice(0, 3);
-                const absentClients = clients.filter((c) => (now - c.lastVisit) > winBackWeeks * 7 * dayMs).slice(0, 5);
-                const loyalClients = clients.filter((c) => c.visits >= loyalMin).slice(0, 3);
+                // ── Rule-based promo generation ──
+                const promos: Array<{
+                    clientId: string; clientName: string; reason: string;
+                    discountPercent: number; title: string; description: string;
+                }> = [];
 
-                const prompt = `Tu es l'assistant marketing IA du salon "${salon.name}". Analyse ces données clients et propose des promotions ciblées. Réponds UNIQUEMENT en JSON valide, sans markdown.
+                // Already targeted client IDs (avoid duplicates)
+                const targeted = new Set<string>();
 
-Clients les plus actifs :
-${topByVisits.map((c) => `- ${c.name} (ID: ${c.id}): ${c.visits} visites, ${c.totalSpent} MAD total, dernière visite il y a ${Math.round((now - c.lastVisit) / dayMs)} jours`).join("\n")}
+                // Rule 1: WIN-BACK — clients absent for X+ weeks
+                const absentClients = clients
+                    .filter((c) => (now - c.lastVisit) > winBackWeeks * 7 * dayMs)
+                    .sort((a, b) => b.visits - a.visits); // prioritize those who used to come often
 
-Clients absents depuis ${winBackWeeks}+ semaines :
-${absentClients.length > 0 ? absentClients.map((c) => `- ${c.name} (ID: ${c.id}): ${c.visits} visites, absent depuis ${Math.round((now - c.lastVisit) / dayMs)} jours`).join("\n") : "Aucun"}
-
-Clients fidèles (${loyalMin}+ visites) :
-${loyalClients.length > 0 ? loyalClients.map((c) => `- ${c.name} (ID: ${c.id}): ${c.visits} visites, ${c.totalSpent} MAD`).join("\n") : "Aucun"}
-
-Règles :
-- top_client : meilleur client du mois → ${topPct}% pendant 7 jours
-- win_back : absent ${winBackWeeks}+ semaines → ${winBackPct}% pendant 7 jours
-- loyal : ${loyalMin}+ visites → ${loyalPct}% pendant 7 jours
-- Maximum 3 promotions au total
-- Ne propose une promo que si elle est pertinente
-
-Réponds avec un JSON array :
-[{"clientId": "xxx", "clientName": "xxx", "reason": "top_client|win_back|loyal", "discountPercent": ${topPct}, "title": "titre court en français", "description": "description courte en français"}]
-
-Si aucune promo n'est pertinente, réponds : []`;
-
-                const result = await model.generateContent(prompt);
-                let text = result.response.text().trim();
-
-                // Strip markdown code blocks if present
-                text = text.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
-
-                let promos: any[];
-                try {
-                    promos = JSON.parse(text);
-                } catch {
-                    console.error(`Salon ${salonId}: Gemini returned invalid JSON: ${text}`);
-                    continue;
+                for (const c of absentClients) {
+                    if (promos.length >= 3) break;
+                    if (targeted.has(c.id)) continue;
+                    const absentDays = Math.round((now - c.lastVisit) / dayMs);
+                    promos.push({
+                        clientId: c.id,
+                        clientName: c.name,
+                        reason: "win_back",
+                        discountPercent: winBackPct,
+                        title: `${c.name}, tu nous manques !`,
+                        description: `Cela fait ${absentDays} jours ! Profite de -${winBackPct}% sur ta prochaine visite.`,
+                    });
+                    targeted.add(c.id);
                 }
 
-                if (!Array.isArray(promos) || promos.length === 0) {
-                    console.log(`Salon ${salonId}: no AI promos suggested.`);
-                    continue;
+                // Rule 2: LOYAL — clients with X+ visits
+                const loyalClients = clients
+                    .filter((c) => c.visits >= loyalMin)
+                    .sort((a, b) => b.visits - a.visits);
+
+                for (const c of loyalClients) {
+                    if (promos.length >= 3) break;
+                    if (targeted.has(c.id)) continue;
+                    promos.push({
+                        clientId: c.id,
+                        clientName: c.name,
+                        reason: "loyal",
+                        discountPercent: loyalPct,
+                        title: `Merci pour ta fidélité, ${c.name} !`,
+                        description: `${c.visits} visites chez nous ! Voici -${loyalPct}% pour te remercier.`,
+                    });
+                    targeted.add(c.id);
                 }
 
-                // Cap at 3 promos max
-                promos = promos.slice(0, 3);
+                // Rule 3: TOP CLIENT — most visits in the last 30 days
+                const thirtyDaysAgo = now - 30 * dayMs;
+                const recentVisits: Record<string, number> = {};
+                for (const a of completedAppts) {
+                    const cid = a.clientId;
+                    if (!cid || cid === "walk-in") continue;
+                    const dt = a.dateTime?.toDate ? a.dateTime.toDate().getTime() : new Date(a.dateTime).getTime();
+                    if (dt >= thirtyDaysAgo) {
+                        recentVisits[cid] = (recentVisits[cid] || 0) + 1;
+                    }
+                }
+                const topClient = Object.entries(recentVisits)
+                    .sort((a, b) => b[1] - a[1])
+                    .find(([id]) => !targeted.has(id) && clientMap[id]);
+
+                if (topClient && promos.length < 3) {
+                    const c = clientMap[topClient[0]];
+                    promos.push({
+                        clientId: c.id,
+                        clientName: c.name,
+                        reason: "top_client",
+                        discountPercent: topPct,
+                        title: `${c.name}, notre meilleur client du mois !`,
+                        description: `${topClient[1]} visites ce mois-ci ! Profite de -${topPct}% en récompense.`,
+                    });
+                    targeted.add(c.id);
+                }
+
+                if (promos.length === 0) {
+                    console.log(`Salon ${salonId}: no smart promos to generate.`);
+                    continue;
+                }
 
                 const expiresAt = new Date(now + 7 * dayMs);
 
@@ -1176,20 +1197,20 @@ Si aucune promo n'est pertinente, réponds : []`;
                     // Create promotion in Firestore
                     const promoRef = await db.collection("promotions").add({
                         salonId,
-                        title: promo.title || "Offre spéciale",
-                        description: promo.description || "",
+                        title: promo.title,
+                        description: promo.description,
                         type: "percent",
-                        discountPercent: promo.discountPercent || 20,
+                        discountPercent: promo.discountPercent,
                         isActive: true,
                         createdAt: admin.firestore.FieldValue.serverTimestamp(),
                         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
                         isAiGenerated: true,
-                        aiReason: promo.reason || "other",
+                        aiReason: promo.reason,
                         targetedClientId: promo.clientId,
                         targetedClientName: promo.clientName,
                     });
 
-                    console.log(`✅ Salon ${salonId}: AI promo created (${promo.reason}) for ${promo.clientName} → ${promoRef.id}`);
+                    console.log(`Salon ${salonId}: smart promo created (${promo.reason}) for ${promo.clientName} → ${promoRef.id}`);
 
                     // Send push notification to the targeted client
                     if (promo.clientId) {
@@ -1201,16 +1222,16 @@ Si aucune promo n'est pertinente, réponds : []`;
                                 await messaging.send({
                                     token: fcmToken,
                                     notification: {
-                                        title: `🎁 ${salon.name} - Offre spéciale pour toi !`,
-                                        body: promo.title || "Une promotion exclusive t'attend !",
+                                        title: `${salon.name} - Offre spéciale pour toi !`,
+                                        body: promo.title,
                                     },
                                     data: {
-                                        type: "ai_promotion",
+                                        type: "smart_promotion",
                                         salonId,
                                         promotionId: promoRef.id,
                                     },
                                 });
-                                console.log(`📩 Push sent to ${promo.clientName} (${promo.clientId})`);
+                                console.log(`Push sent to ${promo.clientName} (${promo.clientId})`);
                             }
 
                             // Save in-app notification
@@ -1218,7 +1239,7 @@ Si aucune promo n'est pertinente, réponds : []`;
                                 userId: promo.clientId,
                                 title: `${salon.name} - Offre spéciale`,
                                 body: promo.title,
-                                type: "ai_promotion",
+                                type: "smart_promotion",
                                 salonId,
                                 read: false,
                                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1228,14 +1249,10 @@ Si aucune promo n'est pertinente, réponds : []`;
                         }
                     }
                 }
-
-                // Small delay between salons to avoid Gemini rate limits
-                await new Promise((resolve) => setTimeout(resolve, 500));
-
             } catch (salonErr) {
                 console.error(`Error processing salon ${salonDoc.id}:`, salonErr);
             }
         }
 
-        console.log("🎯 AI promotions generation complete.");
+        console.log("Smart promotions generation complete.");
     });

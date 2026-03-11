@@ -6,6 +6,7 @@ class SalonModel {
   final String name;
   final String address;
   final String city;
+  final String country;
   final String description;
   final String category;
   final double rating;
@@ -31,6 +32,7 @@ class SalonModel {
     required this.name,
     required this.address,
     required this.city,
+    this.country = 'Maroc',
     required this.description,
     required this.category,
     required this.rating,
@@ -64,6 +66,7 @@ class SalonModel {
       name: data['name'] ?? '',
       address: data['address'] ?? '',
       city: data['city'] ?? '',
+      country: data['country'] ?? 'Maroc',
       description: data['description'] ?? '',
       category: data['category'] ?? '',
       rating: (data['rating'] ?? 0.0).toDouble(),
@@ -102,6 +105,7 @@ class SalonModel {
       'name': name,
       'address': address,
       'city': city,
+      'country': country,
       'description': description,
       'category': category,
       'rating': rating,

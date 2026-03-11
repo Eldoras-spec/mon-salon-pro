@@ -101,6 +101,7 @@ class _OwnerOnboardingStep4ScreenState
         name: finalSalonData['name'],
         address: finalSalonData['address'],
         city: finalSalonData['city'],
+        country: finalSalonData['country'] ?? 'Maroc',
         description: finalSalonData['description'],
         category: finalSalonData['category'],
         rating: 0.0,
@@ -667,12 +668,12 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _fieldLabel('Prix'),
+                      _fieldLabel('Prix (MAD)'),
                       const SizedBox(height: 6),
                       TextField(
                         controller: _priceCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: _fieldDeco('0.00'),
+                        decoration: _fieldDeco('0'),
                       ),
                     ],
                   ),

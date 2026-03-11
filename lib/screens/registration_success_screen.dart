@@ -5,8 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 import '../services/notification_service.dart';
-import '../services/database_service.dart';
-import 'client_salon_profile_screen.dart';
 
 class RegistrationSuccessScreen extends StatefulWidget {
   final bool isOwner;
@@ -40,21 +38,6 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
       context,
       rootNavigator: true,
     ).popUntil((route) => route.isFirst);
-  }
-
-  Future<void> _previewProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final salon = await DatabaseService().getSalon(user.uid);
-    if (salon == null || !mounted) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ClientSalonProfileScreen(salon: salon),
-      ),
-    );
   }
 
   Future<void> _handleNotificationToggle(bool value) async {
@@ -251,27 +234,6 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                             : Icons.search,
                       ),
                     ),
-                    if (widget.isOwner) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _previewProfile,
-                          icon: const Icon(Icons.remove_red_eye, size: 18),
-                          label: const Text('Aperçu du profil'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.secondary600,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            side: const BorderSide(
-                              color: AppColors.secondary200,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ],
