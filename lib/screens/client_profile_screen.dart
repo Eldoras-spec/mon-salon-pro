@@ -261,7 +261,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
 
                     const SizedBox(height: 16),
                     Text(
-                      'Mon Salon v1.1.0',
+                      'Mon Salon v1.1.2',
                       style: TextStyle(
                           fontSize: 11, color: AppColors.secondary300),
                     ),
