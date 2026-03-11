@@ -5,6 +5,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/promotion_model.dart';
+import '../models/review_reward_model.dart';
+import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
@@ -313,6 +315,49 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                                     _confirmDelete(context, p.id),
                               ),
                             )),
+                      const SizedBox(height: 28),
+
+                      // ── Paramètres fidélité & IA ────────────────────────
+                      Text(
+                        'Paramètres',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brand950,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      salonAsync.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (salon) {
+                          if (salon == null) return const SizedBox.shrink();
+                          return Column(
+                            children: [
+                              _RewardToggle(salon: salon),
+                              const SizedBox(height: 1),
+                              _AiPromoToggle(salon: salon),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Google Review Reward section
+                      salonAsync.when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (salon) {
+                          if (salon == null) return const SizedBox.shrink();
+                          final cfg = salon.googleReviewReward;
+                          final enabled = cfg['enabled'] == true;
+                          return _GoogleReviewSection(
+                            salonId: salon.id,
+                            config: cfg,
+                            enabled: enabled,
+                          );
+                        },
+                      ),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -1184,6 +1229,1101 @@ class _PromoField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Google Review Reward Section ─────────────────────────────────────────────
+
+class _GoogleReviewSection extends StatefulWidget {
+  const _GoogleReviewSection({
+    required this.salonId,
+    required this.config,
+    required this.enabled,
+  });
+  final String salonId;
+  final Map<String, dynamic> config;
+  final bool enabled;
+
+  @override
+  State<_GoogleReviewSection> createState() => _GoogleReviewSectionState();
+}
+
+class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
+  void _showInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF9C3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.star_rounded,
+                  color: Color(0xFFCA8A04), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Récompense Avis Google',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 15, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Comment ça fonctionne ?',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: AppColors.brand950),
+            ),
+            SizedBox(height: 10),
+            _InfoStep(
+              number: '1',
+              text:
+                  'Après un RDV terminé, le client reçoit une invitation à laisser un avis Google.',
+            ),
+            SizedBox(height: 8),
+            _InfoStep(
+              number: '2',
+              text:
+                  'Il tape "J\'ai laissé mon avis" dans l\'app — une demande de validation vous est envoyée.',
+            ),
+            SizedBox(height: 8),
+            _InfoStep(
+              number: '3',
+              text:
+                  'Vous vérifiez l\'avis sur Google Maps, puis validez dans l\'app.',
+            ),
+            SizedBox(height: 8),
+            _InfoStep(
+              number: '4',
+              text:
+                  'Le client reçoit automatiquement son code promo de réduction.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Compris'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSettingsDialog() {
+    final percentCtrl = TextEditingController(
+        text: '${widget.config['discountPercent'] ?? 10}');
+    final mapsUrlCtrl = TextEditingController(
+        text: widget.config['googleMapsUrl'] ?? '');
+    bool saving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Paramètres de la récompense',
+              style: GoogleFonts.dmSans(
+                  fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Réduction offerte (%)',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary500,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: percentCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: 'Ex: 10',
+                  filled: true,
+                  fillColor: AppColors.secondary50,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  const Text('Lien Google Maps',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.secondary500,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: ctx,
+                        builder: (_) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          title: const Text('Comment obtenir le lien ?'),
+                          content: const Text(
+                            '1. Ouvrez Google Maps\n'
+                            '2. Recherchez votre salon\n'
+                            '3. Appuyez sur "Partager" → copiez le lien\n\n'
+                            'Le lien ressemble à :\nhttps://maps.app.goo.gl/...',
+                          ),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('OK')),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Icon(Icons.help_outline_rounded,
+                        size: 15, color: AppColors.secondary400),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: mapsUrlCtrl,
+                decoration: InputDecoration(
+                  hintText: 'https://maps.app.goo.gl/...',
+                  filled: true,
+                  fillColor: AppColors.secondary50,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final percent =
+                          int.tryParse(percentCtrl.text.trim()) ?? 10;
+                      final mapsUrl = mapsUrlCtrl.text.trim();
+                      if (percent <= 0 || percent > 100) return;
+                      setDlgState(() => saving = true);
+                      final newConfig = {
+                        'enabled': widget.enabled,
+                        'discountPercent': percent,
+                        'googleMapsUrl': mapsUrl,
+                      };
+                      await _db.updateGoogleReviewReward(
+                          widget.salonId, newConfig);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand700,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text('Enregistrer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleEnabled(bool value) async {
+    final newConfig = Map<String, dynamic>.from(widget.config);
+    newConfig['enabled'] = value;
+    await _db.updateGoogleReviewReward(widget.salonId, newConfig);
+  }
+
+  Future<void> _validateReward(ReviewRewardModel reward) async {
+    final percent = widget.config['discountPercent'] ?? 10;
+    final code =
+        'AVIS${reward.clientName.toUpperCase().replaceAll(' ', '').substring(0, reward.clientName.length.clamp(0, 4))}$percent';
+    await _db.validateReviewReward(reward.id, code);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Code "$code" envoyé à ${reward.clientName}'),
+          backgroundColor: const Color(0xFF16A34A),
+        ),
+      );
+    }
+  }
+
+  Future<void> _rejectReward(ReviewRewardModel reward) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Refuser cet avis ?'),
+        content: Text(
+            'La demande de ${reward.clientName} sera refusée, aucun code promo ne sera envoyé.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Refuser',
+                  style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _db.rejectReviewReward(reward.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Récompense Avis Google',
+              style: GoogleFonts.dmSans(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brand950,
+              ),
+            ),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: _showInfoDialog,
+              child: const Icon(Icons.info_outline_rounded,
+                  size: 17, color: AppColors.secondary400),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.secondary100),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF9C3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.star_rounded,
+                        color: Color(0xFFCA8A04), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Offrir une réduction pour un avis Google',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.brand950,
+                          ),
+                        ),
+                        Text(
+                          widget.enabled
+                              ? '${widget.config['discountPercent'] ?? 10}% de réduction à la validation'
+                              : 'Activez pour récompenser vos clients',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.secondary400),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: widget.enabled,
+                    onChanged: _toggleEnabled,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: AppColors.brand600,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
+              ),
+              if (widget.enabled) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _showSettingsDialog,
+                    icon: const Icon(Icons.tune_rounded, size: 16),
+                    label: const Text('Paramètres', style: TextStyle(fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brand700,
+                      side: const BorderSide(color: AppColors.brand200),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // Pending review rewards list
+        if (widget.enabled) ...[
+          const SizedBox(height: 20),
+          StreamBuilder<List<ReviewRewardModel>>(
+            stream: _db.getPendingReviewRewards(widget.salonId),
+            builder: (context, snap) {
+              final rewards = snap.data ?? [];
+              if (rewards.isEmpty) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Avis en attente de validation',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brand950,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF9C3),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${rewards.length}',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFCA8A04)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...rewards.map((r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _ReviewRewardTile(
+                          reward: r,
+                          googleMapsUrl:
+                              widget.config['googleMapsUrl'] ?? '',
+                          onValidate: () => _validateReward(r),
+                          onReject: () => _rejectReward(r),
+                        ),
+                      )),
+                ],
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _InfoStep extends StatelessWidget {
+  const _InfoStep({required this.number, required this.text});
+  final String number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 20,
+          height: 20,
+          decoration: const BoxDecoration(
+            color: AppColors.brand700,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(number,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.secondary600,
+                  height: 1.4)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewRewardTile extends StatelessWidget {
+  const _ReviewRewardTile({
+    required this.reward,
+    required this.googleMapsUrl,
+    required this.onValidate,
+    required this.onReject,
+  });
+  final ReviewRewardModel reward;
+  final String googleMapsUrl;
+  final VoidCallback onValidate;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    final date =
+        '${reward.createdAt.day}/${reward.createdAt.month}/${reward.createdAt.year}';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFEF9C3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person_outline_rounded,
+                  size: 16, color: AppColors.brand400),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  reward.clientName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppColors.brand950),
+                ),
+              ),
+              Text(date,
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.secondary400)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${reward.discountPercent}% de réduction à offrir',
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.secondary500),
+          ),
+          if (googleMapsUrl.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () async {
+                final url = Uri.parse(googleMapsUrl);
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url,
+                      mode: LaunchMode.externalApplication);
+                }
+              },
+              child: const Row(
+                children: [
+                  Icon(Icons.open_in_new_rounded,
+                      size: 13, color: AppColors.brand600),
+                  SizedBox(width: 4),
+                  Text(
+                    'Voir les avis Google',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.brand600,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onReject,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFDC2626),
+                    side:
+                        const BorderSide(color: Color(0xFFFECACA)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Refuser',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onValidate,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Valider ✓',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Reward Points Toggle ─────────────────────────────────────────────────────
+
+class _RewardToggle extends StatefulWidget {
+  const _RewardToggle({required this.salon});
+  final SalonModel salon;
+
+  @override
+  State<_RewardToggle> createState() => _RewardToggleState();
+}
+
+class _RewardToggleState extends State<_RewardToggle> {
+  late bool _enabled;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.salon.rewardPointsEnabled;
+  }
+
+  Future<void> _toggle(bool value) async {
+    setState(() {
+      _enabled = value;
+      _saving = true;
+    });
+    try {
+      await DatabaseService().updateSalonField(
+        widget.salon.id,
+        'rewardPointsEnabled',
+        value,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _enabled = !value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.brand50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.stars_rounded,
+                size: 20, color: AppColors.brand600),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Points de fidélité',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brand950,
+                  ),
+                ),
+                Text(
+                  _enabled
+                      ? 'Les clients cumulent des points'
+                      : 'Système désactivé',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.secondary400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_saving)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.brand600),
+            )
+          else
+            Switch(
+              value: _enabled,
+              onChanged: _toggle,
+              activeTrackColor: AppColors.brand600,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── AI Auto-Promotions Toggle ────────────────────────────────────────────────
+
+class _AiPromoToggle extends StatefulWidget {
+  const _AiPromoToggle({required this.salon});
+  final SalonModel salon;
+
+  @override
+  State<_AiPromoToggle> createState() => _AiPromoToggleState();
+}
+
+class _AiPromoToggleState extends State<_AiPromoToggle> {
+  late bool _enabled;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.salon.aiPromosEnabled;
+  }
+
+  Future<void> _toggle(bool value) async {
+    if (value) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.auto_awesome,
+                    size: 20, color: AppColors.brand600),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child:
+                    Text('Promotions IA', style: TextStyle(fontSize: 17)),
+              ),
+            ],
+          ),
+          content: const Text(
+            'L\'IA analysera vos clients chaque jour et créera des promotions ciblées :\n\n'
+            '• Meilleur client du mois\n'
+            '• Client absent depuis longtemps\n'
+            '• Client fidèle\n\n'
+            'Les promotions sont envoyées par notification push. '
+            'Vous pouvez personnaliser les pourcentages depuis les paramètres.',
+            style: TextStyle(
+                fontSize: 13.5, height: 1.5, color: AppColors.secondary600),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand600,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Activer',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() {
+      _enabled = value;
+      _saving = true;
+    });
+    try {
+      await DatabaseService().updateSalonField(
+        widget.salon.id,
+        'aiPromosEnabled',
+        value,
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _enabled = !value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _showConfigDialog() async {
+    final config = Map<String, dynamic>.from(widget.salon.aiPromoConfig);
+    int topPercent = config['topClientPercent'] ?? 30;
+    int winBackPercent = config['winBackPercent'] ?? 20;
+    int winBackWeeks = config['winBackWeeks'] ?? 3;
+    int loyalPercent = config['loyalPercent'] ?? 15;
+    int loyalMinVisits = config['loyalMinVisits'] ?? 10;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.tune_rounded,
+                    size: 20, color: AppColors.brand600),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Configurer les promos IA',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: MediaQuery.of(ctx).size.width,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _configRow(
+                    'Meilleur client',
+                    'Réduction pour le top client du mois',
+                    '$topPercent%',
+                    topPercent,
+                    5,
+                    50,
+                    (v) => setDialogState(() => topPercent = v),
+                  ),
+                  const Divider(height: 24),
+                  _configRow(
+                    'Client absent',
+                    'Réduction pour récupérer un client',
+                    '$winBackPercent%',
+                    winBackPercent,
+                    5,
+                    50,
+                    (v) => setDialogState(() => winBackPercent = v),
+                  ),
+                  const SizedBox(height: 8),
+                  _configRow(
+                    'Semaines d\'absence',
+                    'Après combien de semaines ?',
+                    '$winBackWeeks sem.',
+                    winBackWeeks,
+                    2,
+                    8,
+                    (v) => setDialogState(() => winBackWeeks = v),
+                  ),
+                  const Divider(height: 24),
+                  _configRow(
+                    'Client fidèle',
+                    'Réduction de remerciement',
+                    '$loyalPercent%',
+                    loyalPercent,
+                    5,
+                    50,
+                    (v) => setDialogState(() => loyalPercent = v),
+                  ),
+                  const SizedBox(height: 8),
+                  _configRow(
+                    'Visites minimum',
+                    'Nombre de visites pour être fidèle',
+                    '$loyalMinVisits',
+                    loyalMinVisits,
+                    5,
+                    30,
+                    (v) => setDialogState(() => loyalMinVisits = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                config['topClientPercent'] = topPercent;
+                config['winBackPercent'] = winBackPercent;
+                config['winBackWeeks'] = winBackWeeks;
+                config['loyalPercent'] = loyalPercent;
+                config['loyalMinVisits'] = loyalMinVisits;
+                Navigator.pop(ctx, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand600,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Enregistrer',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      try {
+        await DatabaseService().updateSalonField(
+          widget.salon.id,
+          'aiPromoConfig',
+          config,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Configuration IA enregistrée'),
+              backgroundColor: Color(0xFF16A34A),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur : $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Widget _configRow(String title, String subtitle, String valueLabel,
+      int value, int min, int max, ValueChanged<int> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brand950)),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.secondary400)),
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.brand50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(valueLabel,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brand600)),
+            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: AppColors.brand600,
+            inactiveTrackColor: AppColors.brand100,
+            thumbColor: AppColors.brand600,
+            overlayColor: AppColors.brand600.withValues(alpha: 0.1),
+            trackHeight: 3,
+          ),
+          child: Slider(
+            value: value.toDouble(),
+            min: min.toDouble(),
+            max: max.toDouble(),
+            divisions: max - min,
+            onChanged: (v) => onChanged(v.round()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.auto_awesome,
+                    size: 20, color: AppColors.brand600),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Promotions IA',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brand950,
+                      ),
+                    ),
+                    Text(
+                      _enabled
+                          ? 'Promotions ciblées automatiques'
+                          : 'Désactivé',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondary400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_saving)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.brand600),
+                )
+              else
+                Switch(
+                  value: _enabled,
+                  onChanged: _toggle,
+                  activeTrackColor: AppColors.brand600,
+                ),
+            ],
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _showConfigDialog,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.brand100),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.tune_rounded,
+                        size: 16, color: AppColors.brand600),
+                    SizedBox(width: 8),
+                    Text(
+                      'Configurer les pourcentages',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brand600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

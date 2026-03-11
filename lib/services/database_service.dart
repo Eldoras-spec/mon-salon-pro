@@ -11,6 +11,7 @@ import '../models/team_member_model.dart';
 import '../models/waitlist_model.dart';
 import '../models/product_model.dart';
 import '../models/order_model.dart';
+import '../models/review_reward_model.dart';
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -1047,6 +1048,42 @@ class DatabaseService {
   Future<void> updateOrderStatus(String orderId, String status) async {
     await _firestore.collection('orders').doc(orderId).update({
       'status': status,
+    });
+  }
+
+  // ── Google Review Rewards ─────────────────────────────────────────────────
+
+  Stream<List<ReviewRewardModel>> getPendingReviewRewards(String salonId) {
+    return _firestore
+        .collection('reviewRewards')
+        .where('salonId', isEqualTo: salonId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => ReviewRewardModel.fromFirestore(d))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  }
+
+  Future<void> validateReviewReward(String rewardId, String promoCode) async {
+    await _firestore.collection('reviewRewards').doc(rewardId).update({
+      'status': 'validated',
+      'promoCode': promoCode,
+      'validatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> rejectReviewReward(String rewardId) async {
+    await _firestore.collection('reviewRewards').doc(rewardId).update({
+      'status': 'rejected',
+      'validatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateGoogleReviewReward(
+      String salonId, Map<String, dynamic> config) async {
+    await _firestore.collection('salons').doc(salonId).update({
+      'googleReviewReward': config,
     });
   }
 }

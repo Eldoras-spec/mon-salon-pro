@@ -215,17 +215,16 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       child: SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: OutlinedButton.icon(
+                        child: ElevatedButton.icon(
                           onPressed: _signOut,
                           icon: const Icon(Icons.logout_rounded, size: 18),
                           label: const Text('Se déconnecter'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFDC2626),
-                            side: const BorderSide(
-                                color: Color(0xFFFEE2E2), width: 1.5),
-                            backgroundColor: const Color(0xFFFFF5F5),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: AppColors.brand950,
+                            backgroundColor: AppColors.secondary100,
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                                borderRadius: BorderRadius.circular(14)),
                             textStyle: const TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 14),
                           ),
@@ -241,17 +240,16 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       child: SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: OutlinedButton.icon(
+                        child: ElevatedButton.icon(
                           onPressed: _deleteAccount,
-                          icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                          icon: const Icon(Icons.delete_outline_rounded, size: 18),
                           label: const Text('Supprimer mon compte'),
-                          style: OutlinedButton.styleFrom(
+                          style: ElevatedButton.styleFrom(
                             foregroundColor: const Color(0xFFDC2626),
-                            side: const BorderSide(
-                                color: Color(0xFFFEE2E2), width: 1.5),
-                            backgroundColor: const Color(0xFFFFF5F5),
+                            backgroundColor: const Color(0xFFFEF2F2),
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                                borderRadius: BorderRadius.circular(14)),
                             textStyle: const TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 14),
                           ),

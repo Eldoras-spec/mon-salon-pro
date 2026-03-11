@@ -24,6 +24,7 @@ class SalonModel {
   final bool rewardPointsEnabled;
   final bool aiPromosEnabled;
   final Map<String, dynamic> aiPromoConfig;
+  final Map<String, dynamic> googleReviewReward;
   final String? slug;
 
   SalonModel({
@@ -54,6 +55,11 @@ class SalonModel {
       'winBackWeeks': 3,
       'loyalPercent': 15,
       'loyalMinVisits': 10,
+    },
+    this.googleReviewReward = const {
+      'enabled': false,
+      'discountPercent': 10,
+      'googleMapsUrl': '',
     },
     this.slug,
   });
@@ -95,6 +101,11 @@ class SalonModel {
         'loyalPercent': 15,
         'loyalMinVisits': 10,
       }),
+      googleReviewReward: Map<String, dynamic>.from(data['googleReviewReward'] ?? {
+        'enabled': false,
+        'discountPercent': 10,
+        'googleMapsUrl': '',
+      }),
       slug: data['slug'],
     );
   }
@@ -122,6 +133,7 @@ class SalonModel {
       'rewardPointsEnabled': rewardPointsEnabled,
       'aiPromosEnabled': aiPromosEnabled,
       'aiPromoConfig': aiPromoConfig,
+      'googleReviewReward': googleReviewReward,
       if (slug != null) 'slug': slug,
     };
   }
