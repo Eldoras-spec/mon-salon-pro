@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
@@ -64,6 +65,37 @@ class _BasicRegistrationScreenState
     setState(() => _passwordStrength = strength);
   }
 
+  // ── Device-level rate limiting ─────────────────────────────
+  static const _maxAccountsPerDevice = 2;
+  static const _cooldownSeconds = 60;
+
+  Future<String?> _checkDeviceLimit() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Check cooldown (60s between attempts)
+    final lastAttempt = prefs.getInt('reg_last_attempt') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - lastAttempt < _cooldownSeconds * 1000) {
+      final remaining = _cooldownSeconds - ((now - lastAttempt) ~/ 1000);
+      return 'Veuillez patienter ${remaining}s avant de réessayer.';
+    }
+
+    // Check max accounts per device
+    final count = prefs.getInt('reg_device_count') ?? 0;
+    if (count >= _maxAccountsPerDevice) {
+      return 'Limite de création de compte atteinte sur cet appareil.';
+    }
+
+    return null; // OK
+  }
+
+  Future<void> _incrementDeviceCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final count = prefs.getInt('reg_device_count') ?? 0;
+    await prefs.setInt('reg_device_count', count + 1);
+    await prefs.setInt('reg_last_attempt', DateTime.now().millisecondsSinceEpoch);
+  }
+
   Future<void> _handleRegistration() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptTerms) {
@@ -78,8 +110,6 @@ class _BasicRegistrationScreenState
     try {
       // If the user already exists (came back from onboarding to edit),
       // skip re-registration and navigate forward directly.
-      // Use AuthService.currentUserId (synchronous) instead of the StreamProvider
-      // to avoid a race where the stream hasn't emitted yet.
       final existingUserId = ref.read(authServiceProvider).currentUserId;
       if (existingUserId != null) {
         if (mounted) {
@@ -94,6 +124,18 @@ class _BasicRegistrationScreenState
         return;
       }
 
+      // Device-level rate limit check
+      final limitError = await _checkDeviceLimit();
+      if (limitError != null) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(limitError), backgroundColor: Colors.redAccent),
+          );
+        }
+        return;
+      }
+
       await ref.read(authServiceProvider).registerWithEmail(
             email: _emailController.text.trim(),
             password: _passwordController.text,
@@ -103,6 +145,9 @@ class _BasicRegistrationScreenState
             city: '',
             isClient: false,
           );
+
+      // Registration succeeded — increment device counter
+      await _incrementDeviceCount();
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -126,6 +171,10 @@ class _BasicRegistrationScreenState
           message = 'Email invalide';
         } else if (errorString.contains('network-request-failed')) {
           message = 'Erreur réseau, vérifiez votre connexion';
+        } else if (errorString.contains('blocking-function-error-response') ||
+                   errorString.contains('resource-exhausted') ||
+                   errorString.contains('permission-denied')) {
+          message = 'Trop de comptes créés. Réessayez plus tard.';
         } else {
           message = e.toString();
         }

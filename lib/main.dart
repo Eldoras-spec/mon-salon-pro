@@ -155,11 +155,13 @@ class MonSalonProApp extends ConsumerWidget {
 
               // Owner flow: team profile selector → member or owner scaffold
               final profileSelected = ref.watch(profileSelectedProvider);
-              final activeMember = ref.watch(activeTeamMemberProvider);
+              final activeMemberRole = ref.watch(
+                activeTeamMemberProvider.select((m) => m?.role),
+              );
               if (!profileSelected) {
                 return TeamProfileSelectorScreen(userModel: model);
               }
-              if (activeMember != null && activeMember.role == 'member') {
+              if (activeMemberRole == 'member') {
                 return const MemberHomeScreen();
               }
               return MainAppScaffold(userModel: model);

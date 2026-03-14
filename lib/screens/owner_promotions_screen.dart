@@ -246,16 +246,16 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 10),
                       _PromoTypeCard(
-                        icon: Icons.redeem_outlined,
+                        icon: Icons.tune_outlined,
                         iconBg: const Color(0xFFFDF4FF),
                         iconColor: const Color(0xFF9333EA),
-                        title: 'Offre spéciale',
-                        desc: 'Ex : 1 service acheté = 1 offert',
+                        title: 'Offre conditionnelle',
+                        desc: 'Réduction avec conditions (minimum, jours, heures)',
                         onTap: () {
                           final salon = salonAsync.value;
                           if (salon != null) {
                             _showAddPromoSheet(context, salon.id,
-                                initialType: 'special',
+                                initialType: 'conditional',
                                 services: salon.services,
                                 slug: salon.slug);
                           }
@@ -436,15 +436,24 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
   final _descCtrl = TextEditingController();
   final _percentCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
+  final _minAmountCtrl = TextEditingController();
   late String _type;
   DateTime? _expiresAt;
   bool _saving = false;
   bool _allServices = true;
   final Set<String> _selectedServices = {};
+  // Conditional fields
+  final Set<String> _validDays = {};
+  String? _validHoursStart;
+  String? _validHoursEnd;
+
+  static const _daysList = [
+    'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+  ];
 
   static const _typeLabels = {
     'percent': 'Réduction %',
-    'special': 'Offre spéciale',
+    'conditional': 'Conditionnelle',
     'code': 'Code promo',
   };
 
@@ -460,6 +469,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
     _descCtrl.dispose();
     _percentCtrl.dispose();
     _codeCtrl.dispose();
+    _minAmountCtrl.dispose();
     super.dispose();
   }
 
@@ -479,7 +489,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
     if (title.isEmpty || desc.isEmpty) return;
 
     double? percent;
-    if (_type == 'percent') {
+    if (_type == 'percent' || _type == 'conditional') {
       percent = double.tryParse(
           _percentCtrl.text.replaceAll(',', '.'));
       if (percent == null || percent <= 0 || percent > 100) return;
@@ -493,10 +503,26 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
     setState(() => _saving = true);
     try {
-      // For percent type: null = all services, otherwise selected list
+      // For percent/conditional type: null = all services, otherwise selected list
       List<String>? serviceNames;
-      if (_type == 'percent' && !_allServices && _selectedServices.isNotEmpty) {
+      if ((_type == 'percent' || _type == 'conditional') &&
+          !_allServices && _selectedServices.isNotEmpty) {
         serviceNames = _selectedServices.toList();
+      }
+
+      // Conditional fields
+      double? minAmount;
+      List<String>? validDays;
+      String? hoursStart;
+      String? hoursEnd;
+      if (_type == 'conditional') {
+        final minText = _minAmountCtrl.text.trim();
+        if (minText.isNotEmpty) {
+          minAmount = double.tryParse(minText.replaceAll(',', '.'));
+        }
+        if (_validDays.isNotEmpty) validDays = _validDays.toList();
+        hoursStart = _validHoursStart;
+        hoursEnd = _validHoursEnd;
       }
 
       final promo = PromotionModel(
@@ -511,6 +537,10 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
         expiresAt: _expiresAt,
         isActive: true,
         createdAt: DateTime.now(),
+        minAmount: minAmount,
+        validDays: validDays,
+        validHoursStart: hoursStart,
+        validHoursEnd: hoursEnd,
       );
       await _db.addPromotion(promo);
       if (mounted) {
@@ -581,7 +611,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 maxLines: 2),
             const SizedBox(height: 12),
 
-            if (_type == 'percent') ...[
+            if (_type == 'percent' || _type == 'conditional') ...[
               _PromoField(
                 label: 'Pourcentage de réduction (%)',
                 controller: _percentCtrl,
@@ -667,6 +697,188 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                     'Aucun service configuré dans votre salon.',
                     style: TextStyle(
                         fontSize: 12, color: AppColors.secondary400),
+                  ),
+                ),
+              const SizedBox(height: 12),
+            ],
+
+            // ── Conditional-specific fields ──
+            if (_type == 'conditional') ...[
+              // Min amount
+              _PromoField(
+                label: 'Dépense minimum (MAD) — optionnel',
+                controller: _minAmountCtrl,
+                keyboard: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 12),
+
+              // Valid days
+              Text('Jours valides (optionnel)',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary500,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _daysList.map((day) {
+                  final selected = _validDays.contains(day);
+                  return GestureDetector(
+                    onTap: () => setState(() {
+                      if (selected) {
+                        _validDays.remove(day);
+                      } else {
+                        _validDays.add(day);
+                      }
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.brand700
+                            : AppColors.secondary50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.brand700
+                              : AppColors.secondary200,
+                        ),
+                      ),
+                      child: Text(
+                        day.substring(0, 3),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: selected
+                              ? Colors.white
+                              : AppColors.secondary500,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              if (_validDays.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Tous les jours si aucun sélectionné',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.secondary400),
+                  ),
+                ),
+              const SizedBox(height: 12),
+
+              // Valid hours
+              Text('Heures valides (optionnel)',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary500,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: const TimeOfDay(hour: 9, minute: 0),
+                        );
+                        if (time != null) {
+                          setState(() => _validHoursStart =
+                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}');
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time,
+                                size: 16, color: AppColors.secondary400),
+                            const SizedBox(width: 8),
+                            Text(
+                              _validHoursStart ?? 'De',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _validHoursStart != null
+                                    ? AppColors.brand950
+                                    : AppColors.secondary400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('→',
+                        style: TextStyle(color: AppColors.secondary400)),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: const TimeOfDay(hour: 12, minute: 0),
+                        );
+                        if (time != null) {
+                          setState(() => _validHoursEnd =
+                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}');
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time,
+                                size: 16, color: AppColors.secondary400),
+                            const SizedBox(width: 8),
+                            Text(
+                              _validHoursEnd ?? 'À',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _validHoursEnd != null
+                                    ? AppColors.brand950
+                                    : AppColors.secondary400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_validHoursStart != null || _validHoursEnd != null)
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          size: 16, color: AppColors.secondary400),
+                      onPressed: () => setState(() {
+                        _validHoursStart = null;
+                        _validHoursEnd = null;
+                      }),
+                    ),
+                ],
+              ),
+              if (_validHoursStart == null && _validHoursEnd == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Toute la journée si non défini',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.secondary400),
                   ),
                 ),
               const SizedBox(height: 12),
@@ -769,16 +981,19 @@ class _PromoTile extends StatelessWidget {
 
   static const _typeIcon = {
     'percent': Icons.percent_rounded,
-    'special': Icons.redeem_outlined,
+    'conditional': Icons.tune_outlined,
+    'special': Icons.tune_outlined,
     'code': Icons.confirmation_number_outlined,
   };
   static const _typeBg = {
     'percent': Color(0xFFEFF6FF),
+    'conditional': Color(0xFFFDF4FF),
     'special': Color(0xFFFDF4FF),
     'code': Color(0xFFFFF7ED),
   };
   static const _typeColor = {
     'percent': Color(0xFF2563EB),
+    'conditional': Color(0xFF9333EA),
     'special': Color(0xFF9333EA),
     'code': Color(0xFFEA580C),
   };

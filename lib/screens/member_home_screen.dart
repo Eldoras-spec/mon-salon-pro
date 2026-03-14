@@ -1196,6 +1196,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
               _LegendDot(color: AppColors.secondary50, label: 'Passé'),
             ],
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );

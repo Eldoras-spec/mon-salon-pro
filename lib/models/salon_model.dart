@@ -26,6 +26,9 @@ class SalonModel {
   final Map<String, dynamic> aiPromoConfig;
   final Map<String, dynamic> googleReviewReward;
   final String? slug;
+  // Service packs — bundled services at a reduced price
+  // Each pack: { name, services: [service names], price, description? }
+  final List<Map<String, dynamic>> servicePacks;
 
   SalonModel({
     required this.id,
@@ -47,6 +50,7 @@ class SalonModel {
     this.longitude,
     required this.createdAt,
     this.socialLinks = const {},
+    this.servicePacks = const [],
     this.rewardPointsEnabled = true,
     this.aiPromosEnabled = false,
     this.aiPromoConfig = const {
@@ -106,6 +110,7 @@ class SalonModel {
         'discountPercent': 10,
         'googleMapsUrl': '',
       }),
+      servicePacks: List<Map<String, dynamic>>.from(data['servicePacks'] ?? []),
       slug: data['slug'],
     );
   }
@@ -134,6 +139,7 @@ class SalonModel {
       'aiPromosEnabled': aiPromosEnabled,
       'aiPromoConfig': aiPromoConfig,
       'googleReviewReward': googleReviewReward,
+      'servicePacks': servicePacks,
       if (slug != null) 'slug': slug,
     };
   }

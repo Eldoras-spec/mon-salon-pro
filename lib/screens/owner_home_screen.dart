@@ -1297,10 +1297,14 @@ class _AISummaryCard extends StatefulWidget {
 
 class _AISummaryCardState extends State<_AISummaryCard> {
   String? _summary;
+  List<String> _noShowAlerts = [];
+  List<String> _priceSuggestions = [];
+  List<String> _actionSuggestions = [];
+  String? _monthlyComparison;
+  String? _financialInsights;
   bool _loading = false;
   bool _error = false;
   bool _expanded = false;
-  static const int _maxChars = 120;
 
   @override
   void initState() {
@@ -1308,7 +1312,6 @@ class _AISummaryCardState extends State<_AISummaryCard> {
     _loadCachedOrFetch();
   }
 
-  /// Load cached summary from Firestore. Only call Gemini if no cache for today.
   Future<void> _loadCachedOrFetch() async {
     setState(() { _loading = true; _error = false; });
     try {
@@ -1317,20 +1320,29 @@ class _AISummaryCardState extends State<_AISummaryCard> {
           .doc(widget.salonId)
           .get();
       final data = doc.data();
-      final cachedSummary = data?['aiSummary'] as String?;
       final cachedDate = data?['aiSummaryDate'] as String?;
       final today = DateTime.now().toIso8601String().substring(0, 10);
 
-      if (cachedSummary != null && cachedDate == today) {
-        setState(() { _summary = cachedSummary; _loading = false; });
+      if (cachedDate == today && data?['aiSummary'] != null) {
+        _applyCache(data!);
         return;
       }
-      // No valid cache — fetch from Gemini
       await _fetchFromGemini();
     } catch (e) {
-      // Fallback: try Gemini directly
       await _fetchFromGemini();
     }
+  }
+
+  void _applyCache(Map<String, dynamic> data) {
+    setState(() {
+      _summary = data['aiSummary'] as String?;
+      _noShowAlerts = List<String>.from(data['aiNoShowAlerts'] ?? []);
+      _priceSuggestions = List<String>.from(data['aiPriceSuggestions'] ?? []);
+      _actionSuggestions = List<String>.from(data['aiActionSuggestions'] ?? []);
+      _monthlyComparison = data['aiMonthlyComparison'] as String?;
+      _financialInsights = data['aiFinancialInsights'] as String?;
+      _loading = false;
+    });
   }
 
   Future<void> _fetchFromGemini() async {
@@ -1338,25 +1350,46 @@ class _AISummaryCardState extends State<_AISummaryCard> {
     try {
       final callable = FirebaseFunctions.instance.httpsCallable(
         'generateDailySummary',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
       );
       final result = await callable.call({'salonId': widget.salonId});
       final data = result.data as Map<String, dynamic>;
-      final summary = data['summary'] as String?;
-      setState(() { _summary = summary; _loading = false; });
 
-      // Cache in Firestore
-      if (summary != null) {
-        final today = DateTime.now().toIso8601String().substring(0, 10);
-        FirebaseFirestore.instance
-            .collection('salons')
-            .doc(widget.salonId)
-            .update({'aiSummary': summary, 'aiSummaryDate': today});
-      }
+      setState(() {
+        _summary = data['summary'] as String?;
+        _noShowAlerts = List<String>.from(data['noShowAlerts'] ?? []);
+        _priceSuggestions = List<String>.from(data['priceSuggestions'] ?? []);
+        _actionSuggestions = List<String>.from(data['actionSuggestions'] ?? []);
+        _monthlyComparison = data['monthlyComparison'] as String?;
+        _financialInsights = data['financialInsights'] as String?;
+        _loading = false;
+      });
+
+      // Cache all sections in Firestore
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.salonId)
+          .update({
+        'aiSummary': _summary,
+        'aiSummaryDate': today,
+        'aiNoShowAlerts': _noShowAlerts,
+        'aiPriceSuggestions': _priceSuggestions,
+        'aiActionSuggestions': _actionSuggestions,
+        'aiMonthlyComparison': _monthlyComparison,
+        'aiFinancialInsights': _financialInsights,
+      });
     } catch (e) {
       setState(() { _loading = false; _error = true; });
     }
   }
+
+  bool get _hasSections =>
+      _noShowAlerts.isNotEmpty ||
+      _priceSuggestions.isNotEmpty ||
+      _actionSuggestions.isNotEmpty ||
+      (_monthlyComparison ?? '').isNotEmpty ||
+      (_financialInsights ?? '').isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -1367,10 +1400,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFDF2F8), // brand50
-            Color(0xFFFFFFFF),
-          ],
+          colors: [Color(0xFFFDF2F8), Color(0xFFFFFFFF)],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.brand100, width: 1),
@@ -1378,6 +1408,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ──
           Row(
             children: [
               Container(
@@ -1386,16 +1417,12 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                   color: AppColors.brand100,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  size: 18,
-                  color: AppColors.brand600,
-                ),
+                child: const Icon(Icons.auto_awesome, size: 18, color: AppColors.brand600),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Résumé intelligent',
+                  'Assistant IA',
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -1405,27 +1432,20 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               ),
               if (!_loading)
                 GestureDetector(
-                  onTap: _loadCachedOrFetch,
-                  child: Icon(
-                    Icons.refresh_rounded,
-                    size: 20,
-                    color: AppColors.secondary400,
-                  ),
+                  onTap: _fetchFromGemini,
+                  child: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.secondary400),
                 ),
             ],
           ),
           const SizedBox(height: 14),
+
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Center(
                 child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    color: AppColors.brand600,
-                    strokeWidth: 2,
-                  ),
+                  width: 24, height: 24,
+                  child: CircularProgressIndicator(color: AppColors.brand600, strokeWidth: 2),
                 ),
               ),
             )
@@ -1434,40 +1454,167 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               onTap: _fetchFromGemini,
               child: Text(
                 'Impossible de générer le résumé. Appuie pour réessayer.',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5,
-                  color: AppColors.secondary400,
-                  height: 1.5,
-                ),
+                style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.secondary400, height: 1.5),
               ),
             )
           else if (_summary != null) ...[
-            Text(
-              _expanded || _summary!.length <= _maxChars
-                  ? _summary!
-                  : '${_summary!.substring(0, _maxChars)}...',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13.5,
-                color: AppColors.secondary600,
-                height: 1.6,
-              ),
+            // ── Summary section ──
+            _AISectionRow(
+              icon: Icons.summarize_rounded,
+              color: AppColors.brand600,
+              text: _summary!,
             ),
-            if (_summary!.length > _maxChars)
+
+            // ── No-show alerts ──
+            if (_noShowAlerts.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _AISectionHeader(icon: Icons.warning_amber_rounded, color: const Color(0xFFEA580C), label: 'Risque no-show'),
+              for (final alert in _noShowAlerts)
+                _AISectionRow(icon: Icons.person_off_rounded, color: const Color(0xFFEA580C), text: alert),
+            ],
+
+            // ── Expandable sections ──
+            if (_hasSections && !_expanded) ...[
+              const SizedBox(height: 10),
               GestureDetector(
-                onTap: () => setState(() => _expanded = !_expanded),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    _expanded ? 'Voir moins' : 'Voir plus',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brand600,
-                    ),
-                  ),
+                onTap: () => setState(() => _expanded = true),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Voir plus', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.brand600),
+                  ],
                 ),
               ),
+            ],
+
+            if (_expanded) ...[
+              // ── Action suggestions ──
+              if (_actionSuggestions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _AISectionHeader(icon: Icons.lightbulb_outline_rounded, color: const Color(0xFF0891B2), label: 'Suggestions'),
+                for (final s in _actionSuggestions)
+                  _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF0891B2), text: s),
+              ],
+
+              // ── Price suggestions ──
+              if (_priceSuggestions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _AISectionHeader(icon: Icons.monetization_on_outlined, color: const Color(0xFF059669), label: 'Suggestions de prix'),
+                for (final s in _priceSuggestions)
+                  _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF059669), text: s),
+              ],
+
+              // ── Monthly comparison ──
+              if ((_monthlyComparison ?? '').isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _AISectionRow(
+                  icon: Icons.compare_arrows_rounded,
+                  color: const Color(0xFF7C3AED),
+                  text: _monthlyComparison!,
+                  label: 'Comparaison mensuelle',
+                ),
+              ],
+
+              // ── Financial insights ──
+              if ((_financialInsights ?? '').isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _AISectionRow(
+                  icon: Icons.insights_rounded,
+                  color: const Color(0xFF0369A1),
+                  text: _financialInsights!,
+                  label: 'Insights financiers',
+                ),
+              ],
+
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => setState(() => _expanded = false),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Voir moins', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: AppColors.brand600),
+                  ],
+                ),
+              ),
+            ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AISectionHeader extends StatelessWidget {
+  const _AISectionHeader({required this.icon, required this.color, required this.label});
+  final IconData icon;
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AISectionRow extends StatelessWidget {
+  const _AISectionRow({required this.icon, required this.color, required this.text, this.label});
+  final IconData icon;
+  final Color color;
+  final String text;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (label != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(icon, size: 15, color: color),
+                  const SizedBox(width: 6),
+                  Text(label!, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+                ],
+              ),
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (label == null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(icon, size: 14, color: color.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  text,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.secondary600, height: 1.5),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

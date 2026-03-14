@@ -91,6 +91,7 @@ class DatabaseService {
       latitude: salon.latitude,
       longitude: salon.longitude,
       socialLinks: salon.socialLinks,
+      servicePacks: salon.servicePacks,
       slug: slug,
     );
 

@@ -876,6 +876,8 @@ export const onProductStockChanged = functions.firestore
 
 // ============================================================
 // 11. AI DAILY SUMMARY: Generate intelligent dashboard summary
+//     Includes: no-show prediction, price suggestions, financial
+//     insights, action suggestions, monthly comparison
 // ============================================================
 export const generateDailySummary = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -901,12 +903,17 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
         const weekStart = new Date(todayStart.getTime() - (now.getDay() === 0 ? 6 : now.getDay() - 1) * 24 * 60 * 60 * 1000);
         const lastWeekStart = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+        // Month boundaries
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
         // Fetch all salon appointments in one query (no composite index needed)
         const allApptsSnap = await db.collection("appointments")
             .where("salonId", "==", salonId)
             .get();
 
-        const allAppts = allApptsSnap.docs.map(d => d.data());
+        const allAppts: any[] = allApptsSnap.docs.map(d => ({...d.data(), _id: d.id}));
 
         // Helper: get timestamp as millis
         const getTime = (a: any): number => {
@@ -948,16 +955,95 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
             .filter(a => a.status === "completed")
             .reduce((s, a) => s + (a.price || 0), 0);
 
-        // Most popular service this week
-        const serviceCounts: Record<string, number> = {};
-        for (const a of weekAppts) {
-            const name = a.serviceName || "Autre";
-            serviceCounts[name] = (serviceCounts[name] || 0) + 1;
-        }
-        const topService = Object.entries(serviceCounts)
-            .sort((a, b) => b[1] - a[1])[0];
+        // ── Monthly comparison ──
+        const thisMonthAppts = allAppts.filter(a => {
+            const t = getTime(a);
+            return t >= monthStart.getTime() && t < todayEnd.getTime();
+        });
+        const lastMonthAppts = allAppts.filter(a => {
+            const t = getTime(a);
+            return t >= lastMonthStart.getTime() && t <= lastMonthEnd.getTime();
+        });
+        const thisMonthRevenue = thisMonthAppts
+            .filter(a => a.status === "completed")
+            .reduce((s, a) => s + (a.price || 0), 0);
+        const lastMonthRevenue = lastMonthAppts
+            .filter(a => a.status === "completed")
+            .reduce((s, a) => s + (a.price || 0), 0);
+        const thisMonthCount = thisMonthAppts.length;
+        const lastMonthCount = lastMonthAppts.length;
+        const thisMonthCancelled = thisMonthAppts.filter(a => a.status === "cancelled").length;
+        const lastMonthCancelled = lastMonthAppts.filter(a => a.status === "cancelled").length;
+        // Unique clients this month vs last
+        const thisMonthClients = new Set(thisMonthAppts.map(a => a.clientId).filter((id: string) => id && id !== "walk-in"));
+        const lastMonthClients = new Set(lastMonthAppts.map(a => a.clientId).filter((id: string) => id && id !== "walk-in"));
 
-        // Reviews (single-field query, sort in code to avoid composite index)
+        // ── No-show / cancellation prediction for today's clients ──
+        const todayUpcomingAppts = todayAppts.filter(a => a.status === "upcoming");
+        const clientIds = [...new Set(todayUpcomingAppts.map(a => a.clientId).filter((id: string) => id && id !== "walk-in"))];
+
+        const noShowRisks: Array<{clientName: string, clientId: string, total: number, cancelled: number, rate: number}> = [];
+        for (const cid of clientIds) {
+            const clientAppts = allAppts.filter(a => a.clientId === cid && getTime(a) < todayStart.getTime());
+            if (clientAppts.length < 2) continue; // Need history to predict
+            const cancelled = clientAppts.filter(a => a.status === "cancelled").length;
+            const rate = Math.round((cancelled / clientAppts.length) * 100);
+            if (rate >= 25) {
+                const name = todayUpcomingAppts.find(a => a.clientId === cid)?.clientName || "Client";
+                noShowRisks.push({clientName: name, clientId: cid, total: clientAppts.length, cancelled, rate});
+            }
+        }
+        noShowRisks.sort((a, b) => b.rate - a.rate);
+
+        // ── Service pricing analysis ──
+        const serviceCounts: Record<string, {count: number, totalRevenue: number, avgPrice: number}> = {};
+        const completedAppts = allAppts.filter(a => a.status === "completed");
+        for (const a of completedAppts) {
+            const name = a.serviceName || "Autre";
+            if (!serviceCounts[name]) serviceCounts[name] = {count: 0, totalRevenue: 0, avgPrice: 0};
+            serviceCounts[name].count++;
+            serviceCounts[name].totalRevenue += (a.price || 0);
+        }
+        for (const key of Object.keys(serviceCounts)) {
+            serviceCounts[key].avgPrice = Math.round(serviceCounts[key].totalRevenue / serviceCounts[key].count);
+        }
+        const serviceAnalysis = Object.entries(serviceCounts)
+            .map(([name, stats]) => ({name, ...stats}))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 8);
+
+        const topService = serviceAnalysis[0] || null;
+
+        // ── Charges this month (for financial insights) ──
+        let thisMonthCharges = 0;
+        let lastMonthCharges = 0;
+        try {
+            const chargesSnap = await db.collection("charges")
+                .where("salonId", "==", salonId)
+                .get();
+            for (const doc of chargesSnap.docs) {
+                const c = doc.data();
+                const ct = c.date?.toDate ? c.date.toDate().getTime() : 0;
+                if (ct >= monthStart.getTime() && ct < todayEnd.getTime()) {
+                    thisMonthCharges += (c.amount || 0);
+                } else if (ct >= lastMonthStart.getTime() && ct <= lastMonthEnd.getTime()) {
+                    lastMonthCharges += (c.amount || 0);
+                }
+            }
+        } catch (_) { /* charges collection may not exist */ }
+
+        // ── Busiest day analysis ──
+        const dayBookings: Record<string, number> = {};
+        const dayNamesArr = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+        for (const a of thisMonthAppts) {
+            const d = a.dateTime?.toDate ? a.dateTime.toDate() : new Date(getTime(a));
+            const dayName = dayNamesArr[d.getDay()];
+            dayBookings[dayName] = (dayBookings[dayName] || 0) + 1;
+        }
+        const busiestDay = Object.entries(dayBookings).sort((a, b) => b[1] - a[1])[0];
+        const slowestDay = Object.entries(dayBookings).sort((a, b) => a[1] - b[1])[0];
+
+        // Reviews
         const reviewsSnap = await db.collection("reviews")
             .where("salonId", "==", salonId)
             .get();
@@ -979,24 +1065,48 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
             ? Math.round(((weekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100)
             : 0;
 
-        const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
-        const todayName = dayNames[now.getDay()];
+        const todayName = dayNamesArr[now.getDay()];
+        const monthNames = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+        const thisMonthName = monthNames[now.getMonth()];
+        const lastMonthName = monthNames[now.getMonth() === 0 ? 11 : now.getMonth() - 1];
 
-        const prompt = `Tu es l'assistant IA du salon "${salon.name}". Génère un résumé concis et motivant pour le propriétaire. Parle en français, tutoie-le. Sois bref (3-4 phrases max). Pas de bullet points, juste du texte fluide.
+        const prompt = `Tu es l'assistant IA du salon "${salon.name}". Génère un résumé structuré en JSON pour le propriétaire. Parle en français, tutoie-le. Sois concis et actionnable.
 
-Données du jour (${todayName}) :
-- ${todayCount} RDV aujourd'hui (${todayUpcoming} à venir, ${todayCompleted} terminés)
+DONNÉES DU JOUR (${todayName}) :
+- ${todayCount} RDV (${todayUpcoming} à venir, ${todayCompleted} terminés)
 - Revenu aujourd'hui : ${todayRevenue} MAD
 
-Données de la semaine :
-- ${weekCount} RDV cette semaine (${weekCancelled} annulés)
-- Revenu semaine : ${weekRevenue} MAD
-- Variation vs semaine dernière : ${weekChange > 0 ? "+" : ""}${weekChange}% en RDV, ${revenueChange > 0 ? "+" : ""}${revenueChange}% en revenu
-${topService ? `- Service le plus demandé : ${topService[0]} (${topService[1]} fois)` : ""}
+DONNÉES DE LA SEMAINE :
+- ${weekCount} RDV (${weekCancelled} annulés)
+- Revenu : ${weekRevenue} MAD
+- Variation vs semaine dernière : ${weekChange > 0 ? "+" : ""}${weekChange}% RDV, ${revenueChange > 0 ? "+" : ""}${revenueChange}% revenu
+${topService ? `- Service top : ${topService.name} (${topService.count} fois, moy ${topService.avgPrice} MAD)` : ""}
 
-${recentReviews.length > 0 ? `Derniers avis : ${recentReviews.map(r => `${r.rating}★${r.comment ? " - " + r.comment : ""}`).join(" | ")}` : "Pas d'avis récents."}
+COMPARAISON MENSUELLE :
+- ${thisMonthName} : ${thisMonthCount} RDV, ${thisMonthRevenue} MAD revenu, ${thisMonthCancelled} annulés, ${thisMonthClients.size} clients uniques
+- ${lastMonthName} : ${lastMonthCount} RDV, ${lastMonthRevenue} MAD revenu, ${lastMonthCancelled} annulés, ${lastMonthClients.size} clients uniques
+- Charges ${thisMonthName} : ${thisMonthCharges} MAD | Bénéfice net : ${thisMonthRevenue - thisMonthCharges} MAD
+- Charges ${lastMonthName} : ${lastMonthCharges} MAD | Bénéfice net : ${lastMonthRevenue - lastMonthCharges} MAD
+${busiestDay ? `- Jour le plus chargé ce mois : ${busiestDay[0]} (${busiestDay[1]} RDV)` : ""}
+${slowestDay ? `- Jour le plus calme : ${slowestDay[0]} (${slowestDay[1]} RDV)` : ""}
 
-Donne un résumé encourageant avec un conseil actionnable si pertinent (ex: créneau vide à combler, service populaire à mettre en avant, etc).`;
+ANALYSE DES SERVICES :
+${serviceAnalysis.map(s => `- ${s.name} : ${s.count} réservations, prix moyen ${s.avgPrice} MAD`).join("\n")}
+
+CLIENTS À RISQUE (taux d'annulation élevé parmi les RDV d'aujourd'hui) :
+${noShowRisks.length > 0 ? noShowRisks.map(r => `- ${r.clientName} : ${r.rate}% d'annulation (${r.cancelled}/${r.total} RDV)`).join("\n") : "Aucun client à risque aujourd'hui."}
+
+${recentReviews.length > 0 ? `DERNIERS AVIS : ${recentReviews.map(r => `${r.rating}★${r.comment ? " - " + r.comment : ""}`).join(" | ")}` : "Pas d'avis récents."}
+
+Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas de \`\`\`json), avec cette structure exacte :
+{
+  "summary": "2-3 phrases de résumé motivant de la journée",
+  "noShowAlerts": ["phrase courte par client à risque"] ou [] si aucun,
+  "priceSuggestions": ["1-2 suggestions de prix basées sur la demande des services"] ou [] si rien à suggérer,
+  "actionSuggestions": ["2-3 actions concrètes à faire aujourd'hui/cette semaine"],
+  "monthlyComparison": "1-2 phrases comparant ce mois au précédent (RDV, revenu, bénéfice)",
+  "financialInsights": "1-2 phrases sur la santé financière et tendances"
+}`;
 
         // ── Call Gemini ──
         const apiKey = process.env.GEMINI_API_KEY;
@@ -1007,9 +1117,28 @@ Donne un résumé encourageant avec un conseil actionnable si pertinent (ex: cr�
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await model.generateContent(prompt);
-        const summary = result.response.text();
+        const rawText = result.response.text().trim();
 
-        return { summary, generatedAt: now.toISOString() };
+        // Parse JSON response from Gemini
+        let parsed: any;
+        try {
+            // Remove potential markdown code block markers
+            const cleaned = rawText.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
+            parsed = JSON.parse(cleaned);
+        } catch (_) {
+            // Fallback: return as plain summary (backward compatible)
+            return { summary: rawText, generatedAt: now.toISOString() };
+        }
+
+        return {
+            summary: parsed.summary || rawText,
+            noShowAlerts: parsed.noShowAlerts || [],
+            priceSuggestions: parsed.priceSuggestions || [],
+            actionSuggestions: parsed.actionSuggestions || [],
+            monthlyComparison: parsed.monthlyComparison || "",
+            financialInsights: parsed.financialInsights || "",
+            generatedAt: now.toISOString(),
+        };
     } catch (error: any) {
         console.error("Error generating AI summary:", error);
         if (error instanceof functions.https.HttpsError) throw error;

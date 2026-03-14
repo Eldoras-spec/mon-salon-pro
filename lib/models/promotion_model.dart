@@ -5,7 +5,7 @@ class PromotionModel {
   final String salonId;
   final String title;
   final String description;
-  final String type; // 'percent', 'special', 'code'
+  final String type; // 'percent', 'conditional', 'code'
   final double? discountPercent;
   final String? promoCode;
   final List<String>? applicableServiceNames; // null = all services
@@ -17,6 +17,11 @@ class PromotionModel {
   final String? aiReason; // e.g. 'top_client', 'win_back', 'loyal'
   final String? targetedClientId;
   final String? targetedClientName;
+  // Conditional promo fields
+  final double? minAmount; // minimum spend to activate
+  final List<String>? validDays; // e.g. ['lundi', 'mardi'] — null = every day
+  final String? validHoursStart; // e.g. '09:00'
+  final String? validHoursEnd; // e.g. '12:00'
 
   const PromotionModel({
     required this.id,
@@ -34,6 +39,10 @@ class PromotionModel {
     this.aiReason,
     this.targetedClientId,
     this.targetedClientName,
+    this.minAmount,
+    this.validDays,
+    this.validHoursStart,
+    this.validHoursEnd,
   });
 
   bool get isExpired =>
@@ -71,6 +80,10 @@ class PromotionModel {
       aiReason: d['aiReason'] as String?,
       targetedClientId: d['targetedClientId'] as String?,
       targetedClientName: d['targetedClientName'] as String?,
+      minAmount: d['minAmount'] != null ? (d['minAmount'] as num).toDouble() : null,
+      validDays: d['validDays'] != null ? List<String>.from(d['validDays']) : null,
+      validHoursStart: d['validHoursStart'] as String?,
+      validHoursEnd: d['validHoursEnd'] as String?,
     );
   }
 
@@ -90,5 +103,9 @@ class PromotionModel {
         if (aiReason != null) 'aiReason': aiReason,
         if (targetedClientId != null) 'targetedClientId': targetedClientId,
         if (targetedClientName != null) 'targetedClientName': targetedClientName,
+        if (minAmount != null) 'minAmount': minAmount,
+        if (validDays != null) 'validDays': validDays,
+        if (validHoursStart != null) 'validHoursStart': validHoursStart,
+        if (validHoursEnd != null) 'validHoursEnd': validHoursEnd,
       };
 }

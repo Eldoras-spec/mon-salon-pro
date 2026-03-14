@@ -2,12 +2,14 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../models/user_model.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   // Stream of auth state changes
   Stream<User?> get user => _auth.authStateChanges();
@@ -36,6 +38,9 @@ class AuthService {
     required String city,
     required bool isClient,
   }) async {
+    // Server-side rate limit check before creating the account
+    await _functions.httpsCallable('checkSignupLimit').call({'email': email});
+
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -51,6 +56,11 @@ class AuthService {
         'userType': isClient ? 'client' : 'owner',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Record successful signup for server-side rate tracking
+      try {
+        await _functions.httpsCallable('recordSignup').call({});
+      } catch (_) {}
 
       return result;
     } catch (e) {

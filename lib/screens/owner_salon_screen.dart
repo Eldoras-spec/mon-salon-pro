@@ -120,13 +120,52 @@ class _SalonBody extends StatelessWidget {
             ),
           ),
           flexibleSpace: FlexibleSpaceBar(
-            background: salon.images.isNotEmpty
-                ? Image.network(
-                    salon.images.first,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => _coverPlaceholder(),
-                  )
-                : _coverPlaceholder(),
+            background: Stack(
+              fit: StackFit.expand,
+              children: [
+                salon.images.isNotEmpty
+                    ? Image.network(
+                        salon.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _coverPlaceholder(),
+                      )
+                    : _coverPlaceholder(),
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: Material(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => _pickCoverPhoto(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.camera_alt_outlined,
+                                size: 16, color: Colors.white),
+                            const SizedBox(width: 6),
+                            Text(
+                              salon.images.isNotEmpty
+                                  ? 'Modifier'
+                                  : 'Ajouter une photo',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
 
@@ -177,6 +216,16 @@ class _SalonBody extends StatelessWidget {
                 child: _ServicesPreview(services: salon.services),
               ),
 
+              const SizedBox(height: 8),
+
+              // ── Packs ──────────────────────────────────────────────────────
+              _SectionCard(
+                title: 'Packs (${salon.servicePacks.length})',
+                actionLabel: 'Gérer',
+                onAction: () => _showPacksSheet(context, salon),
+                child: _PacksPreview(packs: salon.servicePacks),
+              ),
+
               const SizedBox(height: 32),
             ],
           ),
@@ -192,6 +241,56 @@ class _SalonBody extends StatelessWidget {
               size: 48, color: Colors.white38),
         ),
       );
+
+  Future<void> _pickCoverPhoto(BuildContext context) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1400,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    // Show loading
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Upload en cours…')),
+      );
+    }
+
+    try {
+      final file = File(picked.path);
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('salons/${salon.id}/cover_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await storageRef.putFile(file);
+      final url = await storageRef.getDownloadURL();
+
+      // Put new cover as first image, keep existing gallery images
+      final updatedImages = List<String>.from(salon.images);
+      if (updatedImages.isNotEmpty) {
+        updatedImages[0] = url;
+      } else {
+        updatedImages.insert(0, url);
+      }
+      await DatabaseService().updateSalonImages(salon.id, updatedImages);
+      ref.invalidate(ownerSalonProvider);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Photo de couverture mise à jour !')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    }
+  }
 
   // ── Edit info ─────────────────────────────────────────────────────────────
 
@@ -234,6 +333,19 @@ class _SalonBody extends StatelessWidget {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _ServicesSheet(salon: salon, onSaved: _invalidate),
+    );
+  }
+
+  // ── Manage packs ────────────────────────────────────────────────────────────
+
+  void _showPacksSheet(BuildContext context, SalonModel salon) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PacksSheet(salon: salon, onSaved: _invalidate),
     );
   }
 }
@@ -2508,5 +2620,728 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       ),
     );
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Packs Preview ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _PacksPreview extends StatelessWidget {
+  const _PacksPreview({required this.packs});
+  final List<Map<String, dynamic>> packs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (packs.isEmpty) {
+      return const Text(
+        'Aucun pack créé',
+        style: TextStyle(color: AppColors.secondary400, fontSize: 13),
+      );
+    }
+    final preview = packs.take(3).toList();
+    return Column(
+      children: [
+        ...preview.map((p) {
+          final name = p['name'] as String? ?? '';
+          final price = (p['price'] as num?)?.toDouble() ?? 0;
+          final services = List<String>.from(p['services'] ?? []);
+          final originalPrice = (p['originalPrice'] as num?)?.toDouble() ?? 0;
+          final discount = originalPrice > 0
+              ? ((1 - price / originalPrice) * 100).round()
+              : 0;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.brand100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.inventory_2_outlined,
+                      color: AppColors.brand600, size: 15),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.brand950,
+                            fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${services.length} services',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.secondary400),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${price.toStringAsFixed(0)} MAD',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brand700),
+                    ),
+                    if (discount > 0)
+                      Text(
+                        '-$discount%',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF16A34A)),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+        if (packs.length > 3)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '+ ${packs.length - 3} autres packs',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.secondary400),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Packs Sheet (manage packs) ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _PacksSheet extends StatefulWidget {
+  const _PacksSheet({required this.salon, required this.onSaved});
+  final SalonModel salon;
+  final VoidCallback onSaved;
+
+  @override
+  State<_PacksSheet> createState() => _PacksSheetState();
+}
+
+class _PacksSheetState extends State<_PacksSheet> {
+  late List<Map<String, dynamic>> _packs;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _packs = List<Map<String, dynamic>>.from(
+      widget.salon.servicePacks.map((p) => Map<String, dynamic>.from(p)),
+    );
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await DatabaseService().updateSalonField(
+        widget.salon.id,
+        'servicePacks',
+        _packs,
+      );
+      widget.onSaved();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _addOrEditPack({Map<String, dynamic>? existing, int? index}) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _PackFormDialog(
+        services: widget.salon.services,
+        existing: existing,
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      if (index != null) {
+        _packs[index] = result;
+      } else {
+        _packs.add(result);
+      }
+    });
+  }
+
+  void _deletePack(int index) {
+    setState(() => _packs.removeAt(index));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      heightFactor: 0.85,
+      child: Column(
+        children: [
+          // ── Handle ──
+          const SizedBox(height: 12),
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.secondary200,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Header ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Gérer les packs',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _addOrEditPack(),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Ajouter'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brand600,
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // ── List ──
+          Expanded(
+            child: _packs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.inventory_2_outlined,
+                            size: 48, color: AppColors.secondary300),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Aucun pack',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.secondary400,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Créez des packs de services\nà prix réduit pour vos clients',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.secondary400),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: _packs.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.secondary100),
+                    itemBuilder: (_, i) {
+                      final pack = _packs[i];
+                      final name = pack['name'] as String? ?? '';
+                      final price = (pack['price'] as num?)?.toDouble() ?? 0;
+                      final services = List<String>.from(pack['services'] ?? []);
+                      final originalPrice =
+                          (pack['originalPrice'] as num?)?.toDouble() ?? 0;
+                      final discount = originalPrice > 0
+                          ? ((1 - price / originalPrice) * 100).round()
+                          : 0;
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: AppColors.brand50,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.inventory_2_outlined,
+                              color: AppColors.brand500, size: 20),
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brand950),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              services.join(' • '),
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.secondary400),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Text(
+                                  '${price.toStringAsFixed(0)} MAD',
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brand700),
+                                ),
+                                if (discount > 0) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${originalPrice.toStringAsFixed(0)} MAD',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.secondary400,
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFDCFCE7),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '-$discount%',
+                                      style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF16A34A)),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined,
+                                  size: 18, color: AppColors.secondary400),
+                              onPressed: () =>
+                                  _addOrEditPack(existing: pack, index: i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  size: 18, color: Colors.redAccent),
+                              onPressed: () => _deletePack(i),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // ── Save button ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand700,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Enregistrer'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Pack Form Dialog ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _PackFormDialog extends StatefulWidget {
+  const _PackFormDialog({required this.services, this.existing});
+  final List<Map<String, dynamic>> services;
+  final Map<String, dynamic>? existing;
+
+  @override
+  State<_PackFormDialog> createState() => _PackFormDialogState();
+}
+
+class _PackFormDialogState extends State<_PackFormDialog> {
+  final _nameCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _selectedServices = <String>{};
+  double _originalPrice = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existing != null) {
+      _nameCtrl.text = widget.existing!['name'] as String? ?? '';
+      _priceCtrl.text =
+          (widget.existing!['price'] as num?)?.toStringAsFixed(0) ?? '';
+      _descCtrl.text = widget.existing!['description'] as String? ?? '';
+      _selectedServices.addAll(
+        List<String>.from(widget.existing!['services'] ?? []),
+      );
+    }
+    _recalcOriginalPrice();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _priceCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  void _recalcOriginalPrice() {
+    double total = 0;
+    for (final s in widget.services) {
+      if (_selectedServices.contains(s['name'] as String? ?? '')) {
+        total += (s['price'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    setState(() => _originalPrice = total);
+  }
+
+  void _toggleService(String name) {
+    setState(() {
+      if (_selectedServices.contains(name)) {
+        _selectedServices.remove(name);
+      } else {
+        _selectedServices.add(name);
+      }
+    });
+    _recalcOriginalPrice();
+  }
+
+  void _submit() {
+    final name = _nameCtrl.text.trim();
+    final priceText = _priceCtrl.text.trim();
+    if (name.isEmpty || priceText.isEmpty || _selectedServices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Remplissez le nom, le prix et sélectionnez au moins un service')),
+      );
+      return;
+    }
+    final price = double.tryParse(priceText) ?? 0;
+    Navigator.pop(context, {
+      'name': name,
+      'services': _selectedServices.toList(),
+      'price': price,
+      'originalPrice': _originalPrice,
+      'description': _descCtrl.text.trim(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final discount = _originalPrice > 0 && _priceCtrl.text.isNotEmpty
+        ? ((1 - (double.tryParse(_priceCtrl.text) ?? 0) / _originalPrice) * 100)
+            .round()
+        : 0;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Title ──
+            Text(
+              widget.existing != null ? 'Modifier le pack' : 'Nouveau pack',
+              style: GoogleFonts.dmSans(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brand950,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Pack name ──
+            _buildLabel('Nom du pack'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _nameCtrl,
+              decoration: _inputDecoration('Ex: Pack Mariée, Pack Soin Complet'),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Select services ──
+            _buildLabel('Services inclus'),
+            const SizedBox(height: 8),
+            if (widget.services.isEmpty)
+              const Text(
+                'Aucun service disponible. Ajoutez des services d\'abord.',
+                style: TextStyle(fontSize: 13, color: AppColors.secondary400),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.services.map((s) {
+                  final sName = s['name'] as String? ?? '';
+                  final sPrice = (s['price'] as num?)?.toDouble() ?? 0;
+                  final selected = _selectedServices.contains(sName);
+                  return GestureDetector(
+                    onTap: () => _toggleService(sName),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.brand50
+                            : AppColors.secondary50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selected
+                              ? AppColors.brand500
+                              : AppColors.secondary200,
+                          width: selected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            selected
+                                ? Icons.check_circle
+                                : Icons.circle_outlined,
+                            size: 16,
+                            color: selected
+                                ? AppColors.brand600
+                                : AppColors.secondary300,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            sName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w400,
+                              color: selected
+                                  ? AppColors.brand700
+                                  : AppColors.secondary500,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${sPrice.toStringAsFixed(0)} MAD',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: selected
+                                  ? AppColors.brand400
+                                  : AppColors.secondary400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+
+            // ── Original price info ──
+            if (_selectedServices.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        size: 16, color: AppColors.secondary400),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Prix total séparé : ${_originalPrice.toStringAsFixed(0)} MAD',
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.secondary500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+
+            // ── Pack price ──
+            _buildLabel('Prix du pack (MAD)'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _priceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _inputDecoration('Ex: 250'),
+              onChanged: (_) => setState(() {}),
+            ),
+            if (discount > 0) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Réduction de $discount% par rapport aux services séparés',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF16A34A)),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+
+            // ── Description (optional) ──
+            _buildLabel('Description (optionnel)'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _descCtrl,
+              maxLines: 2,
+              decoration: _inputDecoration('Description du pack…'),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Buttons ──
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.secondary500,
+                      side: const BorderSide(color: AppColors.secondary200),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Annuler'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brand700,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text(
+                        widget.existing != null ? 'Modifier' : 'Créer'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) => Text(
+        text,
+        style: GoogleFonts.dmSans(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.brand950,
+        ),
+      );
+
+  InputDecoration _inputDecoration(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: AppColors.secondary400, fontSize: 14),
+        filled: true,
+        fillColor: AppColors.secondary50,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.secondary200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.secondary200),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.brand400, width: 1.5),
+        ),
+      );
 }
 
