@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
+import '../services/app_localizations.dart';
 import 'basic_registration_screen.dart';
 import 'login_screen.dart';
 
@@ -17,25 +18,34 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   final _controller = PageController();
   int _currentPage = 0;
 
-  static const _pages = [
-    _PageData(
-      icon: Icons.store_rounded,
-      title: 'Votre salon, simplifié',
-      subtitle:
-          'Gérez vos rendez-vous, votre équipe et vos clients depuis une seule application.',
-    ),
-    _PageData(
-      icon: Icons.calendar_month_rounded,
-      title: 'Agenda intelligent',
-      subtitle:
-          'Vos clients réservent en ligne, vous recevez les demandes en temps réel et organisez votre planning facilement.',
-    ),
-    _PageData(
-      icon: Icons.trending_up_rounded,
-      title: 'Suivez votre activité',
-      subtitle:
-          'Statistiques, finances, promotions — tout ce qu\'il faut pour développer votre salon.',
-    ),
+  static const _pageIcons = [
+    Icons.store_rounded,
+    Icons.calendar_month_rounded,
+    Icons.trending_up_rounded,
+  ];
+
+  static const _titleKeys = [
+    'welcome_title_1',
+    'welcome_title_2',
+    'welcome_title_3',
+  ];
+
+  static const _descKeys = [
+    'welcome_desc_1',
+    'welcome_desc_2',
+    'welcome_desc_3',
+  ];
+
+  static const _titleFallbacks = [
+    'Votre salon, simplifie',
+    'Agenda intelligent',
+    'Suivez votre activite',
+  ];
+
+  static const _descFallbacks = [
+    'Gerez vos rendez-vous, votre equipe et vos clients depuis une seule application.',
+    'Vos clients reservent en ligne, vous recevez les demandes en temps reel et organisez votre planning facilement.',
+    'Statistiques, finances, promotions — tout ce qu\'il faut pour developper votre salon.',
   ];
 
   @override
@@ -45,7 +55,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   void _next() {
-    if (_currentPage < _pages.length - 1) {
+    if (_currentPage < _pageIcons.length - 1) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -73,6 +83,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -84,9 +95,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             Expanded(
               child: PageView.builder(
                 controller: _controller,
-                itemCount: _pages.length,
+                itemCount: _pageIcons.length,
                 onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (_, i) => _buildPage(_pages[i]),
+                itemBuilder: (_, i) => _buildPage(
+                  icon: _pageIcons[i],
+                  title: l?.tr(_titleKeys[i]) ?? _titleFallbacks[i],
+                  subtitle: l?.tr(_descKeys[i]) ?? _descFallbacks[i],
+                ),
               ),
             ),
 
@@ -94,7 +109,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
-                _pages.length,
+                _pageIcons.length,
                 (i) => AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -117,11 +132,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               child: Column(
                 children: [
                   CustomButton(
-                    text: _currentPage < _pages.length - 1
-                        ? 'Suivant'
-                        : 'Créer mon salon',
+                    text: _currentPage < _pageIcons.length - 1
+                        ? (l?.tr('welcome_next') ?? 'Suivant')
+                        : (l?.tr('welcome_create_salon') ?? 'Cr\u00e9er mon salon'),
                     onPressed: _next,
-                    icon: _currentPage < _pages.length - 1
+                    icon: _currentPage < _pageIcons.length - 1
                         ? Icons.arrow_forward_rounded
                         : Icons.rocket_launch_rounded,
                   ),
@@ -131,7 +146,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Déjà un compte ?',
+                          l?.tr('welcome_already_account') ?? 'D\u00e9j\u00e0 un compte ?',
                           style: GoogleFonts.plusJakartaSans(
                             color: AppColors.secondary500,
                             fontSize: 14,
@@ -140,7 +155,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         TextButton(
                           onPressed: _goToLogin,
                           child: Text(
-                            'Se connecter',
+                            l?.tr('welcome_login') ?? 'Se connecter',
                             style: GoogleFonts.plusJakartaSans(
                               color: AppColors.brand700,
                               fontWeight: FontWeight.bold,
@@ -161,7 +176,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  Widget _buildPage(_PageData data) {
+  Widget _buildPage({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
@@ -181,11 +200,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
               ],
             ),
-            child: Icon(data.icon, size: 48, color: AppColors.brand600),
+            child: Icon(icon, size: 48, color: AppColors.brand600),
           ),
           const SizedBox(height: 32),
           Text(
-            data.title,
+            title,
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 24,
@@ -196,7 +215,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           const SizedBox(height: 14),
           Text(
-            data.subtitle,
+            subtitle,
             textAlign: TextAlign.center,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
@@ -208,16 +227,4 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ),
     );
   }
-}
-
-class _PageData {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  const _PageData({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
 }

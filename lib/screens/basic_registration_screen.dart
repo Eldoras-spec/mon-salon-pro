@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import '../providers/auth_providers.dart';
+import '../services/app_localizations.dart';
 import 'owner_onboarding_step1_screen.dart';
 import 'terms_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -71,19 +72,20 @@ class _BasicRegistrationScreenState
 
   Future<String?> _checkDeviceLimit() async {
     final prefs = await SharedPreferences.getInstance();
+    final l = AppLocalizations.of(context);
 
     // Check cooldown (60s between attempts)
     final lastAttempt = prefs.getInt('reg_last_attempt') ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - lastAttempt < _cooldownSeconds * 1000) {
       final remaining = _cooldownSeconds - ((now - lastAttempt) ~/ 1000);
-      return 'Veuillez patienter ${remaining}s avant de réessayer.';
+      return (l?.tr('register_cooldown') ?? 'Veuillez patienter {remaining}s avant de r\u00e9essayer.').replaceAll('{remaining}', '$remaining');
     }
 
     // Check max accounts per device
     final count = prefs.getInt('reg_device_count') ?? 0;
     if (count >= _maxAccountsPerDevice) {
-      return 'Limite de création de compte atteinte sur cet appareil.';
+      return l?.tr('register_device_limit') ?? 'Limite de cr\u00e9ation de compte atteinte sur cet appareil.';
     }
 
     return null; // OK
@@ -97,10 +99,11 @@ class _BasicRegistrationScreenState
   }
 
   Future<void> _handleRegistration() async {
+    final l = AppLocalizations.of(context);
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez accepter les conditions')),
+        SnackBar(content: Text(l?.tr('register_accept_terms') ?? 'Veuillez accepter les conditions')),
       );
       return;
     }
@@ -161,20 +164,20 @@ class _BasicRegistrationScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        String message = 'Une erreur est survenue';
+        String message = l?.tr('register_error_generic') ?? 'Une erreur est survenue';
         final errorString = e.toString().toLowerCase();
         if (errorString.contains('email-already-in-use')) {
-          message = 'Cet email est déjà utilisé';
+          message = l?.tr('register_error_email_in_use') ?? 'Cet email est d\u00e9j\u00e0 utilis\u00e9';
         } else if (errorString.contains('weak-password')) {
-          message = 'Le mot de passe est trop faible';
+          message = l?.tr('register_error_weak_password') ?? 'Le mot de passe est trop faible';
         } else if (errorString.contains('invalid-email')) {
-          message = 'Email invalide';
+          message = l?.tr('register_error_invalid_email') ?? 'Email invalide';
         } else if (errorString.contains('network-request-failed')) {
-          message = 'Erreur réseau, vérifiez votre connexion';
+          message = l?.tr('register_error_network') ?? 'Erreur r\u00e9seau, v\u00e9rifiez votre connexion';
         } else if (errorString.contains('blocking-function-error-response') ||
                    errorString.contains('resource-exhausted') ||
                    errorString.contains('permission-denied')) {
-          message = 'Trop de comptes créés. Réessayez plus tard.';
+          message = l?.tr('register_error_rate_limit') ?? 'Trop de comptes cr\u00e9\u00e9s. R\u00e9essayez plus tard.';
         } else {
           message = e.toString();
         }
@@ -187,6 +190,7 @@ class _BasicRegistrationScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -202,11 +206,11 @@ class _BasicRegistrationScreenState
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: 28),
-                      _buildHeader(),
+                      _buildHeader(l),
                       const SizedBox(height: 32),
 
                       // ── Section : Informations personnelles
-                      _buildSectionLabel('Informations personnelles'),
+                      _buildSectionLabel(l?.tr('register_section_personal') ?? 'Informations personnelles'),
                       const SizedBox(height: 14),
 
                       Row(
@@ -214,22 +218,22 @@ class _BasicRegistrationScreenState
                         children: [
                           Expanded(
                             child: CustomTextField(
-                              label: 'Prénom',
-                              hintText: 'Karim',
+                              label: l?.tr('register_first_name') ?? 'Pr\u00e9nom',
+                              hintText: l?.tr('register_first_name_hint') ?? 'Karim',
                               controller: _firstNameController,
                               validator: (v) => v == null || v.isEmpty
-                                  ? 'Prénom requis'
+                                  ? (l?.tr('register_first_name_required') ?? 'Pr\u00e9nom requis')
                                   : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: CustomTextField(
-                              label: 'Nom',
-                              hintText: 'Benali',
+                              label: l?.tr('register_last_name') ?? 'Nom',
+                              hintText: l?.tr('register_last_name_hint') ?? 'Benali',
                               controller: _lastNameController,
                               validator: (v) => v == null || v.isEmpty
-                                  ? 'Nom requis'
+                                  ? (l?.tr('register_last_name_required') ?? 'Nom requis')
                                   : null,
                             ),
                           ),
@@ -238,14 +242,14 @@ class _BasicRegistrationScreenState
                       const SizedBox(height: 14),
 
                       CustomTextField(
-                        label: 'Adresse email',
-                        hintText: 'karim@exemple.com',
+                        label: l?.tr('register_email_label') ?? 'Adresse email',
+                        hintText: l?.tr('register_email_hint') ?? 'karim@exemple.com',
                         icon: Icons.email_outlined,
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         validator: (v) {
-                          if (v == null || v.isEmpty) return 'Email requis';
-                          if (!v.contains('@')) return 'Email invalide';
+                          if (v == null || v.isEmpty) return l?.tr('register_email_required') ?? 'Email requis';
+                          if (!v.contains('@')) return l?.tr('register_email_invalid') ?? 'Email invalide';
                           return null;
                         },
                       ),
@@ -254,36 +258,36 @@ class _BasicRegistrationScreenState
                       const SizedBox(height: 28),
 
                       // ── Section : Sécurité
-                      _buildSectionLabel('Sécurité'),
+                      _buildSectionLabel(l?.tr('register_section_security') ?? 'S\u00e9curit\u00e9'),
                       const SizedBox(height: 14),
 
                       CustomTextField(
-                        label: 'Mot de passe',
-                        hintText: '••••••••••••',
+                        label: l?.tr('register_password_label') ?? 'Mot de passe',
+                        hintText: l?.tr('register_password_hint') ?? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
                         icon: Icons.lock_outline_rounded,
                         isPassword: true,
                         controller: _passwordController,
                         validator: (v) {
                           if (v == null || v.isEmpty) {
-                            return 'Mot de passe requis';
+                            return l?.tr('register_password_required') ?? 'Mot de passe requis';
                           }
-                          if (v.length < 6) return 'Min. 6 caractères';
+                          if (v.length < 6) return l?.tr('register_password_min_length') ?? 'Min. 6 caract\u00e8res';
                           return null;
                         },
                       ),
                       const SizedBox(height: 10),
-                      _buildPasswordStrength(),
+                      _buildPasswordStrength(l),
                       const SizedBox(height: 14),
 
                       CustomTextField(
-                        label: 'Confirmer le mot de passe',
-                        hintText: '••••••••••••',
+                        label: l?.tr('register_confirm_password_label') ?? 'Confirmer le mot de passe',
+                        hintText: l?.tr('register_password_hint') ?? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022',
                         icon: Icons.lock_outline_rounded,
                         isPassword: true,
                         controller: _confirmPasswordController,
                         validator: (v) {
                           if (v != _passwordController.text) {
-                            return 'Les mots de passe ne correspondent pas';
+                            return l?.tr('register_confirm_password_mismatch') ?? 'Les mots de passe ne correspondent pas';
                           }
                           return null;
                         },
@@ -291,11 +295,11 @@ class _BasicRegistrationScreenState
                       const SizedBox(height: 24),
 
                       // Terms
-                      _buildTermsRow(),
+                      _buildTermsRow(l),
                       const SizedBox(height: 28),
 
                       CustomButton(
-                        text: 'Continuer',
+                        text: l?.tr('register_continue') ?? 'Continuer',
                         onPressed: _handleRegistration,
                         isLoading: _isLoading,
                         icon: Icons.arrow_forward_rounded,
@@ -307,7 +311,7 @@ class _BasicRegistrationScreenState
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'Déjà un compte ?',
+                              l?.tr('register_already_account') ?? 'D\u00e9j\u00e0 un compte ?',
                               style: GoogleFonts.plusJakartaSans(
                                 color: AppColors.secondary500,
                                 fontSize: 14,
@@ -319,7 +323,7 @@ class _BasicRegistrationScreenState
                                 (route) => route.isFirst,
                               ),
                               child: Text(
-                                'Se connecter',
+                                l?.tr('register_login') ?? 'Se connecter',
                                 style: GoogleFonts.plusJakartaSans(
                                   color: AppColors.brand700,
                                   fontWeight: FontWeight.bold,
@@ -373,7 +377,7 @@ class _BasicRegistrationScreenState
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppLocalizations? l) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -384,7 +388,9 @@ class _BasicRegistrationScreenState
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            widget.isClient ? 'Étape 2 sur 3' : 'Étape 1 sur 6',
+            widget.isClient
+                ? (l?.tr('register_step_client') ?? '\u00c9tape 2 sur 3')
+                : (l?.tr('register_step_owner') ?? '\u00c9tape 1 sur 6'),
             style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -395,7 +401,9 @@ class _BasicRegistrationScreenState
         ),
         const SizedBox(height: 14),
         Text(
-          widget.isClient ? 'Créez votre compte' : 'Votre profil',
+          widget.isClient
+              ? (l?.tr('register_title_client') ?? 'Cr\u00e9ez votre compte')
+              : (l?.tr('register_title_owner') ?? 'Votre profil'),
           style: GoogleFonts.dmSans(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -406,8 +414,8 @@ class _BasicRegistrationScreenState
         const SizedBox(height: 10),
         Text(
           widget.isClient
-              ? 'Quelques informations et c\'est parti !'
-              : 'Ces informations serviront à configurer votre salon.',
+              ? (l?.tr('register_subtitle_client') ?? 'Quelques informations et c\'est parti !')
+              : (l?.tr('register_subtitle_owner') ?? 'Ces informations serviront \u00e0 configurer votre salon.'),
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             color: AppColors.secondary500,
@@ -436,8 +444,14 @@ class _BasicRegistrationScreenState
     );
   }
 
-  Widget _buildPasswordStrength() {
-    final labels = ['', 'Faible', 'Moyen', 'Fort', 'Excellent'];
+  Widget _buildPasswordStrength(AppLocalizations? l) {
+    final labels = [
+      '',
+      l?.tr('register_password_weak') ?? 'Faible',
+      l?.tr('register_password_medium') ?? 'Moyen',
+      l?.tr('register_password_strong') ?? 'Fort',
+      l?.tr('register_password_excellent') ?? 'Excellent',
+    ];
     final colors = [
       AppColors.secondary200,
       Colors.red.shade400,
@@ -482,7 +496,7 @@ class _BasicRegistrationScreenState
     );
   }
 
-  Widget _buildTermsRow() {
+  Widget _buildTermsRow(AppLocalizations? l) {
     return GestureDetector(
       onTap: () => setState(() => _acceptTerms = !_acceptTerms),
       child: Row(
@@ -517,9 +531,9 @@ class _BasicRegistrationScreenState
                   height: 1.5,
                 ),
                 children: [
-                  const TextSpan(text: 'J\'accepte les '),
+                  TextSpan(text: l?.tr('register_terms_prefix') ?? 'J\'accepte les '),
                   TextSpan(
-                    text: 'Conditions d\'utilisation',
+                    text: l?.tr('register_terms_link') ?? 'Conditions d\'utilisation',
                     style: const TextStyle(
                       color: AppColors.brand700,
                       fontWeight: FontWeight.w600,
@@ -534,9 +548,9 @@ class _BasicRegistrationScreenState
                         );
                       },
                   ),
-                  const TextSpan(text: ' et la '),
+                  TextSpan(text: l?.tr('register_terms_separator') ?? ' et la '),
                   TextSpan(
-                    text: 'Politique de confidentialité',
+                    text: l?.tr('register_privacy_link') ?? 'Politique de confidentialit\u00e9',
                     style: const TextStyle(
                       color: AppColors.brand700,
                       fontWeight: FontWeight.w600,

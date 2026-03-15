@@ -7,6 +7,7 @@ import '../theme/app_colors.dart';
 import '../models/user_model.dart';
 import '../widgets/custom_text_field.dart';
 import '../providers/auth_providers.dart';
+import '../services/app_localizations.dart';
 import 'basic_registration_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -105,9 +106,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         if (userModel != null && userModel.userType == UserType.client) {
           await authService.signOut();
           if (mounted) {
+            final l = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Ce compte est un compte client. Veuillez utiliser l\'application Mon Salon.'),
+              SnackBar(
+                content: Text(l?.tr('login_client_account_error') ?? 'Ce compte est un compte client. Veuillez utiliser l\'application Mon Salon pour vous connecter.'),
                 backgroundColor: Colors.redAccent,
               ),
             );
@@ -123,17 +125,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
     } catch (e) {
       if (mounted) {
-        String message = 'Une erreur est survenue';
+        final l = AppLocalizations.of(context);
+        String message = l?.tr('login_error_generic') ?? 'Une erreur est survenue';
         final errorString = e.toString().toLowerCase();
 
         if (errorString.contains('user-not-found') ||
             errorString.contains('wrong-password') ||
             errorString.contains('invalid-credential')) {
-          message = 'Email ou mot de passe incorrect';
+          message = l?.tr('login_error_wrong_credentials') ?? 'Email ou mot de passe incorrect';
         } else if (errorString.contains('network-request-failed')) {
-          message = 'Erreur réseau, vérifiez votre connexion';
+          message = l?.tr('login_error_network') ?? 'Erreur réseau, vérifiez votre connexion';
         } else if (errorString.contains('too-many-requests')) {
-          message = 'Trop de tentatives, réessayez plus tard';
+          message = l?.tr('login_error_too_many_attempts') ?? 'Trop de tentatives, réessayez plus tard';
         } else {
           message = e.toString();
         }
@@ -160,6 +163,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -202,7 +206,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                         // Heading
                         Text(
-                          'Mon Salon Pro',
+                          l?.tr('login_title') ?? 'Mon Salon Pro',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.dmSans(
                             fontSize: 28,
@@ -213,7 +217,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Connectez-vous pour gérer votre salon.',
+                          l?.tr('login_subtitle') ?? 'Connectez-vous pour gérer votre salon.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 14,
@@ -246,17 +250,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               children: [
                                 // Email
                                 CustomTextField(
-                                  label: 'Email',
-                                  hintText: 'karim@exemple.com',
+                                  label: l?.tr('login_email_label') ?? 'Email',
+                                  hintText: l?.tr('login_email_hint') ?? 'karim@exemple.com',
                                   controller: _emailController,
                                   icon: Icons.email_outlined,
                                   keyboardType: TextInputType.emailAddress,
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'Veuillez entrer votre email';
+                                      return l?.tr('login_email_required') ?? 'Veuillez entrer votre email';
                                     }
                                     if (!value.contains('@')) {
-                                      return 'Veuillez entrer un email valide';
+                                      return l?.tr('login_email_invalid') ?? 'Veuillez entrer un email valide';
                                     }
                                     return null;
                                   },
@@ -265,16 +269,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                                 // Password
                                 CustomTextField(
-                                  label: 'Mot de passe',
-                                  hintText: '••••••••••••',
+                                  label: l?.tr('login_password_label') ?? 'Mot de passe',
+                                  hintText: l?.tr('login_password_hint') ?? '••••••••••••',
                                   controller: _passwordController,
                                   isPassword: true,
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'Veuillez entrer votre mot de passe';
+                                      return l?.tr('login_password_required') ?? 'Veuillez entrer votre mot de passe';
                                     }
                                     if (value.length < 6) {
-                                      return 'Le mot de passe doit faire au moins 6 caractères';
+                                      return l?.tr('login_password_min_length') ?? 'Le mot de passe doit faire au moins 6 caractères';
                                     }
                                     return null;
                                   },
@@ -316,7 +320,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            'Se souvenir de moi',
+                                            l?.tr('login_remember_me') ?? 'Se souvenir de moi',
                                             style: GoogleFonts.plusJakartaSans(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500,
@@ -330,7 +334,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       onPressed: _handleForgotPassword,
                                       style: TextButton.styleFrom(padding: EdgeInsets.zero),
                                       child: Text(
-                                        'Mot de passe oublié ?',
+                                        l?.tr('login_forgot_password') ?? 'Mot de passe oublié ?',
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
@@ -381,19 +385,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Row(
+                                : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        'Se connecter',
-                                        style: TextStyle(
+                                        l?.tr('login_button') ?? 'Se connecter',
+                                        style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
                                           color: Colors.white,
                                         ),
                                       ),
-                                      SizedBox(width: 8),
-                                      Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
                                     ],
                                   ),
                           ),
@@ -406,7 +410,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                'Pas encore de compte ?',
+                                l?.tr('login_no_account') ?? 'Pas encore de compte ?',
                                 style: GoogleFonts.plusJakartaSans(
                                   color: AppColors.secondary500,
                                   fontSize: 14,
@@ -423,7 +427,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   );
                                 },
                                 child: Text(
-                                  'Créer un compte',
+                                  l?.tr('login_create_account') ?? 'Créer un compte',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: const Color(0xFF7C3AED),
                                     fontWeight: FontWeight.bold,

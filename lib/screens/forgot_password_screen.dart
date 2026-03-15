@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_colors.dart';
 import '../providers/auth_providers.dart';
+import '../services/app_localizations.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   final String initialEmail;
@@ -50,16 +51,17 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        final l = AppLocalizations.of(context);
         final errorString = e.toString().toLowerCase();
-        String message = 'Une erreur est survenue';
+        String message = l?.tr('login_error_generic') ?? 'Une erreur est survenue';
         if (errorString.contains('user-not-found')) {
-          message = 'Aucun compte trouvé avec cet email';
+          message = 'Aucun compte trouv\u00e9 avec cet email';
         } else if (errorString.contains('network-request-failed')) {
-          message = 'Erreur réseau, vérifiez votre connexion';
+          message = l?.tr('login_error_network') ?? 'Erreur r\u00e9seau, v\u00e9rifiez votre connexion';
         } else if (errorString.contains('too-many-requests')) {
-          message = 'Trop de tentatives, réessayez plus tard';
+          message = l?.tr('login_error_too_many_attempts') ?? 'Trop de tentatives, r\u00e9essayez plus tard';
         } else if (errorString.contains('invalid-email')) {
-          message = 'Adresse email invalide';
+          message = l?.tr('login_email_invalid') ?? 'Adresse email invalide';
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
@@ -70,6 +72,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -86,7 +89,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
-              child: _emailSent ? _buildSuccessView() : _buildFormView(),
+              child: _emailSent ? _buildSuccessView(l) : _buildFormView(l),
             ),
           ),
         ),
@@ -94,7 +97,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
   }
 
-  Widget _buildFormView() {
+  Widget _buildFormView(AppLocalizations? l) {
     return Form(
       key: _formKey,
       child: Column(
@@ -120,7 +123,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
           // Title
           Text(
-            'Mot de passe oublié',
+            l?.tr('forgot_title') ?? 'Mot de passe oubli\u00e9',
             textAlign: TextAlign.center,
             style: GoogleFonts.playfairDisplay(
               fontSize: 24,
@@ -132,7 +135,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
           // Subtitle
           Text(
-            'Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.',
+            l?.tr('forgot_subtitle') ?? 'Entrez votre adresse email pour recevoir un lien de r\u00e9initialisation.',
             textAlign: TextAlign.center,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 14,
@@ -144,7 +147,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
           // Email label
           Text(
-            'Email',
+            l?.tr('forgot_email_label') ?? 'Email',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -163,7 +166,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               color: AppColors.brand950,
             ),
             decoration: InputDecoration(
-              hintText: 'votre@email.com',
+              hintText: l?.tr('forgot_email_hint') ?? 'votre@email.com',
               hintStyle: GoogleFonts.plusJakartaSans(
                 color: AppColors.secondary400,
                 fontSize: 15,
@@ -196,10 +199,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return 'Veuillez entrer votre email';
+                return l?.tr('login_email_required') ?? 'Veuillez entrer votre email';
               }
               if (!value.contains('@') || !value.contains('.')) {
-                return 'Veuillez entrer un email valide';
+                return l?.tr('login_email_invalid') ?? 'Veuillez entrer un email valide';
               }
               return null;
             },
@@ -230,7 +233,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       ),
                     )
                   : Text(
-                      'Envoyer le lien',
+                      l?.tr('forgot_send_button') ?? 'Envoyer le lien',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -245,7 +248,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             child: TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'Retour à la connexion',
+                l?.tr('forgot_back_to_login') ?? 'Retour \u00e0 la connexion',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -259,7 +262,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
   }
 
-  Widget _buildSuccessView() {
+  Widget _buildSuccessView(AppLocalizations? l) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -283,7 +286,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
         // Title
         Text(
-          'Email envoyé !',
+          l?.tr('forgot_success_title') ?? 'Email envoy\u00e9 !',
           textAlign: TextAlign.center,
           style: GoogleFonts.playfairDisplay(
             fontSize: 24,
@@ -295,7 +298,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
         // Instructions
         Text(
-          'Un lien de réinitialisation a été envoyé à',
+          l?.tr('forgot_success_message') ?? 'Un lien de r\u00e9initialisation a \u00e9t\u00e9 envoy\u00e9 \u00e0',
           textAlign: TextAlign.center,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
@@ -315,7 +318,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Vérifiez votre boîte de réception et suivez les instructions pour créer un nouveau mot de passe.',
+          l?.tr('forgot_check_inbox') ?? 'V\u00e9rifiez votre bo\u00eete de r\u00e9ception et vos spams.',
           textAlign: TextAlign.center,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
@@ -339,7 +342,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               ),
             ),
             child: Text(
-              'Retour à la connexion',
+              l?.tr('forgot_back_to_login') ?? 'Retour \u00e0 la connexion',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -358,7 +361,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     setState(() => _emailSent = false);
                   },
             child: Text(
-              'Renvoyer l\'email',
+              l?.tr('forgot_resend') ?? 'Renvoyer l\'email',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

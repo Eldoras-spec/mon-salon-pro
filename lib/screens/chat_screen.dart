@@ -7,6 +7,7 @@ import '../models/message_model.dart';
 import '../models/salon_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
+import '../services/app_localizations.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -41,12 +42,12 @@ class _ChatScreenState extends State<ChatScreen> {
   SalonModel? _salon;
 
   // ── Owner quick-reply templates ──────────────────────────────────────
-  static const List<Map<String, String>> _quickReplies = [
-    {'label': 'RDV confirmé', 'text': 'Votre rendez-vous est bien confirmé ! À bientôt ✨'},
-    {'label': 'Rappel RDV', 'text': 'Petit rappel : vous avez un rendez-vous prévu chez nous bientôt. On vous attend ! 😊'},
-    {'label': 'Salon fermé', 'text': 'Le salon est fermé aujourd\'hui. Nous serons ravis de vous accueillir dès notre réouverture !'},
-    {'label': 'Merci', 'text': 'Merci pour votre message ! Nous restons à votre disposition pour toute question.'},
-    {'label': 'Annulation', 'text': 'Votre rendez-vous a bien été annulé. N\'hésitez pas à reprendre RDV quand vous le souhaitez.'},
+  List<Map<String, String>> _getQuickReplies(AppLocalizations? l) => [
+    {'label': l?.tr('chat_quick_rdv_confirmed') ?? 'RDV confirmé', 'text': l?.tr('chat_quick_rdv_confirmed_text') ?? 'Votre rendez-vous est bien confirmé. À bientôt !'},
+    {'label': l?.tr('chat_quick_rdv_reminder') ?? 'Rappel RDV', 'text': l?.tr('chat_quick_rdv_reminder_text') ?? 'N\'oubliez pas votre rendez-vous prévu prochainement.'},
+    {'label': l?.tr('chat_quick_salon_closed') ?? 'Salon fermé', 'text': l?.tr('chat_quick_salon_closed_text') ?? 'Notre salon est actuellement fermé. Nous serons ravis de vous accueillir à la réouverture.'},
+    {'label': l?.tr('chat_quick_thanks') ?? 'Merci', 'text': l?.tr('chat_quick_thanks_text') ?? 'Merci beaucoup ! N\'hésitez pas si vous avez d\'autres questions.'},
+    {'label': l?.tr('chat_quick_cancellation') ?? 'Annulation', 'text': l?.tr('chat_quick_cancellation_text') ?? 'Votre rendez-vous a été annulé. N\'hésitez pas à reprendre rendez-vous quand vous le souhaitez.'},
   ];
 
   @override
@@ -131,7 +132,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur : $e'),
+            content: Text((AppLocalizations.of(context)?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')),
             backgroundColor: Colors.red,
           ),
         );
@@ -155,6 +156,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: AppColors.secondary50,
       appBar: AppBar(
@@ -204,15 +206,15 @@ class _ChatScreenState extends State<ChatScreen> {
                             size: 48, color: AppColors.secondary200),
                         const SizedBox(height: 12),
                         Text(
-                          'Démarrez la conversation',
+                          l?.tr('chat_start_conversation') ?? 'Démarrez la conversation',
                           style: GoogleFonts.dmSans(
                             fontSize: 16,
                             color: AppColors.secondary400,
                           ),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          'Envoyez un message pour commencer.',
+                        Text(
+                          l?.tr('chat_start_hint') ?? 'Envoyez un message pour commencer.',
                           style: TextStyle(
                               fontSize: 12,
                               color: AppColors.secondary300),
@@ -262,7 +264,7 @@ class _ChatScreenState extends State<ChatScreen> {
           // Quick replies for owner
           if (!widget.isClient)
             _QuickReplyBar(
-              replies: _quickReplies,
+              replies: _getQuickReplies(l),
               onTap: (text) => _send(overrideText: text),
             ),
 
@@ -271,6 +273,7 @@ class _ChatScreenState extends State<ChatScreen> {
             controller: _controller,
             sending: _sending,
             onSend: _send,
+            hintText: l?.tr('chat_input_hint') ?? 'Écrivez un message…',
           ),
         ],
       ),
@@ -289,11 +292,12 @@ class _DateDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final now = DateTime.now();
     final isToday =
         date.year == now.year && date.month == now.month && date.day == now.day;
     final label = isToday
-        ? "Aujourd'hui"
+        ? (l?.tr('chat_today') ?? "Aujourd'hui")
         : DateFormat('d MMMM yyyy', 'fr_FR').format(date);
 
     return Padding(
@@ -334,6 +338,7 @@ class _MessageBubble extends StatelessWidget {
 
     // Bot auto-reply → special centered style
     if (_isBot) {
+      final l = AppLocalizations.of(context);
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 24),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -351,7 +356,7 @@ class _MessageBubble extends StatelessWidget {
                     size: 14, color: AppColors.brand600),
                 const SizedBox(width: 6),
                 Text(
-                  'Réponse automatique',
+                  l?.tr('chat_auto_reply') ?? 'Réponse automatique',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -499,10 +504,12 @@ class _InputBar extends StatelessWidget {
     required this.controller,
     required this.sending,
     required this.onSend,
+    required this.hintText,
   });
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
+  final String hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -525,7 +532,7 @@ class _InputBar extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 14, color: AppColors.secondary800),
               decoration: InputDecoration(
-                hintText: 'Écrivez un message…',
+                hintText: hintText,
                 hintStyle: const TextStyle(
                     color: AppColors.secondary400, fontSize: 14),
                 filled: true,

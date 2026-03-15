@@ -6,12 +6,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 
 class OwnerClientsScreen extends ConsumerWidget {
   const OwnerClientsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
 
     return Scaffold(
@@ -21,7 +23,7 @@ class OwnerClientsScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'Mes clients',
+          l?.tr('clients_title') ?? 'Mes clients',
           style: GoogleFonts.dmSans(
             fontWeight: FontWeight.bold,
             color: AppColors.brand950,
@@ -36,7 +38,7 @@ class OwnerClientsScreen extends ConsumerWidget {
       body: appointmentsAsync.when(
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.brand600)),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         data: (appointments) => _ClientsBody(appointments: appointments),
       ),
     );
@@ -56,6 +58,7 @@ class _ClientsBodyState extends State<_ClientsBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final completed =
         widget.appointments.where((a) => a.status == 'completed').toList();
 
@@ -94,7 +97,7 @@ class _ClientsBodyState extends State<_ClientsBody> {
           child: TextField(
             onChanged: (v) => setState(() => _search = v),
             decoration: InputDecoration(
-              hintText: 'Rechercher un client…',
+              hintText: l?.tr('clients_search_hint') ?? 'Rechercher un client…',
               hintStyle: const TextStyle(
                   color: AppColors.secondary400, fontSize: 14),
               prefixIcon:
@@ -116,7 +119,7 @@ class _ClientsBodyState extends State<_ClientsBody> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '${clients.length} client${clients.length > 1 ? 's' : ''}',
+              (l?.tr('clients_count') ?? '{count} client(s)').replaceAll('{count}', '${clients.length}'),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -132,8 +135,8 @@ class _ClientsBodyState extends State<_ClientsBody> {
               ? Center(
                   child: Text(
                     _search.isNotEmpty
-                        ? 'Aucun client trouvé'
-                        : 'Aucun client pour le moment',
+                        ? l?.tr('clients_not_found') ?? 'Aucun client trouvé'
+                        : l?.tr('clients_empty') ?? 'Aucun client pour le moment',
                     style: const TextStyle(
                         color: AppColors.secondary400, fontSize: 14),
                   ),
@@ -181,13 +184,14 @@ class _ClientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final daysSinceLast =
         DateTime.now().difference(client.lastVisit).inDays;
     final lastVisitLabel = daysSinceLast == 0
-        ? "Aujourd'hui"
+        ? l?.tr('clients_today') ?? "Aujourd'hui"
         : daysSinceLast == 1
-            ? 'Hier'
-            : 'Il y a $daysSinceLast jours';
+            ? l?.tr('clients_yesterday') ?? 'Hier'
+            : (l?.tr('clients_days_ago') ?? 'Il y a {days} jours').replaceAll('{days}', '$daysSinceLast');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -269,7 +273,7 @@ class _ClientCard extends StatelessWidget {
                       size: 20, color: AppColors.brand600),
                   onPressed: () =>
                       launchUrl(Uri.parse('tel:${client.phone}')),
-                  tooltip: 'Appeler',
+                  tooltip: l?.tr('clients_call') ?? 'Appeler',
                 ),
             ],
           ),
@@ -279,7 +283,7 @@ class _ClientCard extends StatelessWidget {
             children: [
               _MiniStat(
                 icon: Icons.receipt_long,
-                label: '${client.visitCount} visite${client.visitCount > 1 ? 's' : ''}',
+                label: (l?.tr('clients_visits_count') ?? '{count} visite(s)').replaceAll('{count}', '${client.visitCount}'),
               ),
               const SizedBox(width: 16),
               _MiniStat(
@@ -298,7 +302,7 @@ class _ClientCard extends StatelessWidget {
           const SizedBox(height: 8),
           // Last visit
           Text(
-            'Dernière visite : $lastVisitLabel',
+            (l?.tr('clients_last_visit') ?? 'Dernière visite : {label}').replaceAll('{label}', lastVisitLabel),
             style: const TextStyle(
               fontSize: 11,
               color: AppColors.secondary400,

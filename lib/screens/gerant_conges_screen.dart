@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
+import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import 'member_home_screen.dart';
 
@@ -11,6 +12,7 @@ class GerantCongesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final member = ref.watch(activeTeamMemberProvider);
     final salonAsync = ref.watch(ownerSalonProvider);
 
@@ -22,9 +24,9 @@ class GerantCongesScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text(
-          'Mes Indisponibilités',
-          style: TextStyle(
+        title: Text(
+          l?.tr('unavailability_title') ?? 'Mes Indisponibilités',
+          style: const TextStyle(
             fontFamily: 'DmSans',
             fontWeight: FontWeight.bold,
             fontSize: 20,
@@ -36,13 +38,13 @@ class GerantCongesScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.brand500),
         ),
-        error: (e, _) => Center(child: Text('Erreur: $e')),
+        error: (e, _) => Center(child: Text((l?.tr('gerant_conges_error') ?? 'Erreur: {error}').replaceAll('{error}', '$e'))),
         data: (salon) {
           if (salon == null) {
-            return const Center(
+            return Center(
               child: Text(
-                'Salon introuvable',
-                style: TextStyle(color: AppColors.secondary400),
+                l?.tr('member_salon_not_found') ?? 'Salon introuvable',
+                style: const TextStyle(color: AppColors.secondary400),
               ),
             );
           }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../models/user_model.dart';
 import '../providers/team_providers.dart';
@@ -81,6 +82,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
   void _showOwnerMenu() {
     final activeMember = ref.read(activeTeamMemberProvider);
     final isGerant = activeMember?.role == 'gerant';
+    final l = AppLocalizations.of(context);
 
     showModalBottomSheet(
       context: context,
@@ -113,7 +115,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Actions rapides',
+                    l?.tr('menu_quick_actions') ?? 'Actions rapides',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -134,8 +136,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.calendar_view_day_outlined,
               iconBg: AppColors.brand50,
               iconColor: AppColors.brand600,
-              label: 'Agenda',
-              sub: 'Planning de l\'équipe',
+              label: l?.tr('menu_agenda') ?? 'Agenda',
+              sub: l?.tr('menu_team_planning') ?? 'Planning de l\'équipe',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(
@@ -147,8 +149,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.calendar_month_outlined,
               iconBg: const Color(0xFFEFF6FF),
               iconColor: const Color(0xFF2563EB),
-              label: 'Rendez-vous du jour',
-              sub: 'Voir les réservations d\'aujourd\'hui',
+              label: l?.tr('menu_today_appointments') ?? 'Rendez-vous du jour',
+              sub: l?.tr('menu_today_appointments_desc') ?? 'Voir les réservations d\'aujourd\'hui',
               onTap: () {
                 Navigator.pop(context);
                 setState(() => _currentIndex = 1);
@@ -159,8 +161,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                 icon: Icons.content_cut_outlined,
                 iconBg: const Color(0xFFF0FDF4),
                 iconColor: const Color(0xFF16A34A),
-                label: 'Gérer les services',
-                sub: 'Ajouter ou modifier vos services',
+                label: l?.tr('menu_manage_services') ?? 'Gérer les services',
+                sub: l?.tr('menu_manage_services_desc') ?? 'Ajouter ou modifier vos services',
                 onTap: () {
                   Navigator.pop(context);
                   setState(() => _currentIndex = 2);
@@ -176,8 +178,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.chat_outlined,
               iconBg: const Color(0xFFFDF2F8),
               iconColor: const Color(0xFFDB2777),
-              label: 'Messages',
-              sub: 'Conversations avec les clients',
+              label: l?.tr('menu_messages') ?? 'Messages',
+              sub: l?.tr('menu_messages_desc') ?? 'Conversations avec les clients',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -196,8 +198,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.inventory_2_outlined,
               iconBg: const Color(0xFFFFF7ED),
               iconColor: const Color(0xFFEA580C),
-              label: 'Stock & Produits',
-              sub: 'Gérez vos produits et consommables',
+              label: l?.tr('menu_inventory') ?? 'Stock & Produits',
+              sub: l?.tr('menu_inventory_desc') ?? 'Gérez vos produits et consommables',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(const OwnerInventoryScreen());
@@ -207,8 +209,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.account_balance_wallet_outlined,
               iconBg: const Color(0xFFF0FDF4),
               iconColor: const Color(0xFF059669),
-              label: 'Finances',
-              sub: 'Charges, revenus et bénéfice net',
+              label: l?.tr('menu_finances') ?? 'Finances',
+              sub: l?.tr('menu_finances_desc') ?? 'Charges, revenus et bénéfice net',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(const OwnerFinancesScreen());
@@ -219,8 +221,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                 icon: Icons.local_offer_outlined,
                 iconBg: const Color(0xFFFDF4FF),
                 iconColor: const Color(0xFF9333EA),
-                label: 'Offres & Promotions',
-                sub: 'Réductions, codes promo et offres spéciales',
+                label: l?.tr('menu_promotions') ?? 'Offres & Promotions',
+                sub: l?.tr('menu_promotions_desc') ?? 'Réductions, codes promo et offres spéciales',
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushSlide(const OwnerPromotionsScreen());
@@ -230,8 +232,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.storefront_outlined,
               iconBg: const Color(0xFFFFF7ED),
               iconColor: const Color(0xFFEA580C),
-              label: 'Boutique',
-              sub: 'Produits, commandes et livraisons',
+              label: l?.tr('menu_boutique') ?? 'Boutique',
+              sub: l?.tr('menu_boutique_desc') ?? 'Produits, commandes et livraisons',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(const OwnerBoutiqueScreen());
@@ -242,8 +244,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                 icon: Icons.groups_outlined,
                 iconBg: const Color(0xFFEFF6FF),
                 iconColor: const Color(0xFF2563EB),
-                label: 'Mon Équipe',
-                sub: 'Membres, rôles et disponibilités',
+                label: l?.tr('menu_team') ?? 'Mon Équipe',
+                sub: l?.tr('menu_team_desc') ?? 'Membres, rôles et disponibilités',
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).pushSlide(const OwnerTeamScreen());
@@ -253,8 +255,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.people_outline,
               iconBg: const Color(0xFFFFF1F2),
               iconColor: const Color(0xFFE11D48),
-              label: 'Mes clients',
-              sub: 'Historique, contacts et fidélité',
+              label: l?.tr('menu_clients') ?? 'Mes clients',
+              sub: l?.tr('menu_clients_desc') ?? 'Historique, contacts et fidélité',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(const OwnerClientsScreen());
@@ -264,8 +266,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
               icon: Icons.bar_chart_rounded,
               iconBg: const Color(0xFFF0F9FF),
               iconColor: const Color(0xFF0284C7),
-              label: 'Statistiques',
-              sub: 'Analyses détaillées et performances',
+              label: l?.tr('menu_statistics') ?? 'Statistiques',
+              sub: l?.tr('menu_statistics_desc') ?? 'Analyses détaillées et performances',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.of(context).pushSlide(const OwnerStatisticsScreen());
@@ -323,6 +325,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
   }
 
   Widget _buildBottomNav(bool isGerant) {
+    final l = AppLocalizations.of(context);
     return BottomAppBar(
       color: Colors.white,
       elevation: 20,
@@ -334,13 +337,13 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.grid_view_rounded, 'Accueil', 0),
-            _buildNavItem(Icons.calendar_month_rounded, 'RDV', 1),
+            _buildNavItem(Icons.grid_view_rounded, l?.tr('nav_home') ?? 'Accueil', 0),
+            _buildNavItem(Icons.calendar_month_rounded, l?.tr('nav_appointments') ?? 'RDV', 1),
             const SizedBox(width: 48),
             isGerant
-                ? _buildNavItem(Icons.event_busy_rounded, 'Indispo', 2)
-                : _buildNavItem(Icons.store_rounded, 'Salon', 2),
-            _buildNavItem(Icons.person_rounded, 'Profil', 3),
+                ? _buildNavItem(Icons.event_busy_rounded, l?.tr('nav_unavailability') ?? 'Indispo', 2)
+                : _buildNavItem(Icons.store_rounded, l?.tr('nav_salon') ?? 'Salon', 2),
+            _buildNavItem(Icons.person_rounded, l?.tr('nav_profile') ?? 'Profil', 3),
           ],
         ),
       ),

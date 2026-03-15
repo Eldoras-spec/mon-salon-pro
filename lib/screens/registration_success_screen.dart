@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 import '../services/notification_service.dart';
+import '../services/app_localizations.dart';
 
 class RegistrationSuccessScreen extends StatefulWidget {
   final bool isOwner;
@@ -52,6 +53,7 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -91,8 +93,8 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                 // Title & Subtitle
                 Text(
                   widget.isOwner
-                      ? 'Tout est prêt !'
-                      : 'Bienvenue sur Mon Salon !',
+                      ? (l?.tr('success_title') ?? 'Tout est pr\u00eat !')
+                      : (l?.tr('success_welcome') ?? 'Bienvenue sur Mon Salon !'),
                   style: GoogleFonts.dmSans(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
@@ -103,8 +105,8 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                 const SizedBox(height: 12),
                 Text(
                   widget.isOwner
-                      ? 'Votre profil salon a été créé avec succès. Vous pouvez maintenant gérer vos rendez-vous et vos clients.'
-                      : 'Votre compte a été créé. Vous êtes prêt à découvrir et réserver les meilleurs professionnels près de chez vous.',
+                      ? (l?.tr('success_message') ?? 'Votre profil salon a \u00e9t\u00e9 cr\u00e9\u00e9 avec succ\u00e8s. Vous pouvez maintenant recevoir des r\u00e9servations.')
+                      : 'Votre compte a \u00e9t\u00e9 cr\u00e9\u00e9. Vous \u00eates pr\u00eat \u00e0 d\u00e9couvrir et r\u00e9server les meilleurs professionnels pr\u00e8s de chez vous.',
                   style: const TextStyle(
                     color: AppColors.secondary500,
                     fontSize: 16,
@@ -126,7 +128,9 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.isOwner ? 'RÉCAPITULATIF' : 'DÉTAILS DU COMPTE',
+                        widget.isOwner
+                            ? (l?.tr('success_recap') ?? 'R\u00c9CAPITULATIF')
+                            : (l?.tr('success_account_details') ?? 'D\u00c9TAILS DU COMPTE'),
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -137,26 +141,26 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                       const SizedBox(height: 16),
                       if (widget.isOwner) ...[
                         _buildSummaryItem(
-                          'Profil créé',
-                          'Votre salon est en ligne',
+                          l?.tr('success_profile_created') ?? 'Profil cr\u00e9\u00e9',
+                          l?.tr('success_salon_online') ?? 'Votre salon est en ligne',
                         ),
                         const SizedBox(height: 16),
                         _buildSummaryItem(
-                          'Services configurés',
-                          'Vos services sont prêts',
+                          l?.tr('success_services_configured') ?? 'Services configur\u00e9s',
+                          l?.tr('success_services_ready') ?? 'Vos services sont pr\u00eats',
                         ),
                         const SizedBox(height: 16),
                         _buildSummaryItem(
-                          'Équipe ajoutée',
-                          'Vos employés sont assignés',
+                          l?.tr('success_team_added') ?? '\u00c9quipe ajout\u00e9e',
+                          l?.tr('success_team_assigned') ?? 'Vos employ\u00e9s sont assign\u00e9s',
                         ),
                       ] else ...[
                         _buildSummaryItem(
                             'Profil actif', 'Membre standard'),
                         const SizedBox(height: 16),
                         _buildSummaryItem(
-                          'Email vérifié',
-                          'Compte prêt à utiliser',
+                          'Email v\u00e9rifi\u00e9',
+                          'Compte pr\u00eat \u00e0 utiliser',
                         ),
                       ],
                     ],
@@ -187,20 +191,20 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Activer les notifications',
-                              style: TextStyle(
+                              l?.tr('success_enable_notif') ?? 'Activer les notifications',
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.secondary900,
                               ),
                             ),
                             Text(
-                              'Recevez des alertes pour les nouvelles réservations',
-                              style: TextStyle(
+                              l?.tr('success_notif_desc') ?? 'Recevez des alertes pour les nouvelles r\u00e9servations',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.secondary500,
                               ),
@@ -226,8 +230,8 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                       width: double.infinity,
                       child: CustomButton(
                         text: widget.isOwner
-                            ? 'Aller au tableau de bord'
-                            : 'Découvrir les salons',
+                            ? (l?.tr('success_go_dashboard') ?? 'Aller au tableau de bord')
+                            : (l?.tr('success_discover_salons') ?? 'D\u00e9couvrir les salons'),
                         onPressed: _goToDashboard,
                         icon: widget.isOwner
                             ? Icons.arrow_forward

@@ -9,6 +9,7 @@ import '../models/appointment_model.dart';
 import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
@@ -16,12 +17,12 @@ import '../services/database_service.dart';
 enum _Filter { all, today, upcoming, completed, cancelled }
 
 extension _FilterLabel on _Filter {
-  String get label => switch (this) {
-        _Filter.all => 'Tous',
-        _Filter.today => "Aujourd'hui",
-        _Filter.upcoming => 'À venir',
-        _Filter.completed => 'Terminés',
-        _Filter.cancelled => 'Annulés',
+  String localizedLabel(AppLocalizations? l) => switch (this) {
+        _Filter.all => l?.tr('appointments_filter_all') ?? 'Tous',
+        _Filter.today => l?.tr('appointments_filter_today') ?? "Aujourd'hui",
+        _Filter.upcoming => l?.tr('appointments_filter_upcoming') ?? 'À venir',
+        _Filter.completed => l?.tr('appointments_filter_completed') ?? 'Terminés',
+        _Filter.cancelled => l?.tr('appointments_filter_cancelled') ?? 'Annulés',
       };
 }
 
@@ -100,6 +101,7 @@ class _OwnerAppointmentsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
 
     return Scaffold(
@@ -119,7 +121,7 @@ class _OwnerAppointmentsScreenState
             elevation: 0,
             centerTitle: false,
             title: Text(
-              'Rendez-vous',
+              l?.tr('appointments_title') ?? 'Rendez-vous',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -141,7 +143,7 @@ class _OwnerAppointmentsScreenState
                       size: 18, color: AppColors.brand600),
                 ),
                 splashRadius: 20,
-                tooltip: 'Ajouter un rendez-vous',
+                tooltip: l?.tr('appointments_add_tooltip') ?? 'Ajouter un rendez-vous',
               ),
               const SizedBox(width: 4),
             ],
@@ -163,7 +165,7 @@ class _OwnerAppointmentsScreenState
                 onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 style: const TextStyle(fontSize: 13, color: AppColors.brand950),
                 decoration: InputDecoration(
-                  hintText: 'Rechercher par client, service…',
+                  hintText: l?.tr('appointments_search_hint') ?? 'Rechercher par client, service…',
                   hintStyle: const TextStyle(
                       fontSize: 13, color: AppColors.secondary400),
                   prefixIcon: const Icon(Icons.search_rounded,
@@ -210,7 +212,7 @@ class _OwnerAppointmentsScreenState
               ),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur : $e')),
+              child: Center(child: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'))),
             ),
             data: (all) {
               final items = _filter(all);
@@ -246,6 +248,7 @@ class _FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       height: 52,
@@ -266,7 +269,7 @@ class _FilterBar extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text(
-                f.label,
+                f.localizedLabel(l),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -333,8 +336,9 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
       widget.onStatusChanged();
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -343,6 +347,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
   }
 
   void _showAssignSheet(List<TeamMemberModel> members) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -365,7 +370,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Text(
-                'Assigner à un membre',
+                l?.tr('appointments_assign_member') ?? 'Assigner à un membre',
                 style: GoogleFonts.dmSans(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -375,11 +380,11 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
             ),
             const Divider(height: 1),
             if (members.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
+              Padding(
+                padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Aucun membre dans l\'équipe',
-                  style: TextStyle(color: AppColors.secondary400),
+                  l?.tr('appointments_no_team_members') ?? 'Aucun membre dans l\'équipe',
+                  style: const TextStyle(color: AppColors.secondary400),
                 ),
               )
             else
@@ -397,7 +402,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                     title: Text(m.name,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
-                      m.role == 'gerant' ? 'Gérant(e)' : 'Employé(e)',
+                      m.role == 'gerant' ? (l?.tr('team_role_manager') ?? 'Gérant(e)') : (l?.tr('team_role_member') ?? 'Employé(e)'),
                       style: const TextStyle(fontSize: 12),
                     ),
                     trailing: widget.appointment.assignedMemberId == m.id
@@ -422,6 +427,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
   }
 
   void _showActions() {
+    final l = AppLocalizations.of(context);
     final a = widget.appointment;
     if (a.status != 'upcoming') return;
     final members = ref.read(ownerTeamProvider).value ?? [];
@@ -468,8 +474,8 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 child: const Icon(Icons.check_rounded,
                     color: Color(0xFF16A34A), size: 20),
               ),
-              title: const Text('Marquer comme terminé',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(l?.tr('appointments_mark_completed') ?? 'Marquer comme terminé',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _updateStatus('completed');
@@ -486,8 +492,8 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 child: const Icon(Icons.person_pin_outlined,
                     color: AppColors.brand600, size: 20),
               ),
-              title: const Text('Assigner à un membre',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(l?.tr('appointments_assign_member') ?? 'Assigner à un membre',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _showAssignSheet(members);
@@ -504,8 +510,8 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 child: const Icon(Icons.close_rounded,
                     color: Color(0xFFDC2626), size: 20),
               ),
-              title: const Text('Annuler le rendez-vous',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(l?.tr('appointments_cancel') ?? 'Annuler le rendez-vous',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(context);
                 _updateStatus('cancelled');
@@ -520,7 +526,11 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final a = widget.appointment;
+    if (a.clientId == 'walk-in' && a.clientName == null) {
+      _clientName = l?.tr('appointments_walk_in_client') ?? 'Client sans compte';
+    }
 
     final timeStr = DateFormat('HH:mm').format(a.dateTime);
     final dateStr =
@@ -528,16 +538,16 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
 
     final (statusLabel, statusBg, statusFg) = switch (a.status) {
       'completed' => (
-          'Terminé',
+          l?.tr('appointments_status_completed') ?? 'Terminé',
           const Color(0xFFDCFCE7),
           const Color(0xFF16A34A)
         ),
       'cancelled' => (
-          'Annulé',
+          l?.tr('appointments_status_cancelled') ?? 'Annulé',
           const Color(0xFFFEE2E2),
           const Color(0xFFDC2626)
         ),
-      _ => ('À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
+      _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
     };
 
     final canAct = a.status == 'upcoming';
@@ -694,24 +704,25 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final (icon, msg) = switch (filter) {
       _Filter.today => (
           Icons.calendar_today_outlined,
-          "Aucun rendez-vous aujourd'hui"
+          l?.tr('appointments_empty_today') ?? "Aucun rendez-vous aujourd'hui"
         ),
       _Filter.upcoming => (
           Icons.event_available_outlined,
-          'Aucun rendez-vous à venir'
+          l?.tr('appointments_empty_upcoming') ?? 'Aucun rendez-vous à venir'
         ),
       _Filter.completed => (
           Icons.check_circle_outline_rounded,
-          'Aucun rendez-vous terminé'
+          l?.tr('appointments_empty_completed') ?? 'Aucun rendez-vous terminé'
         ),
       _Filter.cancelled => (
           Icons.cancel_outlined,
-          'Aucun rendez-vous annulé'
+          l?.tr('appointments_empty_cancelled') ?? 'Aucun rendez-vous annulé'
         ),
-      _ => (Icons.calendar_month_outlined, 'Aucun rendez-vous pour l\'instant'),
+      _ => (Icons.calendar_month_outlined, l?.tr('appointments_empty_all') ?? 'Aucun rendez-vous pour l\'instant'),
     };
 
     return Center(
@@ -869,27 +880,28 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
 
   Future<void> _submit() async {
     final clientName = _clientNameCtrl.text.trim();
+    final l = AppLocalizations.of(context);
     if (clientName.isEmpty) {
-      _showError('Veuillez entrer le nom du client');
+      _showError(l?.tr('appointments_error_client_name') ?? 'Veuillez entrer le nom du client');
       return;
     }
     if (_selectedService == null) {
-      _showError('Veuillez sélectionner un service');
+      _showError(l?.tr('appointments_error_service') ?? 'Veuillez sélectionner un service');
       return;
     }
     if (_selectedMember == null) {
-      _showError('Veuillez sélectionner un employé');
+      _showError(l?.tr('appointments_error_employee') ?? 'Veuillez sélectionner un employé');
       return;
     }
     if (!_isDayOpen(_selectedDate)) {
-      _showError('Le salon est fermé ce jour-là');
+      _showError(l?.tr('appointments_error_closed') ?? 'Le salon est fermé ce jour-là');
       return;
     }
     // Check member unavailability
     final isoDate =
         '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     if (_selectedMember!.unavailableDates.contains(isoDate)) {
-      _showError('${_selectedMember!.name} est indisponible ce jour-là');
+      _showError((l?.tr('appointments_error_unavailable_day') ?? '{name} est indisponible ce jour-là').replaceAll('{name}', _selectedMember!.name));
       return;
     }
 
@@ -907,7 +919,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         final sMin = int.parse(sp[0]) * 60 + int.parse(sp[1]);
         final eMin = int.parse(ep[0]) * 60 + int.parse(ep[1]);
         if (startMin < eMin && endMin > sMin) {
-          _showError('${_selectedMember!.name} est indisponible sur ce créneau (${parts[0]} - ${parts[1]})');
+          _showError((l?.tr('appointments_error_unavailable_slot') ?? '{name} est indisponible sur ce créneau ({slot})').replaceAll('{name}', _selectedMember!.name).replaceAll('{slot}', '${parts[0]} - ${parts[1]}'));
           return;
         }
       }
@@ -941,7 +953,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             '${conflict.dateTime.hour.toString().padLeft(2, '0')}:${conflict.dateTime.minute.toString().padLeft(2, '0')}';
         if (mounted) {
           _showError(
-              '${_selectedMember!.name} a déjà un RDV à $conflictTime');
+              (l?.tr('appointments_error_conflict') ?? '{name} a déjà un RDV à {time}').replaceAll('{name}', _selectedMember!.name).replaceAll('{time}', conflictTime));
           setState(() => _loading = false);
         }
         return;
@@ -971,8 +983,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
           '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
       await DatabaseService().saveNotification(
         userId: 'team_${widget.salon.id}_${_selectedMember!.id}',
-        title: 'Nouveau RDV assigné',
-        body: '$serviceName avec $clientName le ${DateFormat('d MMM', 'fr_FR').format(dateTime)} à $timeLabel',
+        title: l?.tr('appointments_new_assignment_title') ?? 'Nouveau RDV assigné',
+        body: (l?.tr('appointments_new_assignment_body') ?? '{service} avec {client} le {date} à {time}').replaceAll('{service}', serviceName).replaceAll('{client}', clientName).replaceAll('{date}', DateFormat('d MMM', 'fr_FR').format(dateTime)).replaceAll('{time}', timeLabel),
         type: 'assignment',
       );
 
@@ -980,16 +992,16 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('RDV créé avec succès'),
-            backgroundColor: Color(0xFF16A34A),
+          SnackBar(
+            content: Text(l?.tr('appointments_created_success') ?? 'RDV créé avec succès'),
+            backgroundColor: const Color(0xFF16A34A),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        _showError('Erreur : $e');
+        _showError((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -1004,6 +1016,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final services = widget.salon.services;
     final dateStr = DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
@@ -1031,7 +1044,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             ),
 
             Text(
-              'Nouveau rendez-vous',
+              l?.tr('appointments_new_title') ?? 'Nouveau rendez-vous',
               style: GoogleFonts.dmSans(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -1039,35 +1052,35 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Ajoutez un rendez-vous reçu par téléphone ou WhatsApp',
-              style: TextStyle(fontSize: 12, color: AppColors.secondary400),
+            Text(
+              l?.tr('appointments_new_subtitle') ?? 'Ajoutez un rendez-vous reçu par téléphone ou WhatsApp',
+              style: const TextStyle(fontSize: 12, color: AppColors.secondary400),
             ),
             const SizedBox(height: 20),
 
             // Client name
-            _label('Nom du client *'),
+            _label(l?.tr('appointments_client_name') ?? 'Nom du client *'),
             const SizedBox(height: 6),
             TextField(
               controller: _clientNameCtrl,
               style: const TextStyle(fontSize: 14, color: AppColors.brand950),
-              decoration: _inputDecoration('ex. Mohamed Alami'),
+              decoration: _inputDecoration(l?.tr('appointments_client_name_hint') ?? 'ex. Mohamed Alami'),
             ),
             const SizedBox(height: 16),
 
             // Client phone
-            _label('Téléphone'),
+            _label(l?.tr('appointments_client_phone') ?? 'Téléphone'),
             const SizedBox(height: 6),
             TextField(
               controller: _clientPhoneCtrl,
               keyboardType: TextInputType.phone,
               style: const TextStyle(fontSize: 14, color: AppColors.brand950),
-              decoration: _inputDecoration('ex. 0612345678'),
+              decoration: _inputDecoration(l?.tr('appointments_client_phone_hint') ?? 'ex. 0612345678'),
             ),
             const SizedBox(height: 16),
 
             // Service selection
-            _label('Service *'),
+            _label(l?.tr('appointments_service_label') ?? 'Service *'),
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1082,8 +1095,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                   value: _selectedService != null
                       ? services.indexOf(_selectedService!)
                       : null,
-                  hint: const Text('Sélectionner un service',
-                      style: TextStyle(
+                  hint: Text(l?.tr('appointments_select_service') ?? 'Sélectionner un service',
+                      style: const TextStyle(
                           fontSize: 13, color: AppColors.secondary400)),
                   items: List.generate(services.length, (i) {
                     final s = services[i];
@@ -1114,7 +1127,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             const SizedBox(height: 16),
 
             // Employee selection (filtered by selected service)
-            _label('Employé *'),
+            _label(l?.tr('appointments_employee_label') ?? 'Employé *'),
             const SizedBox(height: 6),
             Builder(builder: (_) {
               final serviceName =
@@ -1127,16 +1140,16 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                           m.assignedServiceNames.contains(serviceName))
                       .toList();
               if (_selectedService == null) {
-                return const Text(
-                  'Sélectionnez d\'abord un service',
-                  style: TextStyle(
+                return Text(
+                  l?.tr('appointments_select_service_first') ?? 'Sélectionnez d\'abord un service',
+                  style: const TextStyle(
                       fontSize: 12, color: AppColors.secondary400),
                 );
               }
               if (filteredMembers.isEmpty) {
-                return const Text(
-                  'Aucun employé assigné à ce service',
-                  style: TextStyle(
+                return Text(
+                  l?.tr('appointments_no_employee_for_service') ?? 'Aucun employé assigné à ce service',
+                  style: const TextStyle(
                       fontSize: 12, color: AppColors.secondary400),
                 );
               }
@@ -1204,7 +1217,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             const SizedBox(height: 16),
 
             // Date
-            _label('Date *'),
+            _label(l?.tr('appointments_date_label') ?? 'Date *'),
             const SizedBox(height: 6),
             GestureDetector(
               onTap: _pickDate,
@@ -1237,7 +1250,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             const SizedBox(height: 16),
 
             // Time slots
-            _label('Heure *'),
+            _label(l?.tr('appointments_time_label') ?? 'Heure *'),
             const SizedBox(height: 6),
             Builder(builder: (_) {
               if (!_isDayOpen(_selectedDate)) {
@@ -1249,15 +1262,15 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                     color: const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded,
+                      const Icon(Icons.warning_amber_rounded,
                           size: 16, color: Color(0xFFDC2626)),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Le salon est fermé ce jour-là',
-                          style: TextStyle(
+                          l?.tr('appointments_salon_closed') ?? 'Le salon est fermé ce jour-là',
+                          style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFFDC2626),
                               fontWeight: FontWeight.w500),
@@ -1277,7 +1290,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                 children: [
                   if (morning.isNotEmpty) ...[
                     _timeSlotSection(
-                      label: 'Matin',
+                      label: l?.tr('appointments_morning') ?? 'Matin',
                       icon: Icons.wb_sunny_outlined,
                       slots: morning,
                     ),
@@ -1285,7 +1298,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                   ],
                   if (afternoon.isNotEmpty)
                     _timeSlotSection(
-                      label: 'Après-midi',
+                      label: l?.tr('appointments_afternoon') ?? 'Après-midi',
                       icon: Icons.wb_twilight_outlined,
                       slots: afternoon,
                     ),
@@ -1307,8 +1320,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Résumé',
-                        style: TextStyle(
+                    Text(l?.tr('appointments_summary') ?? 'Résumé',
+                        style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: AppColors.brand700)),
@@ -1322,7 +1335,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          'Avec ${_selectedMember!.name}',
+                          (l?.tr('appointments_with') ?? 'Avec {name}').replaceAll('{name}', _selectedMember!.name),
                           style: const TextStyle(
                               fontSize: 12, color: AppColors.secondary500),
                         ),
@@ -1353,7 +1366,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                             color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.check_rounded, size: 18),
                 label: Text(
-                  _loading ? 'Création...' : 'Créer le rendez-vous',
+                  _loading ? (l?.tr('appointments_creating') ?? 'Création...') : (l?.tr('appointments_create') ?? 'Créer le rendez-vous'),
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 14),
                 ),
@@ -1403,7 +1416,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             ),
             const SizedBox(width: 8),
             Text(
-              '${slots.length} créneaux',
+              (AppLocalizations.of(context)?.tr('appointments_slots_count') ?? '{count} créneaux').replaceAll('{count}', '${slots.length}'),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.secondary400,

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/charge_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 
@@ -19,7 +20,14 @@ class OwnerFinancesScreen extends ConsumerStatefulWidget {
 }
 
 class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
-  final _months = [
+  static const _monthKeys = [
+    'finances_month_january', 'finances_month_february', 'finances_month_march',
+    'finances_month_april', 'finances_month_may', 'finances_month_june',
+    'finances_month_july', 'finances_month_august', 'finances_month_september',
+    'finances_month_october', 'finances_month_november', 'finances_month_december',
+  ];
+
+  static const _monthFallbacks = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
   ];
@@ -41,6 +49,12 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _fetchRevenue();
+  }
+
+  List<String> _getLocalizedMonths(AppLocalizations? l) {
+    return List.generate(12, (i) =>
+      l?.tr(_monthKeys[i]) ?? _monthFallbacks[i],
+    );
   }
 
   Future<void> _fetchRevenue() async {
@@ -82,8 +96,10 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
     final salonId = salonAsync.value?.id;
+    final months = _getLocalizedMonths(l);
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -99,7 +115,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              'Finances',
+              l?.tr('finances_title') ?? 'Finances',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -113,7 +129,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                 onPressed: salonId == null
                     ? null
                     : () => _showAddChargeSheet(context, salonId),
-                tooltip: 'Ajouter une charge',
+                tooltip: l?.tr('finances_add_charge') ?? 'Ajouter une charge',
               ),
               const SizedBox(width: 8),
             ],
@@ -127,7 +143,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                 children: [
                   // Month selector
                   _MonthSelector(
-                    months: _months,
+                    months: months,
                     selectedMonth: _selectedMonth,
                     selectedYear: _selectedYear,
                     onPrev: _prevMonth,
@@ -152,7 +168,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                               children: [
                                 Expanded(
                                   child: _FinanceCard(
-                                    label: 'Revenus',
+                                    label: l?.tr('finances_revenue') ?? 'Revenus',
                                     value: _loadingRevenue
                                         ? '...'
                                         : '${_revenue.toStringAsFixed(0)} MAD',
@@ -165,7 +181,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: _FinanceCard(
-                                    label: 'Charges',
+                                    label: l?.tr('finances_charges') ?? 'Charges',
                                     value:
                                         '${totalCharges.toStringAsFixed(0)} MAD',
                                     icon: Icons.trending_down_rounded,
@@ -203,8 +219,8 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text('Bénéfice net',
-                                          style: TextStyle(
+                                      Text(l?.tr('finances_net_profit') ?? 'Bénéfice net',
+                                          style: const TextStyle(
                                               fontSize: 12,
                                               color: Colors.white70)),
                                       Text(
@@ -228,7 +244,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                   MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Charges du mois',
+                                  l?.tr('finances_monthly_charges') ?? 'Charges du mois',
                                   style: GoogleFonts.dmSans(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -241,7 +257,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                         context, salonId),
                                     icon: const Icon(Icons.add_rounded,
                                         size: 16),
-                                    label: const Text('Ajouter'),
+                                    label: Text(l?.tr('finances_add') ?? 'Ajouter'),
                                     style: TextButton.styleFrom(
                                         foregroundColor:
                                             AppColors.brand600),
@@ -318,9 +334,29 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
   String _type = 'Autre';
   bool _saving = false;
 
-  final _categories = ['Fixe', 'Variable'];
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
 
-  static const _chargeTypes = <String, (IconData, Color)>{
+  Map<String, String> _localizedChargeTypes(AppLocalizations? l) => {
+    'Salaire': l?.tr('finances_charge_salary') ?? 'Salaire',
+    'Loyer': l?.tr('finances_charge_rent') ?? 'Loyer',
+    'Produits': l?.tr('finances_charge_products') ?? 'Produits',
+    'Équipement': l?.tr('finances_charge_equipment') ?? 'Équipement',
+    'Factures': l?.tr('finances_charge_bills') ?? 'Factures',
+    'Marketing': l?.tr('finances_charge_marketing') ?? 'Marketing',
+    'Autre': l?.tr('finances_charge_other') ?? 'Autre',
+  };
+
+  Map<String, String> _localizedCategories(AppLocalizations? l) => {
+    'Fixe': l?.tr('finances_category_fixed') ?? 'Fixe',
+    'Variable': l?.tr('finances_category_variable') ?? 'Variable',
+  };
+
+  static const _chargeTypeIcons = <String, (IconData, Color)>{
     'Salaire': (Icons.people_outline_rounded, Color(0xFF7C3AED)),
     'Loyer': (Icons.home_outlined, Color(0xFFDC2626)),
     'Produits': (Icons.shopping_bag_outlined, Color(0xFFEA580C)),
@@ -329,13 +365,6 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
     'Marketing': (Icons.campaign_outlined, Color(0xFFDB2777)),
     'Autre': (Icons.more_horiz_rounded, Color(0xFF6B7280)),
   };
-
-  @override
-  void dispose() {
-    _labelCtrl.dispose();
-    _amountCtrl.dispose();
-    super.dispose();
-  }
 
   Future<void> _save() async {
     final label = _labelCtrl.text.trim();
@@ -364,22 +393,26 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final chargeTypeLabels = _localizedChargeTypes(l);
+    final categoryLabels = _localizedCategories(l);
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Ajouter une charge',
+          Text(l?.tr('finances_add_charge') ?? 'Ajouter une charge',
               style: GoogleFonts.dmSans(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.brand950)),
           const SizedBox(height: 20),
           // Type selector (chips)
-          const Text('Type de charge',
-              style: TextStyle(
+          Text(l?.tr('finances_type_label') ?? 'Type de charge',
+              style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.secondary500,
                   fontWeight: FontWeight.w500)),
@@ -387,7 +420,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _chargeTypes.entries.map((entry) {
+            children: _chargeTypeIcons.entries.map((entry) {
               final selected = _type == entry.key;
               final (icon, color) = entry.value;
               return GestureDetector(
@@ -415,7 +448,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
                               : AppColors.secondary400),
                       const SizedBox(width: 6),
                       Text(
-                        entry.key,
+                        chargeTypeLabels[entry.key] ?? entry.key,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: selected
@@ -434,13 +467,13 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
           ),
           const SizedBox(height: 14),
           _FinanceField(
-              label: 'Libellé (ex: Loyer local, Salaire Ahmed…)',
+              label: l?.tr('finances_label_hint') ?? 'Libellé (ex: Loyer local, Salaire Ahmed…)',
               controller: _labelCtrl),
           const SizedBox(height: 14),
           Row(children: [
             Expanded(
               child: _FinanceField(
-                label: 'Montant (MAD)',
+                label: l?.tr('finances_amount_hint') ?? 'Montant (MAD)',
                 controller: _amountCtrl,
                 keyboard: const TextInputType.numberWithOptions(
                     decimal: true),
@@ -455,8 +488,8 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Catégorie',
-                      style: TextStyle(
+                  Text(l?.tr('finances_category_label') ?? 'Catégorie',
+                      style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.secondary500,
                           fontWeight: FontWeight.w500)),
@@ -475,9 +508,9 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
                         style: const TextStyle(
                             fontSize: 14,
                             color: AppColors.brand950),
-                        items: _categories
+                        items: ['Fixe', 'Variable']
                             .map((e) => DropdownMenuItem(
-                                value: e, child: Text(e)))
+                                value: e, child: Text(categoryLabels[e] ?? e)))
                             .toList(),
                         onChanged: (v) =>
                             setState(() => _category = v!),
@@ -507,8 +540,8 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
                       height: 20,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Text('Enregistrer',
-                      style: TextStyle(
+                  : Text(l?.tr('finances_save') ?? 'Enregistrer',
+                      style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 14)),
             ),
           ),
@@ -725,6 +758,7 @@ class _EmptyCharges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       padding:
@@ -740,7 +774,7 @@ class _EmptyCharges extends StatelessWidget {
               size: 40, color: AppColors.secondary200),
           const SizedBox(height: 12),
           Text(
-            'Aucune charge enregistrée',
+            l?.tr('finances_no_charges') ?? 'Aucune charge enregistrée',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -748,9 +782,9 @@ class _EmptyCharges extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Loyer, fournitures, salaires…\nEnregistrez vos dépenses pour suivre la rentabilité.',
-            style: TextStyle(
+          Text(
+            l?.tr('finances_no_charges_hint') ?? 'Loyer, fournitures, salaires...\nEnregistrez vos dépenses pour suivre la rentabilité.',
+            style: const TextStyle(
               fontSize: 12,
               color: AppColors.secondary400,
               height: 1.5,
@@ -761,7 +795,7 @@ class _EmptyCharges extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Ajouter une charge'),
+            label: Text(l?.tr('finances_add_charge') ?? 'Ajouter une charge'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brand700,
               foregroundColor: Colors.white,

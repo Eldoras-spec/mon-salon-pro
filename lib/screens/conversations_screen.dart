@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../models/conversation_model.dart';
 import '../services/message_service.dart';
 import 'chat_screen.dart';
+import '../services/app_localizations.dart';
 
 class ConversationsScreen extends StatelessWidget {
   const ConversationsScreen({
@@ -23,6 +24,7 @@ class ConversationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final stream = isClient
         ? MessageService().getClientConversations(currentUserId)
         : MessageService().getOwnerConversations(salonId!);
@@ -41,7 +43,7 @@ class ConversationsScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              'Messages',
+              l?.tr('conversations_title') ?? 'Messages',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -74,7 +76,7 @@ class ConversationsScreen extends StatelessWidget {
                             size: 52, color: AppColors.secondary200),
                         const SizedBox(height: 16),
                         Text(
-                          'Aucune conversation',
+                          l?.tr('conversations_empty_title') ?? 'Aucune conversation',
                           style: GoogleFonts.dmSans(
                             fontSize: 16,
                             color: AppColors.secondary400,
@@ -83,8 +85,8 @@ class ConversationsScreen extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           isClient
-                              ? 'Contactez un salon depuis son profil.'
-                              : 'Les clients peuvent vous envoyer des messages depuis votre profil.',
+                              ? (l?.tr('conversations_empty_client') ?? 'Contactez un salon depuis son profil.')
+                              : (l?.tr('conversations_empty_owner') ?? 'Les clients peuvent vous envoyer des messages depuis votre profil.'),
                           style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.secondary300),

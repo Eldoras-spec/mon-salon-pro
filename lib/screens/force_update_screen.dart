@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
+import '../services/app_localizations.dart';
 
 class ForceUpdateScreen extends StatelessWidget {
   const ForceUpdateScreen({super.key});
@@ -17,6 +18,7 @@ class ForceUpdateScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -40,7 +42,7 @@ class ForceUpdateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
               Text(
-                'Mise à jour requise',
+                l?.tr('force_update_title') ?? 'Mise \u00e0 jour requise',
                 style: GoogleFonts.playfairDisplay(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -50,8 +52,7 @@ class ForceUpdateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Une nouvelle version de Mon Salon est disponible. '
-                'Veuillez mettre à jour l\'application pour continuer.',
+                l?.tr('force_update_message') ?? 'Une nouvelle version de Mon Salon est disponible. Veuillez mettre \u00e0 jour pour continuer.',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 15,
                   color: AppColors.secondary500,
@@ -73,7 +74,7 @@ class ForceUpdateScreen extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'Mettre à jour',
+                    l?.tr('force_update_button') ?? 'Mettre \u00e0 jour',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

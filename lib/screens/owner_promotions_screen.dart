@@ -8,38 +8,39 @@ import '../models/promotion_model.dart';
 import '../models/review_reward_model.dart';
 import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 
 final _db = DatabaseService();
 
-String _buildShareText(PromotionModel promo, String? slug) {
+String _buildShareText(PromotionModel promo, String? slug, [AppLocalizations? l]) {
   final buf = StringBuffer();
   buf.writeln(promo.title);
   buf.writeln(promo.description);
   if (promo.discountPercent != null) {
-    buf.writeln('-${promo.discountPercent!.toStringAsFixed(0)}% de réduction !');
+    buf.writeln((l?.tr('promotions_share_discount') ?? '-{percent}% de réduction !').replaceAll('{percent}', promo.discountPercent!.toStringAsFixed(0)));
   }
   if (promo.promoCode != null) {
-    buf.writeln('Code promo : ${promo.promoCode}');
+    buf.writeln((l?.tr('promotions_share_code') ?? 'Code promo : {code}').replaceAll('{code}', promo.promoCode!));
   }
   if (promo.expiresAt != null) {
     buf.writeln(
-        "Valable jusqu'au ${promo.expiresAt!.day}/${promo.expiresAt!.month}/${promo.expiresAt!.year}");
+        (l?.tr('promotions_share_valid_until') ?? "Valable jusqu'au {date}").replaceAll('{date}', '${promo.expiresAt!.day}/${promo.expiresAt!.month}/${promo.expiresAt!.year}'));
   }
   if (slug != null && slug.isNotEmpty) {
-    buf.writeln('\nRéservez maintenant : https://monsalon.web.app/s/$slug');
+    buf.writeln('\n${(l?.tr('promotions_share_book_now') ?? 'Réservez maintenant : {url}').replaceAll('{url}', 'https://monsalon.web.app/s/$slug')}');
   }
   return buf.toString().trimRight();
 }
 
-Future<void> _sharePromo(PromotionModel promo, String? slug) async {
-  final text = _buildShareText(promo, slug);
+Future<void> _sharePromo(PromotionModel promo, String? slug, [AppLocalizations? l]) async {
+  final text = _buildShareText(promo, slug, l);
   await Share.share(text);
 }
 
-Future<void> _sharePromoWhatsApp(PromotionModel promo, String? slug) async {
-  final text = _buildShareText(promo, slug);
+Future<void> _sharePromoWhatsApp(PromotionModel promo, String? slug, [AppLocalizations? l]) async {
+  final text = _buildShareText(promo, slug, l);
   final encoded = Uri.encodeComponent(text);
   final url = Uri.parse('https://wa.me/?text=$encoded');
   if (await canLaunchUrl(url)) {
@@ -48,6 +49,7 @@ Future<void> _sharePromoWhatsApp(PromotionModel promo, String? slug) async {
 }
 
 void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) {
+  final l = AppLocalizations.of(context);
   showDialog(
     context: context,
     barrierDismissible: true,
@@ -61,7 +63,7 @@ void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) 
               color: Color(0xFF16A34A), size: 24),
           const SizedBox(width: 10),
           Expanded(
-            child: Text('Promotion créée !',
+            child: Text(l?.tr('promotions_created_dialog_title') ?? 'Promotion créée !',
                 style: GoogleFonts.dmSans(
                     fontSize: 16, fontWeight: FontWeight.bold)),
           ),
@@ -77,9 +79,9 @@ void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) 
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Souhaitez-vous partager cette offre ?',
-            style: TextStyle(fontSize: 13, color: AppColors.secondary500),
+          Text(
+            l?.tr('promotions_share_question') ?? 'Souhaitez-vous partager cette offre ?',
+            style: const TextStyle(fontSize: 13, color: AppColors.secondary500),
           ),
           const SizedBox(height: 16),
           Row(
@@ -88,7 +90,7 @@ void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) 
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    _sharePromoWhatsApp(promo, slug);
+                    _sharePromoWhatsApp(promo, slug, l);
                   },
                   icon: const Icon(Icons.chat_rounded, size: 18),
                   label: const Text('WhatsApp'),
@@ -106,10 +108,10 @@ void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) 
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    _sharePromo(promo, slug);
+                    _sharePromo(promo, slug, l);
                   },
                   icon: const Icon(Icons.share_rounded, size: 18),
-                  label: const Text('Partager'),
+                  label: Text(l?.tr('promotions_share') ?? 'Partager'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brand600,
                     foregroundColor: Colors.white,
@@ -135,6 +137,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
     final promosAsync = ref.watch(ownerPromotionsProvider);
 
@@ -152,7 +155,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              'Offres & Promotions',
+              l?.tr('promotions_title') ?? 'Offres & Promotions',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -180,7 +183,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur: $e')),
+              child: Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')),
             ),
             data: (promos) {
               final activeCount =
@@ -200,7 +203,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                               icon: Icons.local_offer_outlined,
                               iconBg: AppColors.brand50,
                               iconColor: AppColors.brand600,
-                              label: 'Actives',
+                              label: l?.tr('promotions_active') ?? 'Actives',
                               value: '$activeCount',
                             ),
                           ),
@@ -210,7 +213,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                               icon: Icons.inventory_2_outlined,
                               iconBg: const Color(0xFFF0FDF4),
                               iconColor: const Color(0xFF16A34A),
-                              label: 'Total',
+                              label: l?.tr('promotions_total') ?? 'Total',
                               value: '${promos.length}',
                             ),
                           ),
@@ -220,7 +223,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
 
                       // Types section (tappable shortcuts)
                       Text(
-                        'Créer une promotion',
+                        l?.tr('promotions_create_title') ?? 'Créer une promotion',
                         style: GoogleFonts.dmSans(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -232,8 +235,8 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                         icon: Icons.percent_rounded,
                         iconBg: const Color(0xFFEFF6FF),
                         iconColor: const Color(0xFF2563EB),
-                        title: 'Réduction en %',
-                        desc: 'Ex : -20% sur les soins du visage',
+                        title: l?.tr('promotions_type_percent') ?? 'Réduction en %',
+                        desc: l?.tr('promotions_type_percent_desc') ?? 'Ex : -20% sur les soins du visage',
                         onTap: () {
                           final salon = salonAsync.value;
                           if (salon != null) {
@@ -249,8 +252,8 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                         icon: Icons.tune_outlined,
                         iconBg: const Color(0xFFFDF4FF),
                         iconColor: const Color(0xFF9333EA),
-                        title: 'Offre conditionnelle',
-                        desc: 'Réduction avec conditions (minimum, jours, heures)',
+                        title: l?.tr('promotions_type_conditional') ?? 'Offre conditionnelle',
+                        desc: l?.tr('promotions_type_conditional_desc') ?? 'Réduction avec conditions (minimum, jours, heures)',
                         onTap: () {
                           final salon = salonAsync.value;
                           if (salon != null) {
@@ -266,8 +269,8 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                         icon: Icons.confirmation_number_outlined,
                         iconBg: const Color(0xFFFFF7ED),
                         iconColor: const Color(0xFFEA580C),
-                        title: 'Code promo',
-                        desc: 'Créez un code réservé à vos clients fidèles',
+                        title: l?.tr('promotions_type_code') ?? 'Code promo',
+                        desc: l?.tr('promotions_type_code_desc') ?? 'Créez un code réservé à vos clients fidèles',
                         onTap: () {
                           final salon = salonAsync.value;
                           if (salon != null) {
@@ -282,7 +285,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
 
                       // Promotions list
                       Text(
-                        'Mes promotions',
+                        l?.tr('promotions_my_promotions') ?? 'Mes promotions',
                         style: GoogleFonts.dmSans(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -319,7 +322,7 @@ class OwnerPromotionsScreen extends ConsumerWidget {
 
                       // ── Paramètres fidélité & IA ────────────────────────
                       Text(
-                        'Paramètres',
+                        l?.tr('promotions_settings') ?? 'Paramètres',
                         style: GoogleFonts.dmSans(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -391,19 +394,20 @@ class OwnerPromotionsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, String id) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer cette promotion ?'),
-        content: const Text('Elle ne sera plus visible par les clients.'),
+        title: Text(l?.tr('promotions_delete_title') ?? 'Supprimer cette promotion ?'),
+        content: Text(l?.tr('promotions_delete_message') ?? 'Elle ne sera plus visible par les clients.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Supprimer',
-                  style: TextStyle(color: Colors.red))),
+              child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -451,10 +455,10 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
     'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
   ];
 
-  static const _typeLabels = {
-    'percent': 'Réduction %',
-    'conditional': 'Conditionnelle',
-    'code': 'Code promo',
+  Map<String, String> _typeLabels(AppLocalizations? l) => {
+    'percent': l?.tr('promotions_type_selector_percent') ?? 'Réduction %',
+    'conditional': l?.tr('promotions_type_selector_conditional') ?? 'Conditionnelle',
+    'code': l?.tr('promotions_type_selector_code') ?? 'Code promo',
   };
 
   @override
@@ -554,6 +558,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottom),
@@ -562,7 +567,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Nouvelle promotion',
+            Text(l?.tr('promotions_new_title') ?? 'Nouvelle promotion',
                 style: GoogleFonts.dmSans(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -571,7 +576,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
             // Type selector
             Row(
-              children: _typeLabels.entries.map((e) {
+              children: _typeLabels(l).entries.map((e) {
                 final selected = _type == e.key;
                 return Expanded(
                   child: GestureDetector(
@@ -603,17 +608,17 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
             ),
             const SizedBox(height: 16),
 
-            _PromoField(label: 'Titre', controller: _titleCtrl),
+            _PromoField(label: l?.tr('promotions_field_title') ?? 'Titre', controller: _titleCtrl),
             const SizedBox(height: 12),
             _PromoField(
-                label: 'Description',
+                label: l?.tr('promotions_field_description') ?? 'Description',
                 controller: _descCtrl,
                 maxLines: 2),
             const SizedBox(height: 12),
 
             if (_type == 'percent' || _type == 'conditional') ...[
               _PromoField(
-                label: 'Pourcentage de réduction (%)',
+                label: l?.tr('promotions_field_percent') ?? 'Pourcentage de réduction (%)',
                 controller: _percentCtrl,
                 keyboard: const TextInputType.numberWithOptions(
                     decimal: true),
@@ -621,7 +626,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
               const SizedBox(height: 12),
 
               // Service selection
-              Text('Appliquer sur',
+              Text(l?.tr('promotions_apply_on') ?? 'Appliquer sur',
                   style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary500,
@@ -630,7 +635,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
               Row(
                 children: [
                   _ServiceToggle(
-                    label: 'Tous les services',
+                    label: l?.tr('promotions_all_services') ?? 'Tous les services',
                     selected: _allServices,
                     onTap: () => setState(() {
                       _allServices = true;
@@ -639,7 +644,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                   ),
                   const SizedBox(width: 8),
                   _ServiceToggle(
-                    label: 'Services spécifiques',
+                    label: l?.tr('promotions_specific_services') ?? 'Services spécifiques',
                     selected: !_allServices,
                     onTap: () => setState(() => _allServices = false),
                   ),
@@ -694,7 +699,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Aucun service configuré dans votre salon.',
+                    l?.tr('promotions_no_services') ?? 'Aucun service configuré dans votre salon.',
                     style: TextStyle(
                         fontSize: 12, color: AppColors.secondary400),
                   ),
@@ -706,14 +711,14 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
             if (_type == 'conditional') ...[
               // Min amount
               _PromoField(
-                label: 'Dépense minimum (MAD) — optionnel',
+                label: l?.tr('promotions_min_amount') ?? 'Dépense minimum (MAD) — optionnel',
                 controller: _minAmountCtrl,
                 keyboard: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 12),
 
               // Valid days
-              Text('Jours valides (optionnel)',
+              Text(l?.tr('promotions_valid_days') ?? 'Jours valides (optionnel)',
                   style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary500,
@@ -764,7 +769,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Tous les jours si aucun sélectionné',
+                    l?.tr('promotions_all_days_hint') ?? 'Tous les jours si aucun sélectionné',
                     style: TextStyle(
                         fontSize: 11, color: AppColors.secondary400),
                   ),
@@ -772,7 +777,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
               const SizedBox(height: 12),
 
               // Valid hours
-              Text('Heures valides (optionnel)',
+              Text(l?.tr('promotions_valid_hours') ?? 'Heures valides (optionnel)',
                   style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary500,
@@ -805,7 +810,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                                 size: 16, color: AppColors.secondary400),
                             const SizedBox(width: 8),
                             Text(
-                              _validHoursStart ?? 'De',
+                              _validHoursStart ?? (l?.tr('promotions_hours_from') ?? 'De'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: _validHoursStart != null
@@ -848,7 +853,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                                 size: 16, color: AppColors.secondary400),
                             const SizedBox(width: 8),
                             Text(
-                              _validHoursEnd ?? 'À',
+                              _validHoursEnd ?? (l?.tr('promotions_hours_to') ?? 'À'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: _validHoursEnd != null
@@ -876,7 +881,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Toute la journée si non défini',
+                    l?.tr('promotions_all_day_hint') ?? 'Toute la journée si non défini',
                     style: TextStyle(
                         fontSize: 11, color: AppColors.secondary400),
                   ),
@@ -886,7 +891,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
             if (_type == 'code') ...[
               _PromoField(
-                label: 'Code promo (ex: BIENVENUE20)',
+                label: l?.tr('promotions_code_hint') ?? 'Code promo (ex: BIENVENUE20)',
                 controller: _codeCtrl,
               ),
               const SizedBox(height: 12),
@@ -909,8 +914,8 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                     const SizedBox(width: 10),
                     Text(
                       _expiresAt == null
-                          ? "Date d'expiration (optionnel)"
-                          : 'Expire le ${_expiresAt!.day}/${_expiresAt!.month}/${_expiresAt!.year}',
+                          ? (l?.tr('promotions_expiry_date') ?? "Date d'expiration (optionnel)")
+                          : (l?.tr('promotions_expiry_label') ?? 'Expire le {date}').replaceAll('{date}', '${_expiresAt!.day}/${_expiresAt!.month}/${_expiresAt!.year}'),
                       style: TextStyle(
                         fontSize: 13,
                         color: _expiresAt == null
@@ -952,7 +957,7 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                         height: 20,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Publier',
+                    : Text(l?.tr('promotions_publish') ?? 'Publier',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 14)),
@@ -1000,6 +1005,7 @@ class _PromoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isExpired = promo.isExpired;
     final bgColor = _typeBg[promo.type] ?? AppColors.brand50;
     final iconColor = _typeColor[promo.type] ?? AppColors.brand600;
@@ -1049,17 +1055,17 @@ class _PromoTile extends StatelessWidget {
                           )),
                     ),
                     if (promo.isAiGenerated)
-                      const _Badge(
-                          label: 'IA',
-                          color: Color(0xFF8B5CF6)),
+                      _Badge(
+                          label: l?.tr('promotions_badge_ai') ?? 'IA',
+                          color: const Color(0xFF8B5CF6)),
                     if (promo.isAiGenerated) const SizedBox(width: 4),
                     if (isExpired)
                       _Badge(
-                          label: 'Expirée',
+                          label: l?.tr('promotions_badge_expired') ?? 'Expirée',
                           color: AppColors.secondary300)
                     else if (promo.isActive)
                       _Badge(
-                          label: 'Active',
+                          label: l?.tr('promotions_badge_active') ?? 'Active',
                           color: const Color(0xFF16A34A)),
                   ],
                 ),
@@ -1078,7 +1084,7 @@ class _PromoTile extends StatelessWidget {
                           size: 12, color: Color(0xFF8B5CF6)),
                       const SizedBox(width: 4),
                       Text(
-                        'Pour ${promo.targetedClientName}',
+                        (l?.tr('promotions_for_client') ?? 'Pour {name}').replaceAll('{name}', promo.targetedClientName!),
                         style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF8B5CF6),
@@ -1107,7 +1113,7 @@ class _PromoTile extends StatelessWidget {
                 if (promo.expiresAt != null && !isExpired) ...[
                   const SizedBox(height: 3),
                   Text(
-                    'Expire le ${promo.expiresAt!.day}/${promo.expiresAt!.month}/${promo.expiresAt!.year}',
+                    (l?.tr('promotions_expiry_label') ?? 'Expire le {date}').replaceAll('{date}', '${promo.expiresAt!.day}/${promo.expiresAt!.month}/${promo.expiresAt!.year}'),
                     style: const TextStyle(
                         fontSize: 10,
                         color: AppColors.secondary400),
@@ -1136,7 +1142,7 @@ class _PromoTile extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.share_rounded,
                         size: 17, color: AppColors.brand400),
-                    onPressed: () => _sharePromo(promo, slug),
+                    onPressed: () => _sharePromo(promo, slug, l),
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -1310,6 +1316,7 @@ class _EmptyPromos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       padding:
@@ -1325,7 +1332,7 @@ class _EmptyPromos extends StatelessWidget {
               size: 40, color: AppColors.secondary200),
           const SizedBox(height: 12),
           Text(
-            'Aucune promotion créée',
+            l?.tr('promotions_empty_title') ?? 'Aucune promotion créée',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -1333,9 +1340,9 @@ class _EmptyPromos extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Créez des offres attractives pour fidéliser\nvos clients et attirer de nouvelles réservations.',
-            style: TextStyle(
+          Text(
+            l?.tr('promotions_empty_subtitle') ?? 'Créez des offres attractives pour fidéliser\nvos clients et attirer de nouvelles réservations.',
+            style: const TextStyle(
               fontSize: 12,
               color: AppColors.secondary400,
               height: 1.5,
@@ -1346,7 +1353,7 @@ class _EmptyPromos extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Créer une promotion'),
+            label: Text(l?.tr('promotions_empty_button') ?? 'Créer une promotion'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brand700,
               foregroundColor: Colors.white,
@@ -1466,6 +1473,7 @@ class _GoogleReviewSection extends StatefulWidget {
 
 class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
   void _showInfoDialog() {
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1483,18 +1491,18 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Récompense Avis Google',
+              child: Text(l?.tr('promotions_google_review_title') ?? 'Récompense Avis Google',
                   style: GoogleFonts.dmSans(
                       fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Comment ça fonctionne ?',
+              l?.tr('promotions_google_review_how') ?? 'Comment ça fonctionne ?',
               style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -1503,25 +1511,25 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
             SizedBox(height: 10),
             _InfoStep(
               number: '1',
-              text:
+              text: l?.tr('promotions_google_review_step1') ??
                   'Après un RDV terminé, le client reçoit une invitation à laisser un avis Google.',
             ),
             SizedBox(height: 8),
             _InfoStep(
               number: '2',
-              text:
+              text: l?.tr('promotions_google_review_step2') ??
                   'Il tape "J\'ai laissé mon avis" dans l\'app — une demande de validation vous est envoyée.',
             ),
             SizedBox(height: 8),
             _InfoStep(
               number: '3',
-              text:
+              text: l?.tr('promotions_google_review_step3') ??
                   'Vous vérifiez l\'avis sur Google Maps, puis validez dans l\'app.',
             ),
             SizedBox(height: 8),
             _InfoStep(
               number: '4',
-              text:
+              text: l?.tr('promotions_google_review_step4') ??
                   'Le client reçoit automatiquement son code promo de réduction.',
             ),
           ],
@@ -1529,7 +1537,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Compris'),
+            child: Text(l?.tr('promotions_google_review_understood') ?? 'Compris'),
           ),
         ],
       ),
@@ -1537,6 +1545,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
   }
 
   void _showSettingsDialog() {
+    final l = AppLocalizations.of(context);
     final percentCtrl = TextEditingController(
         text: '${widget.config['discountPercent'] ?? 10}');
     final mapsUrlCtrl = TextEditingController(
@@ -1549,14 +1558,14 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
         builder: (ctx, setDlgState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text('Paramètres de la récompense',
+          title: Text(l?.tr('promotions_google_review_settings') ?? 'Paramètres de la récompense',
               style: GoogleFonts.dmSans(
                   fontSize: 15, fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Réduction offerte (%)',
+              Text(l?.tr('promotions_google_review_discount') ?? 'Réduction offerte (%)',
                   style: TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary500,
@@ -1579,7 +1588,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  const Text('Lien Google Maps',
+                  Text(l?.tr('promotions_google_review_maps_url') ?? 'Lien Google Maps',
                       style: TextStyle(
                           fontSize: 12,
                           color: AppColors.secondary500,
@@ -1592,7 +1601,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                         builder: (_) => AlertDialog(
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
-                          title: const Text('Comment obtenir le lien ?'),
+                          title: Text(l?.tr('promotions_google_review_how_to_link') ?? 'Comment obtenir le lien ?'),
                           content: const Text(
                             '1. Ouvrez Google Maps\n'
                             '2. Recherchez votre salon\n'
@@ -1602,7 +1611,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                           actions: [
                             TextButton(
                                 onPressed: () => Navigator.pop(context),
-                                child: const Text('OK')),
+                                child: Text(l?.tr('common_ok') ?? 'OK')),
                           ],
                         ),
                       );
@@ -1631,7 +1640,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler'),
             ),
             ElevatedButton(
               onPressed: saving
@@ -1664,7 +1673,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                       height: 16,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Text('Enregistrer'),
+                  : Text(l?.tr('common_save') ?? 'Enregistrer'),
             ),
           ],
         ),
@@ -1694,6 +1703,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
   }
 
   Future<void> _rejectReward(ReviewRewardModel reward) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1703,7 +1713,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Refuser',
@@ -1718,13 +1728,14 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              'Récompense Avis Google',
+              l?.tr('promotions_google_review_title') ?? 'Récompense Avis Google',
               style: GoogleFonts.dmSans(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -1801,7 +1812,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                   child: OutlinedButton.icon(
                     onPressed: _showSettingsDialog,
                     icon: const Icon(Icons.tune_rounded, size: 16),
-                    label: const Text('Paramètres', style: TextStyle(fontSize: 13)),
+                    label: Text(l?.tr('promotions_settings') ?? 'Paramètres', style: const TextStyle(fontSize: 13)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.brand700,
                       side: const BorderSide(color: AppColors.brand200),
@@ -2070,7 +2081,7 @@ class _RewardToggleState extends State<_RewardToggle> {
       if (mounted) {
         setState(() => _enabled = !value);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2200,7 +2211,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler'),
+              child: Text(AppLocalizations.of(context)?.tr('common_cancel') ?? 'Annuler'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
@@ -2232,7 +2243,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
       if (mounted) {
         setState(() => _enabled = !value);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2338,7 +2349,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler'),
+              child: Text(AppLocalizations.of(context)?.tr('common_cancel') ?? 'Annuler'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -2380,7 +2391,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur : $e')),
+            SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
           );
         }
       }

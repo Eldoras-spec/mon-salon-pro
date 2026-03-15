@@ -7,6 +7,7 @@ import '../models/team_member_model.dart';
 import '../models/user_model.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
+import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 
 class TeamProfileSelectorScreen extends ConsumerWidget {
@@ -15,6 +16,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final teamAsync = ref.watch(ownerTeamProvider);
     final hasPinSet = userModel.pinHash != null;
 
@@ -27,7 +29,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
             children: [
               const SizedBox(height: 48),
               Text(
-                'Qui êtes-vous ?',
+                l?.tr('selector_title') ?? 'Qui êtes-vous ?',
                 style: GoogleFonts.dmSans(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -36,7 +38,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Sélectionnez votre profil pour continuer',
+                l?.tr('selector_subtitle') ?? 'Sélectionnez votre profil pour continuer',
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.white.withValues(alpha: 0.5),
@@ -81,7 +83,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
                     ref.read(profileSelectedProvider.notifier).state = true;
                   },
                   child: Text(
-                    'Continuer en tant que propriétaire',
+                    l?.tr('selector_continue_owner') ?? 'Continuer en tant que propriétaire',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.4),
                       fontSize: 12,
@@ -134,6 +136,7 @@ class _OwnerTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final hasPinSet = userModel.pinHash != null;
     return GestureDetector(
       onTap: () => _onTap(context),
@@ -190,9 +193,9 @@ class _OwnerTile extends ConsumerWidget {
                       color: AppColors.brand600.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
-                      'Propriétaire',
-                      style: TextStyle(
+                    child: Text(
+                      l?.tr('selector_owner') ?? 'Propriétaire',
+                      style: const TextStyle(
                         color: AppColors.brand400,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -235,8 +238,12 @@ class _MemberTile extends ConsumerWidget {
       ? const Color(0xFFFFF7ED).withValues(alpha: 0.15)
       : AppColors.brand50.withValues(alpha: 0.15);
 
-  String get _roleLabel =>
-      member.role == 'gerant' ? 'Gérant(e)' : 'Employé(e)';
+  String _roleLabel(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return member.role == 'gerant'
+        ? (l?.tr('selector_manager') ?? 'Gérant(e)')
+        : (l?.tr('selector_employee') ?? 'Employé(e)');
+  }
 
   void _showPinDialog(BuildContext context, WidgetRef ref) {
     showDialog(
@@ -310,7 +317,7 @@ class _MemberTile extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _roleLabel,
+                    _roleLabel(context),
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.4),
                       fontSize: 12,
@@ -386,6 +393,7 @@ class _PinDialogState extends State<_PinDialog>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Column(
@@ -403,9 +411,9 @@ class _PinDialogState extends State<_PinDialog>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Entrez votre PIN à 6 chiffres',
-            style: TextStyle(
+          Text(
+            l?.tr('selector_enter_pin') ?? 'Entrez votre PIN à 6 chiffres',
+            style: const TextStyle(
               fontSize: 13,
               color: AppColors.secondary500,
               fontWeight: FontWeight.normal,
@@ -438,7 +446,7 @@ class _PinDialogState extends State<_PinDialog>
             hintText: '••••••',
             hintStyle: const TextStyle(
                 color: AppColors.secondary300, letterSpacing: 8),
-            errorText: _wrong ? 'PIN incorrect' : null,
+            errorText: _wrong ? (l?.tr('selector_pin_incorrect') ?? 'PIN incorrect') : null,
             filled: true,
             fillColor: AppColors.secondary50,
             border: OutlineInputBorder(
@@ -464,8 +472,8 @@ class _PinDialogState extends State<_PinDialog>
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler',
-              style: TextStyle(color: AppColors.secondary500)),
+          child: Text(l?.tr('selector_cancel') ?? 'Annuler',
+              style: const TextStyle(color: AppColors.secondary500)),
         ),
         ElevatedButton(
           onPressed: _verify,
@@ -476,7 +484,7 @@ class _PinDialogState extends State<_PinDialog>
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
           ),
-          child: const Text('Entrer'),
+          child: Text(l?.tr('selector_enter') ?? 'Entrer'),
         ),
       ],
     );

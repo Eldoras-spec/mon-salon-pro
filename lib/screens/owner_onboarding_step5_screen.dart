@@ -6,6 +6,7 @@ import '../models/team_member_model.dart';
 import '../providers/team_providers.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
+import '../services/app_localizations.dart';
 import 'owner_onboarding_step4_screen.dart';
 
 class OwnerOnboardingStep5Screen extends StatefulWidget {
@@ -26,9 +27,10 @@ class _OwnerOnboardingStep5ScreenState
 
   void _goToServices() {
     if (_members.isEmpty) {
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez ajouter au moins un employé'),
+        SnackBar(
+          content: Text(l?.tr('onboarding_step5_error_empty') ?? 'Veuillez ajouter au moins un employé'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -69,8 +71,9 @@ class _OwnerOnboardingStep5ScreenState
       setState(() => _members.removeAt(index));
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+          SnackBar(content: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'))),
         );
       }
     }
@@ -78,6 +81,7 @@ class _OwnerOnboardingStep5ScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -100,7 +104,7 @@ class _OwnerOnboardingStep5ScreenState
                       ),
                       const Spacer(),
                       Text(
-                        'Étape 5 sur 6',
+                        l?.tr('onboarding_step5_step') ?? 'Étape 5 sur 6',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.secondary400,
@@ -131,7 +135,7 @@ class _OwnerOnboardingStep5ScreenState
                   children: [
                     const SizedBox(height: 8),
                     Text(
-                      'Votre Équipe',
+                      l?.tr('onboarding_step5_title') ?? 'Votre Équipe',
                       style: GoogleFonts.dmSans(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -140,7 +144,7 @@ class _OwnerOnboardingStep5ScreenState
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ajoutez au moins un membre à votre équipe. Ils seront assignés aux services à l\'étape suivante.',
+                      l?.tr('onboarding_step5_subtitle') ?? 'Ajoutez au moins un membre de votre équipe.',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.secondary500,
@@ -160,21 +164,21 @@ class _OwnerOnboardingStep5ScreenState
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: AppColors.secondary200),
                         ),
-                        child: const Column(
+                        child: Column(
                           children: [
-                            Icon(Icons.groups_outlined,
+                            const Icon(Icons.groups_outlined,
                                 size: 40, color: AppColors.secondary300),
-                            SizedBox(height: 12),
+                            const SizedBox(height: 12),
                             Text(
-                              'Aucun membre ajouté',
-                              style: TextStyle(
+                              l?.tr('onboarding_step5_empty_title') ?? 'Aucun membre ajouté',
+                              style: const TextStyle(
                                 color: AppColors.secondary400,
                                 fontSize: 14,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              'Au moins un employé est requis pour continuer',
+                              l?.tr('onboarding_step5_empty_subtitle') ?? 'Au moins un employé est requis pour continuer',
                               style: TextStyle(
                                 color: AppColors.secondary400,
                                 fontSize: 12,
@@ -229,8 +233,8 @@ class _OwnerOnboardingStep5ScreenState
                                       ),
                                       Text(
                                         m.role == 'gerant'
-                                            ? 'Gérant(e)'
-                                            : 'Employé(e)',
+                                            ? (l?.tr('team_role_manager') ?? 'Gérant(e)')
+                                            : (l?.tr('team_role_member') ?? 'Employé(e)'),
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: AppColors.secondary500,
@@ -259,7 +263,7 @@ class _OwnerOnboardingStep5ScreenState
                     OutlinedButton.icon(
                       onPressed: _showAddMemberSheet,
                       icon: const Icon(Icons.person_add_outlined, size: 18),
-                      label: const Text('Ajouter un membre'),
+                      label: Text(l?.tr('onboarding_step5_add') ?? 'Ajouter un membre'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand600,
                         side: const BorderSide(color: AppColors.brand300),
@@ -297,7 +301,7 @@ class _OwnerOnboardingStep5ScreenState
                     textStyle: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 15),
                   ),
-                  child: const Text('Continuer vers les services'),
+                  child: Text(l?.tr('onboarding_step5_continue') ?? 'Continuer vers les services'),
                 ),
               ),
             ),
@@ -363,9 +367,10 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erreur: $e'),
+              content: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating),
         );
@@ -377,6 +382,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -405,7 +411,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Ajouter un membre',
+                  l?.tr('onboarding_step5_sheet_title') ?? 'Ajouter un membre',
                   style: GoogleFonts.dmSans(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -413,23 +419,23 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _label('Nom complet *'),
+                _label(l?.tr('team_name_label') ?? 'Nom complet *'),
                 TextFormField(
                   controller: _nameCtrl,
                   decoration: _inputDeco('Ex: Sophie Martin'),
                   validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Requis' : null,
+                      v == null || v.trim().isEmpty ? (l?.tr('common_required') ?? 'Requis') : null,
                 ),
                 const SizedBox(height: 14),
-                _label('Rôle *'),
+                _label(l?.tr('team_role_label') ?? 'Rôle *'),
                 DropdownButtonFormField<String>(
                   initialValue: _role,
                   decoration: _inputDeco(null),
-                  items: const [
+                  items: [
                     DropdownMenuItem(
-                        value: 'member', child: Text('Employé(e)')),
+                        value: 'member', child: Text(l?.tr('team_role_member') ?? 'Employé(e)')),
                     DropdownMenuItem(
-                        value: 'gerant', child: Text('Gérant(e)')),
+                        value: 'gerant', child: Text(l?.tr('team_role_manager') ?? 'Gérant(e)')),
                   ],
                   onChanged: (v) => setState(() {
                     _role = v ?? 'member';
@@ -440,7 +446,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                   }),
                 ),
                 const SizedBox(height: 14),
-                _label('Téléphone (optionnel)'),
+                _label(l?.tr('team_phone_label') ?? 'Téléphone (optionnel)'),
                 TextFormField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
@@ -449,7 +455,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                 // PIN fields only for gérant
                 if (_needsPin) ...[
                   const SizedBox(height: 14),
-                  _label('PIN 6 chiffres *'),
+                  _label(l?.tr('team_pin_label_new') ?? 'PIN 6 chiffres *'),
                   TextFormField(
                     controller: _pinCtrl,
                     obscureText: !_showPin,
@@ -470,13 +476,13 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                     validator: (v) {
                       if (!_needsPin) return null;
                       if (v == null || v.length != 6) {
-                        return 'Le PIN doit contenir exactement 6 chiffres';
+                        return l?.tr('team_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 14),
-                  _label('Confirmer le PIN *'),
+                  _label(l?.tr('team_pin_confirm_new') ?? 'Confirmer le PIN *'),
                   TextFormField(
                     controller: _pinConfirmCtrl,
                     obscureText: true,
@@ -489,7 +495,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                     validator: (v) {
                       if (!_needsPin) return null;
                       if (v != _pinCtrl.text) {
-                        return 'Les PINs ne correspondent pas';
+                        return l?.tr('team_pin_error_mismatch') ?? 'Les PINs ne correspondent pas';
                       }
                       return null;
                     },
@@ -517,7 +523,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2),
                           )
-                        : const Text('Ajouter le membre'),
+                        : Text(l?.tr('onboarding_step5_add_button') ?? 'Ajouter le membre'),
                   ),
                 ),
               ],

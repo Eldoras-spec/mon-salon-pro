@@ -10,6 +10,7 @@ import '../models/team_member_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 
@@ -43,20 +44,21 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
   }
 
   Future<void> _signOut() async {
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Déconnexion'),
-        content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+        title: Text(l?.tr('home_logout_title') ?? 'Déconnexion'),
+        content: Text(l?.tr('home_logout_message') ?? 'Êtes-vous sûr de vouloir vous déconnecter ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Déconnecter',
-                style: TextStyle(color: Colors.red)),
+            child: Text(l?.tr('common_disconnect') ?? 'Déconnecter',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -74,6 +76,8 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
     if (member == null) return const SizedBox.shrink();
 
     final salonAsync = ref.watch(ownerSalonProvider);
+
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -96,15 +100,15 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppColors.brand200),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.people_alt_outlined,
+                      const Icon(Icons.people_alt_outlined,
                           size: 15, color: AppColors.brand600),
-                      SizedBox(width: 5),
+                      const SizedBox(width: 5),
                       Text(
-                        'Profils',
-                        style: TextStyle(
+                        l?.tr('member_profiles') ?? 'Profils',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.brand600,
@@ -138,10 +142,10 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
               indicatorColor: AppColors.brand600,
               labelStyle: const TextStyle(
                   fontWeight: FontWeight.w600, fontSize: 13),
-              tabs: const [
-                Tab(text: 'Mes RDV'),
-                Tab(text: 'Tous les RDV'),
-                Tab(text: 'Indispo'),
+              tabs: [
+                Tab(text: l?.tr('member_my_appointments_tab') ?? 'Mes RDV'),
+                Tab(text: l?.tr('member_all_appointments_tab') ?? 'Tous les RDV'),
+                Tab(text: l?.tr('member_unavailability_tab') ?? 'Indispo'),
               ],
             ),
           ),
@@ -161,7 +165,7 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
             controller: _tabController,
             children: List.generate(
               3,
-              (_) => Center(child: Text('Erreur: $e')),
+              (_) => Center(child: Text((l?.tr('gerant_conges_error') ?? 'Erreur: {error}').replaceAll('{error}', '$e'))),
             ),
           ),
           data: (salon) {
@@ -170,10 +174,10 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
                 controller: _tabController,
                 children: List.generate(
                   3,
-                  (_) => const Center(
-                    child: Text('Salon introuvable',
+                  (_) => Center(
+                    child: Text(l?.tr('member_salon_not_found') ?? 'Salon introuvable',
                         style:
-                            TextStyle(color: AppColors.secondary400)),
+                            const TextStyle(color: AppColors.secondary400)),
                   ),
                 ),
               );
@@ -212,6 +216,7 @@ class _MemberHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Row(
       children: [
         CircleAvatar(
@@ -249,7 +254,9 @@ class _MemberHeader extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                member.role == 'gerant' ? 'Gérant(e)' : 'Employé(e)',
+                member.role == 'gerant'
+                    ? (l?.tr('selector_manager') ?? 'Gérant(e)')
+                    : (l?.tr('selector_employee') ?? 'Employé(e)'),
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
@@ -332,8 +339,8 @@ class _MyAppointmentsTab extends ConsumerWidget {
             // Appointments list
             Expanded(
               child: appointments.isEmpty
-                  ? const _EmptyAppointments(
-                      message: 'Aucun rendez-vous vous est assigné',
+                  ? _EmptyAppointments(
+                      message: AppLocalizations.of(context)?.tr('member_no_appointments_assigned') ?? 'Aucun rendez-vous vous est assigné',
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -365,11 +372,11 @@ class _AllAppointmentsTab extends ConsumerWidget {
       loading: () => const Center(
         child: CircularProgressIndicator(color: AppColors.brand500),
       ),
-      error: (e, _) => Center(child: Text('Erreur: $e')),
+      error: (e, _) => Center(child: Text((AppLocalizations.of(context)?.tr('gerant_conges_error') ?? 'Erreur: {error}').replaceAll('{error}', '$e'))),
       data: (appointments) {
         if (appointments.isEmpty) {
-          return const _EmptyAppointments(
-            message: 'Aucun rendez-vous dans le salon',
+          return _EmptyAppointments(
+            message: AppLocalizations.of(context)?.tr('member_no_appointments_salon') ?? 'Aucun rendez-vous dans le salon',
           );
         }
         return ListView.builder(
@@ -412,7 +419,7 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
     super.initState();
     final a = widget.appointment;
     if (a.clientId == 'walk-in') {
-      _clientName = a.clientName ?? 'Client sans compte';
+      _clientName = a.clientName ?? 'Client sans compte'; // fallback, localized in build
     } else {
       DatabaseService().getClientName(a.clientId).then((name) {
         if (mounted) setState(() => _clientName = name);
@@ -444,22 +451,23 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final a = widget.appointment;
     final timeStr = DateFormat('HH:mm').format(a.dateTime);
     final dateStr = DateFormat('EEE d MMM', 'fr_FR').format(a.dateTime);
 
     final (statusLabel, statusBg, statusFg) = switch (a.status) {
       'completed' => (
-          'Terminé',
+          l?.tr('appointments_status_completed') ?? 'Terminé',
           const Color(0xFFDCFCE7),
           const Color(0xFF16A34A)
         ),
       'cancelled' => (
-          'Annulé',
+          l?.tr('appointments_status_cancelled') ?? 'Annulé',
           const Color(0xFFFEE2E2),
           const Color(0xFFDC2626)
         ),
-      _ => ('À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
+      _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
     };
 
     final canAssign = widget.member != null &&
@@ -593,9 +601,9 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: AppColors.brand200),
                           ),
-                          child: const Text(
-                            'S\'assigner',
-                            style: TextStyle(
+                          child: Text(
+                            l?.tr('member_self_assign') ?? 'S\'assigner',
+                            style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: AppColors.brand600,
@@ -709,10 +717,11 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
           .getAppointmentsForMemberOnDate(
               widget.salonId, widget.member.id, slotStart, slotEnd);
       if (appointments.isNotEmpty && mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Impossible : vous avez un rendez-vous à ${hour}h',
+              (l?.tr('appointments_error_appointment_at_hour') ?? 'Impossible : vous avez un rendez-vous à {hour}h').replaceAll('{hour}', '$hour'),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             backgroundColor: const Color(0xFFDC2626),
@@ -760,10 +769,11 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
           .getAppointmentsForMemberOnDate(
               widget.salonId, widget.member.id, dayStart, dayEnd);
       if (appointments.isNotEmpty && mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Impossible : vous avez ${appointments.length} rendez-vous ce jour',
+              (l?.tr('appointments_error_appointments_on_day') ?? 'Impossible : vous avez {count} rendez-vous ce jour').replaceAll('{count}', '${appointments.length}'),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             backgroundColor: const Color(0xFFDC2626),
@@ -903,15 +913,15 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFFED7AA)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline_rounded,
+                const Icon(Icons.info_outline_rounded,
                     size: 18, color: Color(0xFFEA580C)),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Marquez vos indisponibilités par heure (aujourd\'hui) ou par jour entier (calendrier).',
-                    style: TextStyle(
+                    AppLocalizations.of(context)?.tr('unavailability_info') ?? 'Marquez vos indisponibilités par heure (aujourd\'hui) ou par jour entier (calendrier).',
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF92400E),
                     ),
@@ -946,7 +956,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                         size: 18, color: AppColors.brand600),
                     const SizedBox(width: 8),
                     Text(
-                      "Aujourd'hui — ${DateFormat('d MMMM', 'fr_FR').format(DateTime.now())}",
+                      (AppLocalizations.of(context)?.tr('unavailability_today') ?? "Aujourd'hui — {date}").replaceAll('{date}', DateFormat('d MMMM', 'fr_FR').format(DateTime.now())),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -972,13 +982,13 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                       color: const Color(0xFFFEE2E2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.block_rounded, size: 16, color: Color(0xFFDC2626)),
-                        SizedBox(width: 8),
+                        const Icon(Icons.block_rounded, size: 16, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 8),
                         Text(
-                          'Journée entière indisponible',
-                          style: TextStyle(
+                          AppLocalizations.of(context)?.tr('unavailability_full_day') ?? 'Journée entière indisponible',
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF991B1B),
@@ -989,9 +999,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                   ),
                 ] else ...[
                   const SizedBox(height: 14),
-                  const Text(
-                    'Matin',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context)?.tr('unavailability_morning') ?? 'Matin',
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.secondary500,
@@ -1004,9 +1014,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                     children: _morningHours.map(_buildHourChip).toList(),
                   ),
                   const SizedBox(height: 14),
-                  const Text(
-                    'Après-midi',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context)?.tr('unavailability_afternoon') ?? 'Après-midi',
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.secondary500,
@@ -1173,7 +1183,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                       size: 18, color: Color(0xFFDC2626)),
                   const SizedBox(width: 10),
                   Text(
-                    '$unavailableThisMonth jour${unavailableThisMonth > 1 ? 's' : ''} indisponible${unavailableThisMonth > 1 ? 's' : ''} ce mois-ci',
+                    (AppLocalizations.of(context)?.tr('unavailability_days_count') ?? '{count} jour{plural} indisponible{plural} ce mois-ci')
+                        .replaceAll('{count}', '$unavailableThisMonth')
+                        .replaceAll('{plural}', unavailableThisMonth > 1 ? 's' : ''),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -1187,15 +1199,18 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
           const SizedBox(height: 16),
 
           // Legend
-          Row(
-            children: [
-              _LegendDot(color: const Color(0xFFDC2626), label: 'Indisponible'),
-              const SizedBox(width: 16),
-              _LegendDot(color: AppColors.brand50, label: "Aujourd'hui", border: AppColors.brand400),
-              const SizedBox(width: 16),
-              _LegendDot(color: AppColors.secondary50, label: 'Passé'),
-            ],
-          ),
+          Builder(builder: (context) {
+            final l = AppLocalizations.of(context);
+            return Row(
+              children: [
+                _LegendDot(color: const Color(0xFFDC2626), label: l?.tr('unavailability_legend_unavailable') ?? 'Indisponible'),
+                const SizedBox(width: 16),
+                _LegendDot(color: AppColors.brand50, label: l?.tr('unavailability_legend_today') ?? "Aujourd'hui", border: AppColors.brand400),
+                const SizedBox(width: 16),
+                _LegendDot(color: AppColors.secondary50, label: l?.tr('unavailability_legend_past') ?? 'Passé'),
+              ],
+            );
+          }),
           const SizedBox(height: 40),
         ],
       ),
@@ -1393,27 +1408,28 @@ class _MemberAddAppointmentSheetState
 
   Future<void> _submit() async {
     final clientName = _clientNameCtrl.text.trim();
+    final l = AppLocalizations.of(context);
     if (clientName.isEmpty) {
-      _showError('Veuillez entrer le nom du client');
+      _showError(l?.tr('appointments_error_client_name') ?? 'Veuillez entrer le nom du client');
       return;
     }
     if (_selectedService == null) {
-      _showError('Veuillez sélectionner un service');
+      _showError(l?.tr('appointments_error_service') ?? 'Veuillez sélectionner un service');
       return;
     }
     if (_isMemberUnavailable(_selectedDate)) {
-      _showError('Vous êtes indisponible ce jour-là');
+      _showError(l?.tr('member_add_unavailable_day') ?? 'Vous êtes indisponible ce jour-là');
       return;
     }
     if (!_isDayOpen(_selectedDate)) {
-      _showError('Le salon est fermé ce jour-là');
+      _showError(l?.tr('appointments_error_closed') ?? 'Le salon est fermé ce jour-là');
       return;
     }
 
     // Check if the selected time falls within an unavailable slot
     final duration = _selectedService!['duration'] as int? ?? 30;
     if (_isMemberUnavailableAtTime(_selectedDate, _selectedTime, duration)) {
-      _showError('Vous êtes indisponible sur ce créneau horaire');
+      _showError(l?.tr('member_add_unavailable_slot') ?? 'Vous êtes indisponible sur ce créneau horaire');
       return;
     }
 
@@ -1443,7 +1459,7 @@ class _MemberAddAppointmentSheetState
         final conflictTime =
             '${conflict.dateTime.hour.toString().padLeft(2, '0')}:${conflict.dateTime.minute.toString().padLeft(2, '0')}';
         if (mounted) {
-          _showError('Vous avez déjà un RDV à $conflictTime');
+          _showError((l?.tr('member_add_conflict') ?? 'Vous avez déjà un RDV à {time}').replaceAll('{time}', conflictTime));
           setState(() => _loading = false);
         }
         return;
@@ -1470,15 +1486,15 @@ class _MemberAddAppointmentSheetState
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('RDV créé avec succès'),
-            backgroundColor: Color(0xFF16A34A),
+          SnackBar(
+            content: Text(l?.tr('appointments_created_success') ?? 'RDV créé avec succès'),
+            backgroundColor: const Color(0xFF16A34A),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
-      if (mounted) _showError('Erreur : $e');
+      if (mounted) _showError((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1498,6 +1514,8 @@ class _MemberAddAppointmentSheetState
         DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
     final timeStr =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
+
+    final l = AppLocalizations.of(context);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
@@ -1519,7 +1537,7 @@ class _MemberAddAppointmentSheetState
               ),
             ),
             Text(
-              'Nouveau rendez-vous',
+              l?.tr('appointments_new_title') ?? 'Nouveau rendez-vous',
               style: GoogleFonts.dmSans(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -1528,30 +1546,30 @@ class _MemberAddAppointmentSheetState
             ),
             const SizedBox(height: 4),
             Text(
-              'Rendez-vous assigné à ${widget.member.name}',
+              (l?.tr('member_add_subtitle') ?? 'Rendez-vous assigné à {name}').replaceAll('{name}', widget.member.name),
               style: const TextStyle(
                   fontSize: 12, color: AppColors.secondary400),
             ),
             const SizedBox(height: 20),
 
             // Client name
-            _label('Nom du client *'),
+            _label(l?.tr('appointments_client_name') ?? 'Nom du client *'),
             const SizedBox(height: 6),
             TextField(
               controller: _clientNameCtrl,
               style:
                   const TextStyle(fontSize: 14, color: AppColors.brand950),
-              decoration: _inputDecoration('ex. Mohamed Alami'),
+              decoration: _inputDecoration(l?.tr('appointments_client_name_hint') ?? 'ex. Mohamed Alami'),
             ),
             const SizedBox(height: 16),
 
             // Service selection (only member's assigned services)
-            _label('Service *'),
+            _label(l?.tr('appointments_service_label') ?? 'Service *'),
             const SizedBox(height: 6),
             if (services.isEmpty)
-              const Text(
-                'Aucun service assigné',
-                style: TextStyle(
+              Text(
+                l?.tr('member_add_no_services') ?? 'Aucun service assigné',
+                style: const TextStyle(
                     fontSize: 12, color: AppColors.secondary400),
               )
             else
@@ -1568,8 +1586,8 @@ class _MemberAddAppointmentSheetState
                     value: _selectedService != null
                         ? services.indexOf(_selectedService!)
                         : null,
-                    hint: const Text('Sélectionner un service',
-                        style: TextStyle(
+                    hint: Text(l?.tr('appointments_select_service') ?? 'Sélectionner un service',
+                        style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.secondary400)),
                     items: List.generate(services.length, (i) {
@@ -1598,7 +1616,7 @@ class _MemberAddAppointmentSheetState
             const SizedBox(height: 16),
 
             // Date
-            _label('Date *'),
+            _label(l?.tr('appointments_date_label') ?? 'Date *'),
             const SizedBox(height: 6),
             GestureDetector(
               onTap: _pickDate,
@@ -1631,7 +1649,7 @@ class _MemberAddAppointmentSheetState
             const SizedBox(height: 16),
 
             // Time slots
-            _label('Heure *'),
+            _label(l?.tr('appointments_time_label') ?? 'Heure *'),
             const SizedBox(height: 6),
             Builder(builder: (_) {
               if (_isMemberUnavailable(_selectedDate)) {
@@ -1643,15 +1661,15 @@ class _MemberAddAppointmentSheetState
                     color: const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.event_busy_outlined,
+                      const Icon(Icons.event_busy_outlined,
                           size: 16, color: Color(0xFFDC2626)),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Vous êtes indisponible ce jour-là',
-                          style: TextStyle(
+                          l?.tr('member_add_unavailable_day') ?? 'Vous êtes indisponible ce jour-là',
+                          style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFFDC2626),
                               fontWeight: FontWeight.w500),
@@ -1670,15 +1688,15 @@ class _MemberAddAppointmentSheetState
                     color: const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded,
+                      const Icon(Icons.warning_amber_rounded,
                           size: 16, color: Color(0xFFDC2626)),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Le salon est fermé ce jour-là',
-                          style: TextStyle(
+                          l?.tr('appointments_salon_closed') ?? 'Le salon est fermé ce jour-là',
+                          style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFFDC2626),
                               fontWeight: FontWeight.w500),
@@ -1700,7 +1718,7 @@ class _MemberAddAppointmentSheetState
                 children: [
                   if (morning.isNotEmpty) ...[
                     _timeSlotSection(
-                      label: 'Matin',
+                      label: l?.tr('appointments_morning') ?? 'Matin',
                       icon: Icons.wb_sunny_outlined,
                       slots: morning,
                     ),
@@ -1708,7 +1726,7 @@ class _MemberAddAppointmentSheetState
                   ],
                   if (afternoon.isNotEmpty)
                     _timeSlotSection(
-                      label: 'Après-midi',
+                      label: l?.tr('appointments_afternoon') ?? 'Après-midi',
                       icon: Icons.wb_twilight_outlined,
                       slots: afternoon,
                     ),
@@ -1730,8 +1748,8 @@ class _MemberAddAppointmentSheetState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Résumé',
-                        style: TextStyle(
+                    Text(l?.tr('appointments_summary') ?? 'Résumé',
+                        style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: AppColors.brand700)),
@@ -1744,7 +1762,7 @@ class _MemberAddAppointmentSheetState
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        'Avec ${widget.member.name}',
+                        (l?.tr('appointments_with') ?? 'Avec {name}').replaceAll('{name}', widget.member.name),
                         style: const TextStyle(
                             fontSize: 12, color: AppColors.secondary500),
                       ),
@@ -1775,7 +1793,9 @@ class _MemberAddAppointmentSheetState
                             color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.check_rounded, size: 18),
                 label: Text(
-                  _loading ? 'Création...' : 'Créer le rendez-vous',
+                  _loading
+                      ? (l?.tr('appointments_creating') ?? 'Création...')
+                      : (l?.tr('appointments_create') ?? 'Créer le rendez-vous'),
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 14),
                 ),
@@ -1825,7 +1845,7 @@ class _MemberAddAppointmentSheetState
             ),
             const SizedBox(width: 8),
             Text(
-              '${slots.length} créneaux',
+              (AppLocalizations.of(context)?.tr('appointments_slots_count') ?? '{count} créneaux').replaceAll('{count}', '${slots.length}'),
               style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.secondary400,

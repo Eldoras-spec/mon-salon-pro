@@ -38,25 +38,35 @@ export const onNewAppointment = functions.firestore
                 return;
             }
 
+            // Get owner's language preference
+            const ownerLang: string = ownerDoc.data()?.lang || "fr";
+            const isEn = ownerLang === "en";
+
             // Format date
             const dateTime = appointment.dateTime?.toDate
                 ? appointment.dateTime.toDate()
                 : new Date(appointment.dateTime);
-            const dateStr = dateTime.toLocaleDateString("fr-FR", {
+            const dateLocale = isEn ? "en-US" : "fr-FR";
+            const dateStr = dateTime.toLocaleDateString(dateLocale, {
                 day: "2-digit",
                 month: "long",
                 year: "numeric",
             });
-            const timeStr = dateTime.toLocaleTimeString("fr-FR", {
+            const timeStr = dateTime.toLocaleTimeString(dateLocale, {
                 hour: "2-digit",
                 minute: "2-digit",
             });
 
+            const notifTitle = isEn ? "New Booking! 🎉" : "Nouvelle Réservation ! 🎉";
+            const notifBody = isEn
+                ? `${serviceName} - ${salonName} on ${dateStr} at ${timeStr}`
+                : `${serviceName} - ${salonName} le ${dateStr} à ${timeStr}`;
+
             // Save in-app notification for the owner
             await db.collection("notifications").add({
                 userId: ownerId,
-                title: "Nouvelle Réservation ! 🎉",
-                body: `${serviceName} - ${salonName} le ${dateStr} à ${timeStr}`,
+                title: notifTitle,
+                body: notifBody,
                 type: "new_appointment",
                 isRead: false,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -66,8 +76,8 @@ export const onNewAppointment = functions.firestore
             await messaging.send({
                 token: fcmToken,
                 notification: {
-                    title: "Nouvelle Réservation ! 🎉",
-                    body: `${serviceName} - ${salonName} le ${dateStr} à ${timeStr}`,
+                    title: notifTitle,
+                    body: notifBody,
                 },
                 data: {
                     type: "new_appointment",
@@ -149,26 +159,33 @@ export const onAppointmentStatusChanged = functions.firestore
                     // Mark as notified
                     await entry.ref.update({ notified: true });
 
+                    // Get waitlist client doc (for lang + FCM token)
+                    const wClientDoc = await db.collection("users").doc(waitlistClientId).get();
+
+                    // Get waitlist client's language
+                    const wLang: string = wClientDoc.data()?.lang || "fr";
+                    const wIsEn = wLang === "en";
+                    const wDateStr = appointmentDate.toLocaleDateString(wIsEn ? "en-US" : "fr-FR", { day: "2-digit", month: "long" });
+
                     // Save in-app notification
                     await db.collection("notifications").add({
                         userId: waitlistClientId,
-                        title: `Créneau disponible chez ${salonName} !`,
-                        body: `Un créneau s'est libéré pour le ${appointmentDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}. Réservez vite !`,
+                        title: wIsEn ? `Slot available at ${salonName}!` : `Créneau disponible chez ${salonName} !`,
+                        body: wIsEn ? `A slot opened up on ${wDateStr}. Book now!` : `Un créneau s'est libéré pour le ${wDateStr}. Réservez vite !`,
                         type: "waitlist",
                         isRead: false,
                         createdAt: admin.firestore.FieldValue.serverTimestamp(),
                         salonId: salonId,
                     });
 
-                    // Send FCM push
-                    const wClientDoc = await db.collection("users").doc(waitlistClientId).get();
+                    // Send FCM push (wClientDoc already fetched above for lang)
                     const wToken: string | undefined = wClientDoc.data()?.fcmToken;
                     if (wToken) {
                         await messaging.send({
                             token: wToken,
                             notification: {
-                                title: `Créneau disponible ! 🎉`,
-                                body: `Un créneau s'est libéré chez ${salonName}. Réservez maintenant !`,
+                                title: wIsEn ? "Slot available! 🎉" : "Créneau disponible ! 🎉",
+                                body: wIsEn ? `A slot opened up at ${salonName}. Book now!` : `Un créneau s'est libéré chez ${salonName}. Réservez maintenant !`,
                             },
                             data: {
                                 type: "waitlist_available",
@@ -200,9 +217,11 @@ export const onAppointmentStatusChanged = functions.firestore
         }
 
         try {
-            // Get client's FCM token
+            // Get client's FCM token and language
             const clientDoc = await db.collection("users").doc(clientId).get();
             const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
+            const clientLang: string = clientDoc.data()?.lang || "fr";
+            const isEn = clientLang === "en";
 
             if (!fcmToken) {
                 console.log(`No FCM token for client ${clientId}, skipping.`);
@@ -215,16 +234,22 @@ export const onAppointmentStatusChanged = functions.firestore
 
             switch (newStatus) {
                 case "cancelled":
-                    title = "Rendez-vous Annulé ❌";
-                    body = `Votre RDV "${serviceName}" chez ${salonName} a été annulé.`;
+                    title = isEn ? "Appointment Cancelled ❌" : "Rendez-vous Annulé ❌";
+                    body = isEn
+                        ? `Your appointment "${serviceName}" at ${salonName} has been cancelled.`
+                        : `Votre RDV "${serviceName}" chez ${salonName} a été annulé.`;
                     break;
                 case "confirmed":
-                    title = "Rendez-vous Confirmé ✅";
-                    body = `Votre RDV "${serviceName}" chez ${salonName} est confirmé !`;
+                    title = isEn ? "Appointment Confirmed ✅" : "Rendez-vous Confirmé ✅";
+                    body = isEn
+                        ? `Your appointment "${serviceName}" at ${salonName} is confirmed!`
+                        : `Votre RDV "${serviceName}" chez ${salonName} est confirmé !`;
                     break;
                 case "completed":
-                    title = "Rendez-vous Terminé 🌟";
-                    body = `Merci pour votre visite chez ${salonName} ! Laissez un avis.`;
+                    title = isEn ? "Appointment Completed 🌟" : "Rendez-vous Terminé 🌟";
+                    body = isEn
+                        ? `Thank you for visiting ${salonName}! Leave a review.`
+                        : `Merci pour votre visite chez ${salonName} ! Laissez un avis.`;
                     break;
                 default:
                     console.log(`Unknown status "${newStatus}", skipping notification.`);
@@ -291,12 +316,15 @@ export const onNewMessage = functions.firestore
             // Determine recipient: the OTHER party
             const recipientId = senderIsClient ? ownerId : clientId;
             const senderDisplayName = senderIsClient ? clientName : salonName;
-            const notifTitle = `Message de ${senderDisplayName} 💬`;
-            const notifBody = text.length > 80 ? text.substring(0, 80) + "…" : text;
 
-            // Fetch recipient FCM token
+            // Fetch recipient FCM token and language
             const recipientDoc = await db.collection("users").doc(recipientId).get();
             const fcmToken: string | undefined = recipientDoc.data()?.fcmToken;
+            const recipientLang: string = recipientDoc.data()?.lang || "fr";
+            const isEn = recipientLang === "en";
+
+            const notifTitle = isEn ? `Message from ${senderDisplayName} 💬` : `Message de ${senderDisplayName} 💬`;
+            const notifBody = text.length > 80 ? text.substring(0, 80) + "…" : text;
 
             if (!fcmToken) {
                 console.log(`No FCM token for recipient ${recipientId}, skipping.`);
@@ -390,15 +418,17 @@ export const onNewPromotion = functions
 
         console.log(`📣 Sending promo notifications to ${usersSnap.size} user(s) for salon "${salonName}".`);
 
-        const notifTitle = `Nouvelle offre chez ${salonName} ✨`;
-        const notifBody = promoTitle;
-
-        // ── Batch-write Firestore notifications + collect FCM tokens ─────────
+        // ── Batch-write Firestore notifications + collect FCM sends ─────────
         const batch = db.batch();
-        const tokens: string[] = [];
+        const fcmPromises: Promise<any>[] = [];
 
         for (const userDoc of usersSnap.docs) {
             const userData = userDoc.data();
+            const userLang: string = userData?.lang || "fr";
+            const uIsEn = userLang === "en";
+
+            const notifTitle = uIsEn ? `New offer at ${salonName} ✨` : `Nouvelle offre chez ${salonName} ✨`;
+            const notifBody = promoTitle;
 
             // In-app notification document
             const notifRef = db.collection("notifications").doc();
@@ -413,52 +443,48 @@ export const onNewPromotion = functions
                 promoId: promoId,
             });
 
-            // FCM token (may be absent if user never granted permission)
+            // FCM push (per-user for language personalization)
             const fcmToken: string | undefined = userData?.fcmToken;
-            if (fcmToken) tokens.push(fcmToken);
+            if (fcmToken) {
+                fcmPromises.push(messaging.send({
+                    token: fcmToken,
+                    notification: { title: notifTitle, body: notifBody },
+                    data: {
+                        type: "new_promotion",
+                        salonId: salonId,
+                        promoId: promoId,
+                    },
+                    android: {
+                        priority: "high",
+                        notification: {
+                            channelId: "mon_salon_channel",
+                            sound: "default",
+                        },
+                    },
+                    apns: {
+                        payload: {
+                            aps: {
+                                sound: "default",
+                                badge: 1,
+                            },
+                        },
+                    },
+                }).catch(err => console.error(`FCM error for ${userDoc.id}:`, err)));
+            }
         }
 
         await batch.commit();
         console.log(`✅ ${usersSnap.size} in-app notification(s) written.`);
 
         // ── Send FCM push notifications ──────────────────────────────────────
-        if (tokens.length === 0) {
+        if (fcmPromises.length === 0) {
             console.log("No FCM tokens available, skipping push notifications.");
             return;
         }
 
-        const fcmResponse = await messaging.sendEachForMulticast({
-            tokens,
-            notification: {
-                title: notifTitle,
-                body: notifBody,
-            },
-            data: {
-                type: "new_promotion",
-                salonId: salonId,
-                promoId: promoId,
-            },
-            android: {
-                priority: "high",
-                notification: {
-                    channelId: "mon_salon_channel",
-                    sound: "default",
-                },
-            },
-            apns: {
-                payload: {
-                    aps: {
-                        sound: "default",
-                        badge: 1,
-                    },
-                },
-            },
-        });
+        await Promise.all(fcmPromises);
 
-        console.log(
-            `✅ FCM push: ${fcmResponse.successCount} sent, ` +
-            `${fcmResponse.failureCount} failed (out of ${tokens.length} tokens).`
-        );
+        console.log(`✅ ${fcmPromises.length} FCM push(es) sent.`);
     });
 
 // ============================================================
@@ -499,22 +525,25 @@ export const sendDailyReminders = functions.pubsub
                 const dateTime = appointment.dateTime?.toDate
                     ? appointment.dateTime.toDate()
                     : new Date(appointment.dateTime);
-                const timeStr = dateTime.toLocaleTimeString("fr-FR", {
+
+                // Get client's FCM token and language
+                const clientDoc = await db.collection("users").doc(clientId).get();
+                const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
+                const cLang: string = clientDoc.data()?.lang || "fr";
+                const cIsEn = cLang === "en";
+
+                const timeStr = dateTime.toLocaleTimeString(cIsEn ? "en-US" : "fr-FR", {
                     hour: "2-digit",
                     minute: "2-digit",
                 });
-
-                // Get client's FCM token
-                const clientDoc = await db.collection("users").doc(clientId).get();
-                const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
 
                 if (!fcmToken) return;
 
                 await messaging.send({
                     token: fcmToken,
                     notification: {
-                        title: "Rappel : RDV aujourd'hui ! ⏰",
-                        body: `${serviceName} chez ${salonName} à ${timeStr}`,
+                        title: cIsEn ? "Reminder: Appointment today! ⏰" : "Rappel : RDV aujourd'hui ! ⏰",
+                        body: cIsEn ? `${serviceName} at ${salonName} at ${timeStr}` : `${serviceName} chez ${salonName} à ${timeStr}`,
                     },
                     data: {
                         type: "reminder",
@@ -586,22 +615,30 @@ export const send24hReminders = functions.pubsub
                 const dateTime = appointment.dateTime?.toDate
                     ? appointment.dateTime.toDate()
                     : new Date(appointment.dateTime);
-                const timeStr = dateTime.toLocaleTimeString("fr-FR", {
+
+                // Get client's FCM token and language
+                const clientDoc = await db.collection("users").doc(clientId).get();
+                const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
+                const cLang: string = clientDoc.data()?.lang || "fr";
+                const cIsEn = cLang === "en";
+
+                const timeStr = dateTime.toLocaleTimeString(cIsEn ? "en-US" : "fr-FR", {
                     hour: "2-digit",
                     minute: "2-digit",
                 });
 
-                // Get client's FCM token
-                const clientDoc = await db.collection("users").doc(clientId).get();
-                const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
-
                 if (!fcmToken) return;
+
+                const rTitle = cIsEn ? "Reminder: Appointment tomorrow! 📋" : "Rappel : RDV demain ! 📋";
+                const rBody = cIsEn
+                    ? `${serviceName} at ${salonName} tomorrow at ${timeStr}`
+                    : `${serviceName} chez ${salonName} demain à ${timeStr}`;
 
                 await messaging.send({
                     token: fcmToken,
                     notification: {
-                        title: "Rappel : RDV demain ! 📋",
-                        body: `${serviceName} chez ${salonName} demain à ${timeStr}`,
+                        title: rTitle,
+                        body: rBody,
                     },
                     data: {
                         type: "reminder_24h",
@@ -627,8 +664,8 @@ export const send24hReminders = functions.pubsub
                 // Also save an in-app notification
                 await db.collection("notifications").add({
                     userId: clientId,
-                    title: "Rappel : RDV demain ! 📋",
-                    body: `${serviceName} chez ${salonName} demain à ${timeStr}`,
+                    title: rTitle,
+                    body: rBody,
                     type: "reminder_24h",
                     isRead: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -706,12 +743,19 @@ export const onNewOrder = functions.firestore
 
             const ownerDoc = await db.collection("users").doc(ownerId).get();
             const fcmToken: string | undefined = ownerDoc.data()?.fcmToken;
+            const oLang: string = ownerDoc.data()?.lang || "fr";
+            const oIsEn = oLang === "en";
+
+            const oTitle = oIsEn ? "New shop order" : "Nouvelle commande boutique";
+            const oBody = oIsEn
+                ? `${clientName} ordered ${itemCount} item${itemCount > 1 ? "s" : ""} for ${grandTotal} MAD`
+                : `${clientName} a commandé ${itemCount} article${itemCount > 1 ? "s" : ""} pour ${grandTotal} MAD`;
 
             // Save in-app notification for owner
             await db.collection("notifications").add({
                 userId: ownerId,
-                title: "Nouvelle commande boutique",
-                body: `${clientName} a commandé ${itemCount} article${itemCount > 1 ? "s" : ""} pour ${grandTotal} MAD`,
+                title: oTitle,
+                body: oBody,
                 type: "new_order",
                 salonId: salonId,
                 orderId: snap.id,
@@ -723,8 +767,10 @@ export const onNewOrder = functions.firestore
                 await messaging.send({
                     token: fcmToken,
                     notification: {
-                        title: "🛍️ Nouvelle commande",
-                        body: `${clientName} — ${itemCount} article${itemCount > 1 ? "s" : ""} · ${grandTotal} MAD`,
+                        title: oIsEn ? "🛍️ New order" : "🛍️ Nouvelle commande",
+                        body: oIsEn
+                            ? `${clientName} — ${itemCount} item${itemCount > 1 ? "s" : ""} · ${grandTotal} MAD`
+                            : `${clientName} — ${itemCount} article${itemCount > 1 ? "s" : ""} · ${grandTotal} MAD`,
                     },
                     data: {
                         type: "new_order",
@@ -756,29 +802,32 @@ export const onOrderStatusChanged = functions.firestore
         if (!clientId || clientId === "walk-in" || clientId === "anonymous") return;
 
         const newStatus: string = after.status;
+
+        try {
+            const clientDoc = await db.collection("users").doc(clientId).get();
+            if (!clientDoc.exists) return;
+            const cLang: string = clientDoc.data()?.lang || "fr";
+            const cIsEn = cLang === "en";
+
         let title = "";
         let body = "";
 
         switch (newStatus) {
             case "confirmed":
-                title = "Commande confirmée ✅";
-                body = "Votre commande a été confirmée par le salon.";
+                title = cIsEn ? "Order confirmed ✅" : "Commande confirmée ✅";
+                body = cIsEn ? "Your order has been confirmed by the salon." : "Votre commande a été confirmée par le salon.";
                 break;
             case "delivered":
-                title = "Commande livrée 📦";
-                body = "Votre commande a été marquée comme livrée.";
+                title = cIsEn ? "Order delivered 📦" : "Commande livrée 📦";
+                body = cIsEn ? "Your order has been marked as delivered." : "Votre commande a été marquée comme livrée.";
                 break;
             case "cancelled":
-                title = "Commande annulée ❌";
-                body = "Votre commande a été annulée par le salon.";
+                title = cIsEn ? "Order cancelled ❌" : "Commande annulée ❌";
+                body = cIsEn ? "Your order has been cancelled by the salon." : "Votre commande a été annulée par le salon.";
                 break;
             default:
                 return;
         }
-
-        try {
-            const clientDoc = await db.collection("users").doc(clientId).get();
-            if (!clientDoc.exists) return;
 
             const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
 
@@ -840,12 +889,19 @@ export const onProductStockChanged = functions.firestore
 
             const ownerDoc = await db.collection("users").doc(ownerId).get();
             const fcmToken: string | undefined = ownerDoc.data()?.fcmToken;
+            const sLang: string = ownerDoc.data()?.lang || "fr";
+            const sIsEn = sLang === "en";
+
+            const sTitle = sIsEn ? "⚠️ Low stock" : "⚠️ Stock bas";
+            const sBody = sIsEn
+                ? `${productName} — only ${newStock} unit${newStock > 1 ? "s" : ""} left`
+                : `${productName} — il ne reste que ${newStock} unité${newStock > 1 ? "s" : ""}`;
 
             // Save in-app notification
             await db.collection("notifications").add({
                 userId: ownerId,
-                title: "⚠️ Stock bas",
-                body: `${productName} — il ne reste que ${newStock} unité${newStock > 1 ? "s" : ""}`,
+                title: sTitle,
+                body: sBody,
                 type: "low_stock",
                 salonId: salonId,
                 isRead: false,
@@ -856,8 +912,8 @@ export const onProductStockChanged = functions.firestore
                 await messaging.send({
                     token: fcmToken,
                     notification: {
-                        title: "⚠️ Stock bas",
-                        body: `${productName} — ${newStock} restant${newStock > 1 ? "s" : ""}`,
+                        title: sTitle,
+                        body: sBody,
                     },
                     data: {
                         type: "low_stock",
@@ -888,6 +944,8 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
     if (!salonId) {
         throw new functions.https.HttpsError("invalid-argument", "salonId required");
     }
+    const lang: string = data.lang || "fr";
+    const isEn = lang === "en";
 
     try {
         // ── Gather salon data ──
@@ -1034,7 +1092,9 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
 
         // ── Busiest day analysis ──
         const dayBookings: Record<string, number> = {};
-        const dayNamesArr = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+        const dayNamesArr = isEn
+            ? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+            : ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
         for (const a of thisMonthAppts) {
             const d = a.dateTime?.toDate ? a.dateTime.toDate() : new Date(getTime(a));
             const dayName = dayNamesArr[d.getDay()];
@@ -1066,11 +1126,51 @@ export const generateDailySummary = functions.https.onCall(async (data, context)
             : 0;
 
         const todayName = dayNamesArr[now.getDay()];
-        const monthNames = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+        const monthNames = isEn
+            ? ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            : ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
         const thisMonthName = monthNames[now.getMonth()];
         const lastMonthName = monthNames[now.getMonth() === 0 ? 11 : now.getMonth() - 1];
 
-        const prompt = `Tu es l'assistant IA du salon "${salon.name}". Génère un résumé structuré en JSON pour le propriétaire. Parle en français, tutoie-le. Sois concis et actionnable.
+        const prompt = isEn
+            ? `You are the AI assistant for salon "${salon.name}". Generate a structured JSON summary for the owner. Speak in English, be concise and actionable.
+
+TODAY'S DATA (${todayName}):
+- ${todayCount} appointments (${todayUpcoming} upcoming, ${todayCompleted} completed)
+- Revenue today: ${todayRevenue} MAD
+
+WEEKLY DATA:
+- ${weekCount} appointments (${weekCancelled} cancelled)
+- Revenue: ${weekRevenue} MAD
+- Change vs last week: ${weekChange > 0 ? "+" : ""}${weekChange}% appointments, ${revenueChange > 0 ? "+" : ""}${revenueChange}% revenue
+${topService ? `- Top service: ${topService.name} (${topService.count} times, avg ${topService.avgPrice} MAD)` : ""}
+
+MONTHLY COMPARISON:
+- ${thisMonthName}: ${thisMonthCount} appointments, ${thisMonthRevenue} MAD revenue, ${thisMonthCancelled} cancelled, ${thisMonthClients.size} unique clients
+- ${lastMonthName}: ${lastMonthCount} appointments, ${lastMonthRevenue} MAD revenue, ${lastMonthCancelled} cancelled, ${lastMonthClients.size} unique clients
+- Charges ${thisMonthName}: ${thisMonthCharges} MAD | Net profit: ${thisMonthRevenue - thisMonthCharges} MAD
+- Charges ${lastMonthName}: ${lastMonthCharges} MAD | Net profit: ${lastMonthRevenue - lastMonthCharges} MAD
+${busiestDay ? `- Busiest day this month: ${busiestDay[0]} (${busiestDay[1]} appointments)` : ""}
+${slowestDay ? `- Slowest day: ${slowestDay[0]} (${slowestDay[1]} appointments)` : ""}
+
+SERVICE ANALYSIS:
+${serviceAnalysis.map(s => `- ${s.name}: ${s.count} bookings, avg price ${s.avgPrice} MAD`).join("\n")}
+
+AT-RISK CLIENTS (high cancellation rate among today's appointments):
+${noShowRisks.length > 0 ? noShowRisks.map(r => `- ${r.clientName}: ${r.rate}% cancellation (${r.cancelled}/${r.total} appointments)`).join("\n") : "No at-risk clients today."}
+
+${recentReviews.length > 0 ? `RECENT REVIEWS: ${recentReviews.map(r => `${r.rating}★${r.comment ? " - " + r.comment : ""}`).join(" | ")}` : "No recent reviews."}
+
+Respond ONLY with valid JSON (no markdown, no \`\`\`json), with this exact structure:
+{
+  "summary": "2-3 motivating summary sentences about the day",
+  "noShowAlerts": ["short sentence per at-risk client"] or [] if none,
+  "priceSuggestions": ["1-2 price suggestions based on service demand"] or [] if nothing to suggest,
+  "actionSuggestions": ["2-3 concrete actions to take today/this week"],
+  "monthlyComparison": "1-2 sentences comparing this month to last (appointments, revenue, profit)",
+  "financialInsights": "1-2 sentences about financial health and trends"
+}`
+            : `Tu es l'assistant IA du salon "${salon.name}". Génère un résumé structuré en JSON pour le propriétaire. Parle en français, tutoie-le. Sois concis et actionnable.
 
 DONNÉES DU JOUR (${todayName}) :
 - ${todayCount} RDV (${todayUpcoming} à venir, ${todayCompleted} terminés)

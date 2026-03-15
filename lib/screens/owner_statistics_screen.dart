@@ -7,12 +7,14 @@ import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../models/order_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 
 class OwnerStatisticsScreen extends ConsumerWidget {
   const OwnerStatisticsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
     final ordersAsync = ref.watch(ownerOrdersProvider);
 
@@ -23,7 +25,7 @@ class OwnerStatisticsScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'Statistiques',
+          l?.tr('statistics_title') ?? 'Statistiques',
           style: GoogleFonts.dmSans(
             fontWeight: FontWeight.bold,
             color: AppColors.brand950,
@@ -38,7 +40,7 @@ class OwnerStatisticsScreen extends ConsumerWidget {
       body: appointmentsAsync.when(
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.brand600)),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         data: (appointments) {
           final orders = ordersAsync.valueOrNull ?? [];
           return _StatisticsBody(
@@ -61,7 +63,11 @@ class _StatisticsBody extends StatefulWidget {
 class _StatisticsBodyState extends State<_StatisticsBody> {
   int _selectedPeriod = 0; // 0=week, 1=month, 2=all
 
-  static const _periodLabels = ['Semaine', 'Mois', 'Tout'];
+  List<String> _periodLabels(AppLocalizations? l) => [
+    l?.tr('statistics_period_week') ?? 'Semaine',
+    l?.tr('statistics_period_month') ?? 'Mois',
+    l?.tr('statistics_period_all') ?? 'Tout',
+  ];
 
   List<AppointmentModel> get _filtered {
     final now = DateTime.now();
@@ -158,6 +164,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final items = _filtered;
     final completed = items.where((a) => a.status == 'completed').toList();
     final cancelled = items.where((a) => a.status == 'cancelled').toList();
@@ -209,7 +216,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
     final memberCounts = <String, int>{};
     final memberRevenue = <String, double>{};
     for (final a in completed) {
-      final name = a.assignedMemberName ?? 'Non assigné';
+      final name = a.assignedMemberName ?? (l?.tr('statistics_unassigned') ?? 'Non assigné');
       memberCounts[name] = (memberCounts[name] ?? 0) + 1;
       memberRevenue[name] = (memberRevenue[name] ?? 0) + a.price;
     }
@@ -270,7 +277,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           // Period selector
           _PeriodSelector(
             selected: _selectedPeriod,
-            labels: _periodLabels,
+            labels: _periodLabels(l),
             onSelect: (i) => setState(() => _selectedPeriod = i),
           ),
 
@@ -281,7 +288,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
             children: [
               Expanded(
                 child: _KpiCard(
-                  label: 'Revenus',
+                  label: l?.tr('statistics_revenue') ?? 'Revenus',
                   value: '${totalRevenue.toStringAsFixed(0)} MAD',
                   icon: Icons.payments_rounded,
                   iconColor: const Color(0xFF059669),
@@ -291,7 +298,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               const SizedBox(width: 12),
               Expanded(
                 child: _KpiCard(
-                  label: 'Panier moyen',
+                  label: l?.tr('statistics_avg_price') ?? 'Panier moyen',
                   value: '${avgPrice.toStringAsFixed(0)} MAD',
                   icon: Icons.shopping_bag_outlined,
                   iconColor: const Color(0xFF7C3AED),
@@ -305,7 +312,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
             children: [
               Expanded(
                 child: _KpiCard(
-                  label: 'Terminés',
+                  label: l?.tr('statistics_completed') ?? 'Terminés',
                   value: '${completed.length}',
                   icon: Icons.check_circle_outline,
                   iconColor: const Color(0xFF16A34A),
@@ -315,7 +322,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               const SizedBox(width: 12),
               Expanded(
                 child: _KpiCard(
-                  label: 'Annulés',
+                  label: l?.tr('statistics_cancelled') ?? 'Annulés',
                   value: '${cancelled.length}',
                   icon: Icons.cancel_outlined,
                   iconColor: const Color(0xFFDC2626),
@@ -329,7 +336,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
             children: [
               Expanded(
                 child: _KpiCard(
-                  label: 'À venir',
+                  label: l?.tr('statistics_upcoming') ?? 'À venir',
                   value: '${upcoming.length}',
                   icon: Icons.event_outlined,
                   iconColor: const Color(0xFF2563EB),
@@ -339,7 +346,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               const SizedBox(width: 12),
               Expanded(
                 child: _KpiCard(
-                  label: 'Heure de pointe',
+                  label: l?.tr('statistics_peak_hour') ?? 'Heure de pointe',
                   value: completed.isNotEmpty ? '${peakHour}h' : '—',
                   icon: Icons.access_time_rounded,
                   iconColor: const Color(0xFFD97706),
@@ -352,7 +359,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           const SizedBox(height: 28),
 
           // Activity chart
-          _SectionHeader(title: 'Activité'),
+          _SectionHeader(title: l?.tr('statistics_activity') ?? 'Activité'),
           const SizedBox(height: 14),
           _ActivityChart(
             dayCounts: dayCounts,
@@ -365,11 +372,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
 
           // Top services
           _SectionHeader(
-            title: 'Services populaires',
+            title: l?.tr('statistics_popular_services') ?? 'Services populaires',
             onSeeMore: topServices.length > 5
                 ? () => _showListBottomSheet(
                       context,
-                      title: 'Services populaires',
+                      title: l?.tr('statistics_popular_services') ?? 'Services populaires',
                       itemCount: topServices.length,
                       itemBuilder: (i) => _ServiceRow(
                         name: topServices[i].key,
@@ -382,7 +389,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           ),
           const SizedBox(height: 14),
           if (topServices.isEmpty)
-            _EmptySection(message: 'Aucun service terminé')
+            _EmptySection(message: l?.tr('statistics_no_completed_service') ?? 'Aucun service terminé')
           else
             ...topServices.take(5).map((e) => _ServiceRow(
                   name: e.key,
@@ -396,11 +403,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           // Team performance
           if (topMembers.isNotEmpty) ...[
             _SectionHeader(
-              title: 'Performance équipe',
+              title: l?.tr('statistics_team_performance') ?? 'Performance équipe',
               onSeeMore: topMembers.length > 5
                   ? () => _showListBottomSheet(
                         context,
-                        title: 'Performance équipe',
+                        title: l?.tr('statistics_team_performance') ?? 'Performance équipe',
                         itemCount: topMembers.length,
                         itemBuilder: (i) => _MemberRow(
                           name: topMembers[i].key,
@@ -424,11 +431,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           if (topClients.isNotEmpty) ...[
             const SizedBox(height: 28),
             _SectionHeader(
-              title: 'Top clients',
+              title: l?.tr('statistics_top_clients') ?? 'Top clients',
               onSeeMore: topClients.length > 5
                   ? () => _showListBottomSheet(
                         context,
-                        title: 'Top clients',
+                        title: l?.tr('statistics_top_clients') ?? 'Top clients',
                         itemCount: topClients.length,
                         itemBuilder: (i) {
                           final cid = topClients[i].key;
@@ -453,11 +460,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           if (recurringClients.isNotEmpty) ...[
             const SizedBox(height: 28),
             _SectionHeader(
-              title: 'Clients récurrents',
+              title: l?.tr('statistics_recurring_clients') ?? 'Clients récurrents',
               onSeeMore: recurringClients.length > 5
                   ? () => _showListBottomSheet(
                         context,
-                        title: 'Clients récurrents',
+                        title: l?.tr('statistics_recurring_clients') ?? 'Clients récurrents',
                         itemCount: recurringClients.length,
                         itemBuilder: (i) {
                           final cid = recurringClients[i].key;
@@ -480,10 +487,10 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
 
           // New clients this month
           const SizedBox(height: 28),
-          _SectionHeader(title: 'Nouveaux clients ce mois'),
+          _SectionHeader(title: l?.tr('statistics_new_clients_month') ?? 'Nouveaux clients ce mois'),
           const SizedBox(height: 14),
           _KpiCard(
-            label: 'Nouveaux clients',
+            label: l?.tr('statistics_new_clients') ?? 'Nouveaux clients',
             value: '${newClientsThisMonth.length}',
             icon: Icons.person_add_outlined,
             iconColor: const Color(0xFF7C3AED),
@@ -493,7 +500,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           // Cancellation rate
           if (items.isNotEmpty) ...[
             const SizedBox(height: 28),
-            _SectionHeader(title: 'Taux d\'annulation'),
+            _SectionHeader(title: l?.tr('statistics_cancellation_rate') ?? 'Taux d\'annulation'),
             const SizedBox(height: 14),
             _CancellationRate(
               total: completed.length + cancelled.length,
@@ -503,13 +510,13 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
 
           // ── Boutique stats ──
           const SizedBox(height: 28),
-          _SectionHeader(title: 'Ventes boutique'),
+          _SectionHeader(title: l?.tr('statistics_boutique_sales') ?? 'Ventes boutique'),
           const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: _KpiCard(
-                  label: 'CA Boutique',
+                  label: l?.tr('statistics_boutique_revenue') ?? 'CA Boutique',
                   value: '${boutiqueRevenue.toStringAsFixed(0)} MAD',
                   icon: Icons.storefront_outlined,
                   iconColor: const Color(0xFFD97706),
@@ -519,7 +526,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               const SizedBox(width: 12),
               Expanded(
                 child: _KpiCard(
-                  label: 'Commandes',
+                  label: l?.tr('statistics_orders') ?? 'Commandes',
                   value: '${completedOrders.length}',
                   icon: Icons.shopping_cart_outlined,
                   iconColor: const Color(0xFF059669),
@@ -533,11 +540,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
           if (topProducts.isNotEmpty) ...[
             const SizedBox(height: 28),
             _SectionHeader(
-              title: 'Top produits vendus',
+              title: l?.tr('statistics_top_products') ?? 'Top produits vendus',
               onSeeMore: topProducts.length > 5
                   ? () => _showListBottomSheet(
                         context,
-                        title: 'Top produits vendus',
+                        title: l?.tr('statistics_top_products') ?? 'Top produits vendus',
                         itemCount: topProducts.length,
                         itemBuilder: (i) => _ProductRow(
                           name: topProducts[i].key,
@@ -1352,7 +1359,7 @@ class _SectionHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Voir plus',
+                  AppLocalizations.of(context)?.tr('common_see_more') ?? 'Voir tout',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

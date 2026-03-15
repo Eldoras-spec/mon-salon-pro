@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
+import '../services/app_localizations.dart';
 import 'owner_onboarding_step3_screen.dart';
 
 class OwnerOnboardingStep2Screen extends StatefulWidget {
@@ -170,6 +171,7 @@ class _OwnerOnboardingStep2ScreenState
   }
 
   Widget _buildFormSection() {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       child: Center(
@@ -195,8 +197,8 @@ class _OwnerOnboardingStep2ScreenState
                         child: const Icon(Icons.arrow_back,
                             size: 12, color: AppColors.secondary500),
                       ),
-                      label: const Text('Retour',
-                          style: TextStyle(
+                      label: Text(l?.tr('onboarding_back') ?? 'Retour',
+                          style: const TextStyle(
                               color: AppColors.secondary500,
                               fontWeight: FontWeight.w600)),
                     ),
@@ -208,8 +210,8 @@ class _OwnerOnboardingStep2ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Portfolio visuel',
-                        style: TextStyle(
+                    Text(l?.tr('onboarding_step2_title') ?? 'Portfolio visuel',
+                        style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: AppColors.brand900)),
@@ -219,8 +221,8 @@ class _OwnerOnboardingStep2ScreenState
                       decoration: BoxDecoration(
                           color: AppColors.brand50,
                           borderRadius: BorderRadius.circular(6)),
-                      child: const Text('Étape 3 sur 6',
-                          style: TextStyle(
+                      child: Text(l?.tr('onboarding_step2_step') ?? 'Étape 3 sur 6',
+                          style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: AppColors.brand600)),
@@ -260,7 +262,7 @@ class _OwnerOnboardingStep2ScreenState
 
                 // Header
                 Text(
-                  'Ajoutez vos photos de salon',
+                  l?.tr('onboarding_step2_subtitle') ?? 'Ajoutez vos photos de salon',
                   style: GoogleFonts.dmSans(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -277,7 +279,7 @@ class _OwnerOnboardingStep2ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Photo de couverture *',
+                    Text(l?.tr('onboarding_step2_cover') ?? 'Photo de couverture *',
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -288,7 +290,7 @@ class _OwnerOnboardingStep2ScreenState
                       decoration: BoxDecoration(
                           color: AppColors.secondary50,
                           borderRadius: BorderRadius.circular(6)),
-                      child: const Text('Format 16:9 recommandé',
+                      child: Text(l?.tr('onboarding_step2_cover_format') ?? 'Format 16:9 recommandé',
                           style: TextStyle(
                               fontSize: 10, color: AppColors.secondary400)),
                     ),
@@ -339,13 +341,13 @@ class _OwnerOnboardingStep2ScreenState
                                               .withValues(alpha: 0.9),
                                           borderRadius:
                                               BorderRadius.circular(6)),
-                                      child: const Row(children: [
-                                        Icon(Icons.star,
+                                      child: Row(children: [
+                                        const Icon(Icons.star,
                                             size: 12,
                                             color: AppColors.brand700),
-                                        SizedBox(width: 4),
-                                        Text('Couverture',
-                                            style: TextStyle(
+                                        const SizedBox(width: 4),
+                                        Text(l?.tr('onboarding_step2_cover_label') ?? 'Couverture',
+                                            style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.bold,
                                                 color: AppColors.brand700)),
@@ -399,15 +401,15 @@ class _OwnerOnboardingStep2ScreenState
                                       color: AppColors.brand400, size: 24),
                                 ),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  'Appuyer pour choisir une photo',
+                                Text(
+                                  l?.tr('onboarding_step2_cover_tap') ?? 'Appuyer pour choisir une photo',
                                   style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.secondary700),
                                 ),
                                 const SizedBox(height: 8),
-                                const Text('JPG, PNG ou WEBP (Max 5 Mo)',
+                                Text(l?.tr('onboarding_step2_cover_formats') ?? 'JPG, PNG ou WEBP (Max 5 Mo)',
                                     style: TextStyle(
                                         fontSize: 10,
                                         color: AppColors.secondary400)),
@@ -427,10 +429,10 @@ class _OwnerOnboardingStep2ScreenState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Images de galerie',
+                        Text(l?.tr('onboarding_step2_gallery') ?? 'Images de galerie',
                             style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -493,7 +495,7 @@ class _OwnerOnboardingStep2ScreenState
                                     color: AppColors.secondary400, size: 16),
                               ),
                               const SizedBox(height: 8),
-                              const Text('Ajouter',
+                              Text(l?.tr('onboarding_step2_add') ?? 'Ajouter',
                                   style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
@@ -601,7 +603,7 @@ class _OwnerOnboardingStep2ScreenState
 
                 // Actions
                 CustomButton(
-                  text: 'Continuer',
+                  text: l?.tr('onboarding_step2_continue') ?? 'Continuer',
                   onPressed: _handleNext,
                   isLoading: _isAnyUploading,
                   icon: Icons.arrow_forward,
@@ -617,14 +619,14 @@ class _OwnerOnboardingStep2ScreenState
                           borderRadius: BorderRadius.circular(12)),
                       side: const BorderSide(color: AppColors.secondary200),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.arrow_back,
+                        const Icon(Icons.arrow_back,
                             size: 14, color: AppColors.secondary700),
-                        SizedBox(width: 8),
-                        Text('Retour',
-                            style: TextStyle(
+                        const SizedBox(width: 8),
+                        Text(l?.tr('onboarding_back') ?? 'Retour',
+                            style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.secondary700)),
                       ],

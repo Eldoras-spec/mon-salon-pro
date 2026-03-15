@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 
@@ -14,6 +15,7 @@ class OwnerTeamScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final teamAsync = ref.watch(ownerTeamProvider);
     final salonAsync = ref.watch(ownerSalonProvider);
     final activeMember = ref.watch(activeTeamMemberProvider);
@@ -33,7 +35,7 @@ class OwnerTeamScreen extends ConsumerWidget {
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              'Mon Équipe',
+              l?.tr('team_title') ?? 'Mon Équipe',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -49,7 +51,7 @@ class OwnerTeamScreen extends ConsumerWidget {
                     onPressed: () => _showAddMemberSheet(
                         context, ref, salonAsync.value?.id,
                         salonAsync.value?.services ?? []),
-                    tooltip: 'Ajouter un membre',
+                    tooltip: l?.tr('team_add_member') ?? 'Ajouter un membre',
                   ),
                   loading: () => const SizedBox(width: 48),
                   error: (_, _) => const SizedBox(width: 48),
@@ -67,7 +69,7 @@ class OwnerTeamScreen extends ConsumerWidget {
                 ),
               ),
               error: (e, _) => Center(
-                child: Text('Erreur: $e',
+                child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e',
                     style: const TextStyle(color: AppColors.secondary500)),
               ),
               data: (members) {
@@ -86,7 +88,7 @@ class OwnerTeamScreen extends ConsumerWidget {
                               icon: Icons.groups_outlined,
                               iconBg: AppColors.brand50,
                               iconColor: AppColors.brand600,
-                              label: 'Membres',
+                              label: l?.tr('team_members_tab') ?? 'Membres',
                               value: '${members.length}',
                             ),
                           ),
@@ -96,7 +98,7 @@ class OwnerTeamScreen extends ConsumerWidget {
                               icon: Icons.calendar_today_outlined,
                               iconBg: const Color(0xFFF0FDF4),
                               iconColor: const Color(0xFF16A34A),
-                              label: 'Disponibles',
+                              label: l?.tr('team_available_tab') ?? 'Disponibles',
                               value: '$activeCount',
                             ),
                           ),
@@ -106,7 +108,7 @@ class OwnerTeamScreen extends ConsumerWidget {
 
                       // Team list
                       Text(
-                        'Membres de l\'équipe',
+                        l?.tr('team_section_title') ?? 'Membres de l\'équipe',
                         style: GoogleFonts.dmSans(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -177,20 +179,22 @@ class OwnerTeamScreen extends ConsumerWidget {
   void _confirmDelete(BuildContext context, WidgetRef ref,
       TeamMemberModel member, String? salonId) {
     if (salonId == null) return;
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Supprimer ${member.name} ?',
+        title: Text(
+            (l?.tr('team_delete_title') ?? 'Supprimer {name} ?').replaceAll('{name}', member.name),
             style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold, color: AppColors.brand950)),
-        content: const Text(
-            'Cette action est irréversible. Le membre sera supprimé définitivement.'),
+        content: Text(
+            l?.tr('team_delete_message_alt') ?? 'Cette action est irréversible. Le membre sera supprimé définitivement.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler',
-                style: TextStyle(color: AppColors.secondary500)),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler',
+                style: const TextStyle(color: AppColors.secondary500)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -199,7 +203,7 @@ class OwnerTeamScreen extends ConsumerWidget {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('${member.name} supprimé'),
+                    content: Text((l?.tr('team_deleted') ?? '{name} supprimé').replaceAll('{name}', member.name)),
                     backgroundColor: AppColors.brand700,
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -213,7 +217,7 @@ class OwnerTeamScreen extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Supprimer'),
+            child: Text(l?.tr('common_delete') ?? 'Supprimer'),
           ),
         ],
       ),
@@ -256,12 +260,12 @@ class _MemberCard extends StatelessWidget {
     }
   }
 
-  String get _roleLabel {
+  String _roleLabel(AppLocalizations? l) {
     switch (member.role) {
       case 'gerant':
-        return 'Gérant(e)';
+        return l?.tr('team_role_manager') ?? 'Gérant(e)';
       default:
-        return 'Employé(e)';
+        return l?.tr('team_role_member') ?? 'Employé(e)';
     }
   }
 
@@ -275,6 +279,7 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -334,7 +339,7 @@ class _MemberCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        _roleLabel,
+                        _roleLabel(l),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -409,13 +414,13 @@ class _MemberCard extends StatelessWidget {
               icon: const Icon(Icons.edit_outlined,
                   size: 18, color: AppColors.secondary400),
               onPressed: onEdit,
-              tooltip: 'Modifier',
+              tooltip: l?.tr('common_edit') ?? 'Modifier',
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline,
                   size: 18, color: Color(0xFFDC2626)),
               onPressed: onDelete,
-              tooltip: 'Supprimer',
+              tooltip: l?.tr('common_delete') ?? 'Supprimer',
             ),
           ],
         ],
@@ -433,6 +438,7 @@ class _EmptyTeam extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
@@ -455,7 +461,7 @@ class _EmptyTeam extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Aucun membre pour l\'instant',
+            l?.tr('team_empty_title') ?? 'Aucun membre pour l\'instant',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -463,9 +469,9 @@ class _EmptyTeam extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Ajoutez les membres de votre équipe pour\ngérer leurs horaires et leurs services.',
-            style: TextStyle(
+          Text(
+            l?.tr('team_empty_subtitle_alt') ?? 'Ajoutez les membres de votre équipe pour\ngérer leurs horaires et leurs services.',
+            style: const TextStyle(
               fontSize: 12,
               color: AppColors.secondary400,
               height: 1.5,
@@ -477,7 +483,7 @@ class _EmptyTeam extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.person_add_outlined, size: 18),
-              label: const Text('Ajouter un membre'),
+              label: Text(l?.tr('team_add_member') ?? 'Ajouter un membre'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brand700,
                 foregroundColor: Colors.white,
@@ -597,9 +603,10 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur: $e'),
+            content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -612,6 +619,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Padding(
       padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -640,7 +648,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  _isEditing ? 'Modifier le membre' : 'Ajouter un membre',
+                  _isEditing
+                      ? (l?.tr('team_edit_title') ?? 'Modifier le membre')
+                      : (l?.tr('team_add_title') ?? 'Ajouter un membre'),
                   style: GoogleFonts.dmSans(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -650,32 +660,32 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                 const SizedBox(height: 20),
 
                 // Name
-                _label('Nom complet *'),
+                _label(l?.tr('team_name_label') ?? 'Nom complet *'),
                 TextFormField(
                   controller: _nameCtrl,
                   decoration: _inputDeco('Ex: Sophie Martin'),
                   validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Requis' : null,
+                      v == null || v.trim().isEmpty ? (l?.tr('team_required') ?? 'Requis') : null,
                 ),
                 const SizedBox(height: 16),
 
                 // Role
-                _label('Rôle *'),
+                _label(l?.tr('team_role_label') ?? 'Rôle *'),
                 DropdownButtonFormField<String>(
                   initialValue: _role,
                   decoration: _inputDeco(null),
-                  items: const [
+                  items: [
                     DropdownMenuItem(
-                        value: 'member', child: Text('Employé(e)')),
+                        value: 'member', child: Text(l?.tr('team_role_member') ?? 'Employé(e)')),
                     DropdownMenuItem(
-                        value: 'gerant', child: Text('Gérant(e)')),
+                        value: 'gerant', child: Text(l?.tr('team_role_manager') ?? 'Gérant(e)')),
                   ],
                   onChanged: (v) => setState(() => _role = v ?? 'member'),
                 ),
                 const SizedBox(height: 16),
 
                 // Phone
-                _label('Téléphone (optionnel)'),
+                _label(l?.tr('team_phone_label') ?? 'Téléphone (optionnel)'),
                 TextFormField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.phone,
@@ -686,8 +696,8 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                 // PIN — only for gérant
                 if (_role == 'gerant') ...[
                   _label(_isEditing
-                      ? 'Nouveau PIN 6 chiffres (laisser vide = inchangé)'
-                      : 'PIN 6 chiffres *'),
+                      ? (l?.tr('team_pin_label_edit') ?? 'Nouveau PIN 6 chiffres (laisser vide = inchangé)')
+                      : (l?.tr('team_pin_label_new') ?? 'PIN 6 chiffres *')),
                   TextFormField(
                     controller: _pinCtrl,
                     obscureText: !_showPin,
@@ -708,7 +718,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                     validator: (v) {
                       if (_isEditing && (v == null || v.isEmpty)) return null;
                       if (v == null || v.length != 6) {
-                        return 'Le PIN doit contenir exactement 6 chiffres';
+                        return l?.tr('team_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres';
                       }
                       return null;
                     },
@@ -717,8 +727,8 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
 
                   // Confirm PIN
                   _label(_isEditing
-                      ? 'Confirmer le nouveau PIN'
-                      : 'Confirmer le PIN *'),
+                      ? (l?.tr('team_pin_confirm_edit') ?? 'Confirmer le nouveau PIN')
+                      : (l?.tr('team_pin_confirm_new') ?? 'Confirmer le PIN *')),
                   TextFormField(
                     controller: _pinConfirmCtrl,
                     obscureText: !_showPinConfirm,
@@ -739,7 +749,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                     validator: (v) {
                       if (_isEditing && _pinCtrl.text.isEmpty) return null;
                       if (v != _pinCtrl.text) {
-                        return 'Les PINs ne correspondent pas';
+                        return l?.tr('team_pin_error_mismatch') ?? 'Les PINs ne correspondent pas';
                       }
                       return null;
                     },
@@ -751,13 +761,13 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                 if (widget.services.isNotEmpty) ...[
                   Row(
                     children: [
-                      _label('Services maîtrisés *'),
+                      _label(l?.tr('team_services_label') ?? 'Services maîtrisés *'),
                       if (_servicesError)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8, bottom: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8, bottom: 6),
                           child: Text(
-                            'Sélectionnez au moins un service',
-                            style: TextStyle(
+                            l?.tr('team_services_hint') ?? 'Sélectionnez au moins un service',
+                            style: const TextStyle(
                                 fontSize: 11, color: Color(0xFFDC2626)),
                           ),
                         ),
@@ -848,7 +858,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                                 color: Colors.white, strokeWidth: 2),
                           )
                         : Text(
-                            _isEditing ? 'Enregistrer' : 'Ajouter le membre'),
+                            _isEditing
+                                ? (l?.tr('team_save') ?? 'Enregistrer')
+                                : (l?.tr('team_add_button') ?? 'Ajouter le membre')),
                   ),
                 ),
               ],

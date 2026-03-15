@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 
 const _memberColors = [
@@ -145,6 +146,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
   }
 
   Future<void> _shareAgenda() async {
+    final l = AppLocalizations.of(context);
     final dateLabel =
         DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(_selectedDate);
     final buf = StringBuffer();
@@ -152,7 +154,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
     buf.writeln('─────────────────────');
 
     if (_appointments.isEmpty) {
-      buf.writeln('Aucun rendez-vous prévu.');
+      buf.writeln(l?.tr('agenda_no_appointments') ?? 'Aucun rendez-vous prévu.');
     } else {
       for (final m in _members) {
         final memberAppts = _appointmentsForMember(m.id);
@@ -163,17 +165,17 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
           final start = DateFormat('HH:mm').format(a.dateTime);
           final end = DateFormat('HH:mm')
               .format(a.dateTime.add(Duration(minutes: a.durationMinutes)));
-          final client = a.clientName ?? 'Client';
+          final client = a.clientName ?? (l?.tr('agenda_client') ?? 'Client');
           buf.writeln('  ⏰ $start - $end | ${a.serviceName} | $client');
         }
       }
       final unassigned = _unassignedAppointments();
       if (unassigned.isNotEmpty) {
         unassigned.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-        buf.writeln('\n📌 Non assigné');
+        buf.writeln('\n📌 ${l?.tr('agenda_unassigned') ?? 'Non assigné'}');
         for (final a in unassigned) {
           final start = DateFormat('HH:mm').format(a.dateTime);
-          final client = a.clientName ?? 'Client';
+          final client = a.clientName ?? (l?.tr('agenda_client') ?? 'Client');
           buf.writeln('  ⏰ $start | ${a.serviceName} | $client');
         }
       }
@@ -185,9 +187,9 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
     await Clipboard.setData(ClipboardData(text: buf.toString()));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Planning copié ! Collez-le dans WhatsApp ou SMS.'),
-          backgroundColor: Color(0xFF16A34A),
+        SnackBar(
+          content: Text(l?.tr('agenda_planning_copied') ?? 'Planning copié ! Collez-le dans WhatsApp ou SMS.'),
+          backgroundColor: const Color(0xFF16A34A),
         ),
       );
     }
@@ -195,6 +197,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isToday = DateUtils.isSameDay(_selectedDate, DateTime.now());
 
     return Scaffold(
@@ -211,7 +214,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
         title: Row(
           children: [
             Text(
-              'Agenda',
+              l?.tr('agenda_title') ?? 'Agenda',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -228,7 +231,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             GestureDetector(
               onTap: isToday ? null : _goToToday,
               child: Text(
-                isToday ? "Aujourd'hui" : _fullDateLabel,
+                isToday ? (l?.tr('agenda_today') ?? "Aujourd'hui") : _fullDateLabel,
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -280,6 +283,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
   }
 
   Widget _buildMemberHeader() {
+    final l = AppLocalizations.of(context);
     final unassigned = _unassignedAppointments();
     return Container(
       height: 76,
@@ -339,7 +343,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                             ),
                           ),
                           Text(
-                            '$apptCount RDV',
+                            (l?.tr('agenda_count') ?? '{count} RDV').replaceAll('{count}', '$apptCount'),
                             style: const TextStyle(
                               fontSize: 10,
                               color: AppColors.secondary400,
@@ -363,16 +367,16 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                                 size: 16, color: AppColors.secondary500),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            'Non assigné',
-                            style: TextStyle(
+                          Text(
+                            l?.tr('agenda_unassigned') ?? 'Non assigné',
+                            style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: AppColors.secondary500,
                             ),
                           ),
                           Text(
-                            '${unassigned.length} RDV',
+                            (l?.tr('agenda_count') ?? '{count} RDV').replaceAll('{count}', '${unassigned.length}'),
                             style: const TextStyle(
                               fontSize: 10,
                               color: AppColors.secondary400,
@@ -625,6 +629,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
   }
 
   Widget _buildEmptyState() {
+    final l = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -632,18 +637,18 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
           Icon(Icons.groups_outlined,
               size: 48, color: AppColors.secondary300),
           const SizedBox(height: 12),
-          const Text(
-            'Aucun membre dans l\'équipe',
-            style: TextStyle(
+          Text(
+            l?.tr('agenda_no_team_members') ?? 'Aucun membre dans l\'équipe',
+            style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
               color: AppColors.secondary500,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Ajoutez des membres pour voir le planning',
-            style: TextStyle(fontSize: 13, color: AppColors.secondary400),
+          Text(
+            l?.tr('agenda_add_members_hint') ?? 'Ajoutez des membres pour voir le planning',
+            style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
           ),
         ],
       ),
@@ -651,6 +656,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
   }
 
   void _showAppointmentDetails(AppointmentModel appt, int colorIndex) async {
+    final l = AppLocalizations.of(context);
     final endTime = appt.dateTime.add(Duration(minutes: appt.durationMinutes));
     final dateStr =
         DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(appt.dateTime);
@@ -744,10 +750,10 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             _detailRow(
               Icons.info_outline,
               appt.status == 'upcoming'
-                  ? 'À venir'
+                  ? (l?.tr('appointments_status_upcoming') ?? 'À venir')
                   : appt.status == 'completed'
-                      ? 'Terminé'
-                      : 'Annulé',
+                      ? (l?.tr('appointments_status_completed') ?? 'Terminé')
+                      : (l?.tr('appointments_status_cancelled') ?? 'Annulé'),
             ),
           ],
         ),

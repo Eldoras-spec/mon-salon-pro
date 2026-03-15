@@ -13,6 +13,7 @@ import '../theme/app_constants.dart';
 import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import 'owner_onboarding_step1_screen.dart';
 
@@ -23,6 +24,7 @@ class OwnerSalonScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
 
     return Scaffold(
@@ -31,7 +33,7 @@ class OwnerSalonScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.brand600),
         ),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         data: (salon) {
           if (salon == null) {
             return Center(
@@ -42,7 +44,7 @@ class OwnerSalonScreen extends ConsumerWidget {
                       size: 56, color: AppColors.secondary300),
                   const SizedBox(height: 16),
                   Text(
-                    'Salon non configuré',
+                    l?.tr('salon_not_configured') ?? 'Salon non configuré',
                     style: GoogleFonts.dmSans(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -50,9 +52,9 @@ class OwnerSalonScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Complétez la configuration de votre salon.',
-                    style: TextStyle(
+                  Text(
+                    l?.tr('salon_configure_hint') ?? 'Complétez la configuration de votre salon.',
+                    style: const TextStyle(
                         color: AppColors.secondary400, fontSize: 13),
                   ),
                   const SizedBox(height: 24),
@@ -67,7 +69,7 @@ class OwnerSalonScreen extends ConsumerWidget {
                       ).then((_) => ref.invalidate(ownerSalonProvider));
                     },
                     icon: const Icon(Icons.settings_outlined, size: 18),
-                    label: const Text('Configurer mon salon'),
+                    label: Text(l?.tr('salon_configure_button') ?? 'Configurer mon salon'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.brand700,
                       foregroundColor: Colors.white,
@@ -102,6 +104,7 @@ class _SalonBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return CustomScrollView(
       slivers: [
         // ── App bar with cover ──────────────────────────────────────────────
@@ -112,7 +115,7 @@ class _SalonBody extends StatelessWidget {
           elevation: 0,
           centerTitle: false,
           title: Text(
-            'Mon Salon',
+            l?.tr('salon_title') ?? 'Mon Salon',
             style: GoogleFonts.dmSans(
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -150,8 +153,8 @@ class _SalonBody extends StatelessWidget {
                             const SizedBox(width: 6),
                             Text(
                               salon.images.isNotEmpty
-                                  ? 'Modifier'
-                                  : 'Ajouter une photo',
+                                  ? (l?.tr('salon_edit_cover') ?? 'Modifier')
+                                  : (l?.tr('salon_add_cover') ?? 'Ajouter une photo'),
                               style: GoogleFonts.dmSans(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -180,8 +183,8 @@ class _SalonBody extends StatelessWidget {
 
               // ── Informations ──────────────────────────────────────────────
               _SectionCard(
-                title: 'Informations',
-                actionLabel: 'Modifier',
+                title: l?.tr('salon_section_info') ?? 'Informations',
+                actionLabel: l?.tr('salon_edit') ?? 'Modifier',
                 onAction: () => _showEditInfoSheet(context, salon),
                 child: _InfoRows(salon: salon),
               ),
@@ -190,8 +193,8 @@ class _SalonBody extends StatelessWidget {
 
               // ── Horaires ──────────────────────────────────────────────────
               _SectionCard(
-                title: "Horaires d'ouverture",
-                actionLabel: 'Modifier',
+                title: l?.tr('salon_section_hours') ?? "Horaires d'ouverture",
+                actionLabel: l?.tr('salon_edit') ?? 'Modifier',
                 onAction: () => _showEditHoursSheet(context, salon),
                 child: _HoursRows(workingHours: salon.workingHours),
               ),
@@ -210,8 +213,8 @@ class _SalonBody extends StatelessWidget {
 
               // ── Services ──────────────────────────────────────────────────
               _SectionCard(
-                title: 'Services (${salon.services.length})',
-                actionLabel: 'Gérer',
+                title: (l?.tr('salon_section_services') ?? 'Services ({count})').replaceAll('{count}', '${salon.services.length}'),
+                actionLabel: l?.tr('salon_manage') ?? 'Gérer',
                 onAction: () => _showServicesSheet(context, salon),
                 child: _ServicesPreview(services: salon.services),
               ),
@@ -220,8 +223,8 @@ class _SalonBody extends StatelessWidget {
 
               // ── Packs ──────────────────────────────────────────────────────
               _SectionCard(
-                title: 'Packs (${salon.servicePacks.length})',
-                actionLabel: 'Gérer',
+                title: (l?.tr('salon_section_packs') ?? 'Packs ({count})').replaceAll('{count}', '${salon.servicePacks.length}'),
+                actionLabel: l?.tr('salon_manage') ?? 'Gérer',
                 onAction: () => _showPacksSheet(context, salon),
                 child: _PacksPreview(packs: salon.servicePacks),
               ),
@@ -253,8 +256,9 @@ class _SalonBody extends StatelessWidget {
 
     // Show loading
     if (context.mounted) {
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Upload en cours…')),
+        SnackBar(content: Text(l?.tr('salon_uploading') ?? 'Upload en cours…')),
       );
     }
 
@@ -277,16 +281,18 @@ class _SalonBody extends StatelessWidget {
       ref.invalidate(ownerSalonProvider);
 
       if (context.mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Photo de couverture mise à jour !')),
+          SnackBar(content: Text(l?.tr('salon_cover_updated') ?? 'Photo de couverture mise à jour !')),
         );
       }
     } catch (e) {
       if (context.mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     }
@@ -514,14 +520,15 @@ class _InfoRows extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Column(
       children: [
-        _InfoRow(icon: Icons.storefront_outlined, label: 'Nom', value: salon.name),
-        _InfoRow(icon: Icons.location_city_outlined, label: 'Ville', value: salon.city),
-        _InfoRow(icon: Icons.map_outlined, label: 'Adresse', value: salon.address),
+        _InfoRow(icon: Icons.storefront_outlined, label: l?.tr('salon_info_name') ?? 'Nom', value: salon.name),
+        _InfoRow(icon: Icons.location_city_outlined, label: l?.tr('salon_info_city') ?? 'Ville', value: salon.city),
+        _InfoRow(icon: Icons.map_outlined, label: l?.tr('salon_info_address') ?? 'Adresse', value: salon.address),
         _InfoRow(
           icon: Icons.description_outlined,
-          label: 'Description',
+          label: l?.tr('salon_info_description') ?? 'Description',
           value: salon.description.isNotEmpty ? salon.description : '—',
         ),
       ],
@@ -573,28 +580,26 @@ class _HoursRows extends StatelessWidget {
   const _HoursRows({required this.workingHours});
   final Map<String, dynamic> workingHours;
 
-  static const _days = [
-    ('lundi', 'Lundi'),
-    ('mardi', 'Mardi'),
-    ('mercredi', 'Mercredi'),
-    ('jeudi', 'Jeudi'),
-    ('vendredi', 'Vendredi'),
-    ('samedi', 'Samedi'),
-    ('dimanche', 'Dimanche'),
+  static const _dayKeys = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  static const _dayTrKeys = [
+    'day_monday', 'day_tuesday', 'day_wednesday', 'day_thursday',
+    'day_friday', 'day_saturday', 'day_sunday',
   ];
+  static const _dayFallbacks = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Column(
-      children: _days.map((entry) {
-        final dayKey = entry.$1;
-        final dayLabel = entry.$2;
+      children: List.generate(_dayKeys.length, (i) {
+        final dayKey = _dayKeys[i];
+        final dayLabel = l?.tr(_dayTrKeys[i]) ?? _dayFallbacks[i];
         final data =
             workingHours[dayKey] as Map<String, dynamic>?;
         final isOpen = data?['isOpen'] == true;
         final hours = isOpen
             ? '${data!['open']} – ${data['close']}'
-            : 'Fermé';
+            : (l?.tr('salon_hours_closed') ?? 'Fermé');
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
@@ -632,7 +637,7 @@ class _HoursRows extends StatelessWidget {
             ],
           ),
         );
-      }).toList(),
+      }),
     );
   }
 }
@@ -645,10 +650,11 @@ class _ServicesPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (services.isEmpty) {
-      return const Text(
-        'Aucun service ajouté',
-        style: TextStyle(color: AppColors.secondary400, fontSize: 13),
+      return Text(
+        l?.tr('salon_no_services') ?? 'Aucun service ajouté',
+        style: const TextStyle(color: AppColors.secondary400, fontSize: 13),
       );
     }
     final preview = services.take(4).toList();
@@ -692,7 +698,7 @@ class _ServicesPreview extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              '+ ${services.length - 4} autres services',
+              (l?.tr('salon_more_services') ?? '+ {count} autres services').replaceAll('{count}', '${services.length - 4}'),
               style: const TextStyle(
                   fontSize: 12, color: AppColors.secondary400),
             ),
@@ -780,18 +786,19 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
   Future<void> _getCurrentLocation() async {
     setState(() => _isGettingLocation = true);
     try {
+      final l = AppLocalizations.of(context);
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw 'Le service de localisation est désactivé.';
+      if (!serviceEnabled) throw l?.tr('salon_edit_info_location_disabled') ?? 'Le service de localisation est désactivé.';
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          throw 'Permission de localisation refusée.';
+          throw l?.tr('salon_edit_info_location_denied') ?? 'Permission de localisation refusée.';
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        throw 'Permission de localisation définitivement refusée. Activez-la dans les paramètres.';
+        throw l?.tr('salon_edit_info_location_denied_forever') ?? 'Permission de localisation définitivement refusée. Activez-la dans les paramètres.';
       }
 
       final position = await Geolocator.getCurrentPosition();
@@ -837,9 +844,10 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
     final city = _city.text.trim();
 
     if (name.isEmpty || city.isEmpty) {
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez remplir les champs obligatoires (nom et ville)'),
+        SnackBar(
+          content: Text(l?.tr('salon_edit_info_required') ?? 'Veuillez remplir les champs obligatoires (nom et ville)'),
         ),
       );
       return;
@@ -869,10 +877,11 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         } catch (_) {}
         if (lat == null || lng == null) {
           if (!mounted) return;
+          final l = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Impossible de localiser cette adresse. Veuillez utiliser le bouton GPS.',
+                l?.tr('salon_edit_info_geocode_error') ?? 'Impossible de localiser cette adresse. Veuillez utiliser le bouton GPS.',
               ),
               backgroundColor: Colors.redAccent,
               duration: Duration(seconds: 4),
@@ -910,7 +919,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -920,6 +929,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 20),
@@ -930,7 +940,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
           children: [
             _SheetHandle(),
             Text(
-              'Modifier les informations',
+              l?.tr('salon_edit_info_title') ?? 'Modifier les informations',
               style: GoogleFonts.dmSans(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
@@ -939,16 +949,16 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
             const SizedBox(height: 20),
 
             // Salon name
-            _Field(controller: _name, label: 'Nom du salon'),
+            _Field(controller: _name, label: l?.tr('salon_edit_info_name') ?? 'Nom du salon'),
             const SizedBox(height: 16),
 
             // Address header + GPS button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Adresse',
-                  style: TextStyle(
+                Text(
+                  l?.tr('salon_edit_info_address_title') ?? 'Adresse',
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: AppColors.secondary700,
@@ -977,10 +987,10 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
                         ),
                   label: Text(
                     _isGettingLocation
-                        ? 'Localisation...'
+                        ? (l?.tr('salon_edit_info_gps_loading') ?? 'Localisation...')
                         : (_latitude != null
-                            ? 'Position capturée'
-                            : 'Utiliser ma position'),
+                            ? (l?.tr('salon_edit_info_gps_captured') ?? 'Position capturée')
+                            : (l?.tr('salon_edit_info_gps_use') ?? 'Utiliser ma position')),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1000,11 +1010,11 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
             const SizedBox(height: 10),
 
             // Country
-            _Field(controller: _country, label: 'Pays'),
+            _Field(controller: _country, label: l?.tr('salon_edit_info_country') ?? 'Pays'),
             const SizedBox(height: 10),
 
             // Street
-            _Field(controller: _street, label: 'Adresse (rue et numéro)'),
+            _Field(controller: _street, label: l?.tr('salon_edit_info_street') ?? 'Adresse (rue et numéro)'),
             const SizedBox(height: 10),
 
             // City + Postal code side by side
@@ -1013,14 +1023,14 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: _Field(controller: _city, label: 'Ville *'),
+                  child: _Field(controller: _city, label: l?.tr('salon_edit_info_city') ?? 'Ville *'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 2,
                   child: _Field(
                     controller: _postalCode,
-                    label: 'Code postal',
+                    label: l?.tr('salon_edit_info_postal') ?? 'Code postal',
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -1031,7 +1041,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
             // Description
             _Field(
               controller: _description,
-              label: 'Description',
+              label: l?.tr('salon_edit_info_description') ?? 'Description',
               maxLines: 3,
             ),
             const SizedBox(height: 24),
@@ -1053,8 +1063,8 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
                         height: 20,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Enregistrer',
-                        style: TextStyle(
+                    : Text(l?.tr('common_save') ?? 'Enregistrer',
+                        style: const TextStyle(
                             color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
@@ -1077,15 +1087,12 @@ class _EditHoursSheet extends StatefulWidget {
 }
 
 class _EditHoursSheetState extends State<_EditHoursSheet> {
-  static const _days = [
-    ('lundi', 'Lundi'),
-    ('mardi', 'Mardi'),
-    ('mercredi', 'Mercredi'),
-    ('jeudi', 'Jeudi'),
-    ('vendredi', 'Vendredi'),
-    ('samedi', 'Samedi'),
-    ('dimanche', 'Dimanche'),
+  static const _dayKeys = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  static const _dayTrKeys = [
+    'day_monday', 'day_tuesday', 'day_wednesday', 'day_thursday',
+    'day_friday', 'day_saturday', 'day_sunday',
   ];
+  static const _dayFallbacks = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
   late Map<String, Map<String, dynamic>> _hours;
   bool _loading = false;
@@ -1094,7 +1101,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
   void initState() {
     super.initState();
     _hours = {};
-    for (final (key, _) in _days) {
+    for (final key in _dayKeys) {
       final data = widget.salon.workingHours[key] as Map<String, dynamic>?;
       _hours[key] = {
         'isOpen': data?['isOpen'] ?? false,
@@ -1146,7 +1153,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1161,7 +1168,9 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
       initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
-      builder: (_, controller) => Column(
+      builder: (_, controller) {
+        final l = AppLocalizations.of(context);
+        return Column(
         children: [
           _SheetHandle(),
           Padding(
@@ -1170,7 +1179,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    "Horaires d'ouverture",
+                    l?.tr('salon_edit_hours_title') ?? "Horaires d'ouverture",
                     style: GoogleFonts.dmSans(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -1185,8 +1194,8 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                           height: 16,
                           child: CircularProgressIndicator(
                               color: AppColors.brand600, strokeWidth: 2))
-                      : const Text('Enregistrer',
-                          style: TextStyle(
+                      : Text(l?.tr('common_save') ?? 'Enregistrer',
+                          style: const TextStyle(
                               color: AppColors.brand600,
                               fontWeight: FontWeight.bold)),
                 ),
@@ -1198,9 +1207,9 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
             child: ListView(
               controller: controller,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              children: _days.map((entry) {
-                final dayKey = entry.$1;
-                final dayLabel = entry.$2;
+              children: List.generate(_dayKeys.length, (i) {
+                final dayKey = _dayKeys[i];
+                final dayLabel = l?.tr(_dayTrKeys[i]) ?? _dayFallbacks[i];
                 final data = _hours[dayKey]!;
                 final isOpen = data['isOpen'] as bool;
                 return Column(
@@ -1229,7 +1238,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                         children: [
                           Expanded(
                             child: _TimeButton(
-                              label: 'Ouverture',
+                              label: l?.tr('salon_edit_hours_opening') ?? 'Ouverture',
                               time: data['open'] as String,
                               onTap: () => _pickTime(dayKey, 'open'),
                             ),
@@ -1237,7 +1246,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _TimeButton(
-                              label: 'Fermeture',
+                              label: l?.tr('salon_edit_hours_closing') ?? 'Fermeture',
                               time: data['close'] as String,
                               onTap: () => _pickTime(dayKey, 'close'),
                             ),
@@ -1249,11 +1258,12 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                     const Divider(height: 16),
                   ],
                 );
-              }).toList(),
+              }),
             ),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 }
@@ -1379,7 +1389,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -1438,7 +1448,9 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
       initialChildSize: 0.8,
       minChildSize: 0.4,
       maxChildSize: 0.95,
-      builder: (_, controller) => Column(
+      builder: (_, controller) {
+        final l = AppLocalizations.of(context);
+        return Column(
         children: [
           _SheetHandle(),
           Padding(
@@ -1447,7 +1459,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    'Services (${_services.length})',
+                    (l?.tr('salon_services_title') ?? 'Services ({count})').replaceAll('{count}', '${_services.length}'),
                     style: GoogleFonts.dmSans(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -1458,8 +1470,8 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
                   onPressed: () => _showServiceDialog(null),
                   icon: const Icon(Icons.add, size: 16,
                       color: AppColors.brand600),
-                  label: const Text('Ajouter',
-                      style: TextStyle(
+                  label: Text(l?.tr('salon_services_add') ?? 'Ajouter',
+                      style: const TextStyle(
                           color: AppColors.brand600,
                           fontWeight: FontWeight.bold)),
                 ),
@@ -1472,8 +1484,8 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
                           height: 16,
                           child: CircularProgressIndicator(
                               color: AppColors.brand600, strokeWidth: 2))
-                      : const Text('Enregistrer',
-                          style: TextStyle(
+                      : Text(l?.tr('common_save') ?? 'Enregistrer',
+                          style: const TextStyle(
                               color: AppColors.brand600,
                               fontWeight: FontWeight.bold)),
                 ),
@@ -1483,10 +1495,10 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
           const Divider(height: 1),
           Expanded(
             child: _services.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'Aucun service. Appuyez sur + pour en ajouter.',
-                      style: TextStyle(
+                      l?.tr('salon_services_empty') ?? 'Aucun service. Appuyez sur + pour en ajouter.',
+                      style: const TextStyle(
                           color: AppColors.secondary400, fontSize: 13),
                       textAlign: TextAlign.center,
                     ),
@@ -1639,7 +1651,8 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
                   ),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 }
@@ -1703,14 +1716,15 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
   }
 
   void _submit() {
+    final l = AppLocalizations.of(context);
     if (_nameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le nom du service est requis')),
+        SnackBar(content: Text(l?.tr('salon_service_form_name_required') ?? 'Le nom du service est requis')),
       );
       return;
     }
     if (_selectedMembers.isEmpty && widget.teamMembers.isNotEmpty) {
-      setState(() => _memberError = 'Assignez au moins un employé');
+      setState(() => _memberError = l?.tr('salon_service_form_assigned_error') ?? 'Assignez au moins un employé');
       return;
     }
     final entry = <String, dynamic>{
@@ -1727,11 +1741,14 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isEdit = widget.existing != null;
     return AlertDialog(
       backgroundColor: Colors.white,
       title: Text(
-        isEdit ? 'Modifier le service' : 'Nouveau service',
+        isEdit
+            ? (l?.tr('salon_service_form_edit') ?? 'Modifier le service')
+            : (l?.tr('salon_service_form_new') ?? 'Nouveau service'),
         style: GoogleFonts.dmSans(
           fontWeight: FontWeight.bold,
           color: AppColors.brand950,
@@ -1746,13 +1763,13 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Name
-              _label('Nom du service *'),
+              _label(l?.tr('salon_service_form_name') ?? 'Nom du service *'),
               const SizedBox(height: 6),
-              _field(_nameCtrl, 'ex. Coupe femme & Brushing'),
+              _field(_nameCtrl, l?.tr('salon_service_form_name_hint') ?? 'ex. Coupe femme & Brushing'),
               const SizedBox(height: 14),
 
               // Category
-              _label('Catégorie *'),
+              _label(l?.tr('salon_service_form_category') ?? 'Catégorie *'),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1783,7 +1800,7 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _label('Durée *'),
+                        _label(l?.tr('salon_service_form_duration') ?? 'Durée *'),
                         const SizedBox(height: 6),
                         Container(
                           padding:
@@ -1818,7 +1835,7 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _label('Prix (MAD)'),
+                        _label(l?.tr('salon_service_form_price') ?? 'Prix (MAD)'),
                         const SizedBox(height: 6),
                         _field(_priceCtrl, '0',
                             keyboardType: TextInputType.number),
@@ -1830,18 +1847,18 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
               const SizedBox(height: 14),
 
               // Description
-              _label('Description'),
+              _label(l?.tr('salon_service_form_description') ?? 'Description'),
               const SizedBox(height: 6),
-              _field(_descCtrl, 'Description optionnelle…', maxLines: 2),
+              _field(_descCtrl, l?.tr('salon_service_form_description_hint') ?? 'Description optionnelle…', maxLines: 2),
               const SizedBox(height: 14),
 
               // Member assignment
               if (widget.teamMembers.isNotEmpty) ...[
-                _label('Réalisé par *'),
+                _label(l?.tr('salon_service_form_assigned') ?? 'Réalisé par *'),
                 const SizedBox(height: 2),
-                const Text(
-                  'Sélectionnez tous les employés capables de réaliser ce service',
-                  style: TextStyle(fontSize: 11, color: AppColors.secondary400),
+                Text(
+                  l?.tr('salon_service_form_assigned_hint') ?? 'Sélectionnez tous les employés capables de réaliser ce service',
+                  style: const TextStyle(fontSize: 11, color: AppColors.secondary400),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -1931,8 +1948,8 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Annuler',
-              style: TextStyle(color: AppColors.secondary400)),
+          child: Text(l?.tr('common_cancel') ?? 'Annuler',
+              style: const TextStyle(color: AppColors.secondary400)),
         ),
         ElevatedButton(
           onPressed: _submit,
@@ -1944,7 +1961,7 @@ class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
             padding: const EdgeInsets.symmetric(
                 horizontal: 24, vertical: 12),
           ),
-          child: Text(isEdit ? 'Enregistrer' : 'Ajouter'),
+          child: Text(isEdit ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter')),
         ),
       ],
     );
@@ -2100,7 +2117,7 @@ class _GallerySectionState extends State<_GallerySection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2109,20 +2126,21 @@ class _GallerySectionState extends State<_GallerySection> {
   }
 
   Future<void> _deleteImage(int index) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Supprimer cette photo ?'),
-        content: const Text('Cette action est irréversible.'),
+        title: Text(l?.tr('salon_gallery_delete_title') ?? 'Supprimer cette photo ?'),
+        content: Text(l?.tr('salon_gallery_delete_message') ?? 'Cette action est irréversible.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer',
-                style: TextStyle(color: Colors.red)),
+            child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -2142,7 +2160,7 @@ class _GallerySectionState extends State<_GallerySection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2152,6 +2170,7 @@ class _GallerySectionState extends State<_GallerySection> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -2162,7 +2181,7 @@ class _GallerySectionState extends State<_GallerySection> {
             children: [
               Expanded(
                 child: Text(
-                  'Galerie (${_images.length})',
+                  (l?.tr('salon_gallery_title') ?? 'Galerie ({count})').replaceAll('{count}', '${_images.length}'),
                   style: GoogleFonts.dmSans(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -2182,9 +2201,9 @@ class _GallerySectionState extends State<_GallerySection> {
               else
                 GestureDetector(
                   onTap: _addImage,
-                  child: const Text(
-                    '+ Ajouter',
-                    style: TextStyle(
+                  child: Text(
+                    l?.tr('salon_gallery_add') ?? '+ Ajouter',
+                    style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.brand600,
                       fontWeight: FontWeight.w600,
@@ -2212,8 +2231,8 @@ class _GallerySectionState extends State<_GallerySection> {
                       size: 32, color: AppColors.secondary300),
                   const SizedBox(height: 8),
                   Text(
-                    'Aucune photo',
-                    style: TextStyle(
+                    l?.tr('salon_gallery_empty') ?? 'Aucune photo',
+                    style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.secondary400,
                     ),
@@ -2299,10 +2318,11 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
 
       // Pick "after" image
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sélectionnez maintenant la photo "Après"'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(l?.tr('salon_before_after_select_after') ?? 'Sélectionnez maintenant la photo "Après"'),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -2317,24 +2337,25 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
 
       // Ask for a label
       final labelCtrl = TextEditingController();
+      final l2 = AppLocalizations.of(context);
       final label = await showDialog<String>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Nom du soin'),
+          title: Text(l2?.tr('salon_before_after_label_title') ?? 'Nom du soin'),
           content: TextField(
             controller: labelCtrl,
-            decoration: const InputDecoration(
-              hintText: 'Ex: Coloration, Lissage…',
+            decoration: InputDecoration(
+              hintText: l2?.tr('salon_before_after_label_hint') ?? 'Ex: Coloration, Lissage…',
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Annuler'),
+              child: Text(l2?.tr('common_cancel') ?? 'Annuler'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, labelCtrl.text.trim()),
-              child: const Text('Valider'),
+              child: Text(l2?.tr('salon_before_after_validate') ?? 'Valider'),
             ),
           ],
         ),
@@ -2369,7 +2390,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2378,20 +2399,21 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
   }
 
   Future<void> _deleteItem(String docId, String beforeUrl, String afterUrl) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Supprimer cet avant/après ?'),
-        content: const Text('Les deux photos seront supprimées.'),
+        title: Text(l?.tr('salon_before_after_delete_title') ?? 'Supprimer cet avant/après ?'),
+        content: Text(l?.tr('salon_before_after_delete_message') ?? 'Les deux photos seront supprimées.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer',
-                style: TextStyle(color: Colors.red)),
+            child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -2405,7 +2427,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     }
@@ -2413,6 +2435,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -2423,7 +2446,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
             children: [
               Expanded(
                 child: Text(
-                  'Avant / Après',
+                  l?.tr('salon_before_after_title') ?? 'Avant / Après',
                   style: GoogleFonts.dmSans(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -2443,9 +2466,9 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
               else
                 GestureDetector(
                   onTap: _addBeforeAfter,
-                  child: const Text(
-                    '+ Ajouter',
-                    style: TextStyle(
+                  child: Text(
+                    l?.tr('salon_gallery_add') ?? '+ Ajouter',
+                    style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.brand600,
                       fontWeight: FontWeight.w600,
@@ -2485,8 +2508,8 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
                           size: 32, color: AppColors.secondary300),
                       const SizedBox(height: 8),
                       Text(
-                        'Aucun avant/après',
-                        style: TextStyle(
+                        l?.tr('salon_before_after_empty') ?? 'Aucun avant/après',
+                        style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.secondary400,
                         ),
@@ -2564,8 +2587,8 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Text('Avant',
-                                        style: TextStyle(
+                                    Text(l?.tr('salon_before_after_before') ?? 'Avant',
+                                        style: const TextStyle(
                                             fontSize: 10,
                                             color: AppColors.secondary400)),
                                     const Spacer(),
@@ -2579,8 +2602,8 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const Spacer(),
-                                    const Text('Après',
-                                        style: TextStyle(
+                                    Text(l?.tr('salon_before_after_after') ?? 'Après',
+                                        style: const TextStyle(
                                             fontSize: 10,
                                             color: AppColors.secondary400)),
                                   ],
@@ -2632,10 +2655,11 @@ class _PacksPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (packs.isEmpty) {
-      return const Text(
-        'Aucun pack créé',
-        style: TextStyle(color: AppColors.secondary400, fontSize: 13),
+      return Text(
+        l?.tr('salon_packs_empty') ?? 'Aucun pack créé',
+        style: const TextStyle(color: AppColors.secondary400, fontSize: 13),
       );
     }
     final preview = packs.take(3).toList();
@@ -2678,7 +2702,7 @@ class _PacksPreview extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        '${services.length} services',
+                        (l?.tr('salon_packs_services_count') ?? '{count} services').replaceAll('{count}', '${services.length}'),
                         style: const TextStyle(
                             fontSize: 11, color: AppColors.secondary400),
                       ),
@@ -2713,7 +2737,7 @@ class _PacksPreview extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              '+ ${packs.length - 3} autres packs',
+              (l?.tr('salon_packs_more') ?? '+ {count} autres packs').replaceAll('{count}', '${packs.length - 3}'),
               style: const TextStyle(
                   fontSize: 12, color: AppColors.secondary400),
             ),
@@ -2761,7 +2785,7 @@ class _PacksSheetState extends State<_PacksSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
@@ -2793,6 +2817,7 @@ class _PacksSheetState extends State<_PacksSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return FractionallySizedBox(
       heightFactor: 0.85,
       child: Column(
@@ -2815,7 +2840,7 @@ class _PacksSheetState extends State<_PacksSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    'Gérer les packs',
+                    l?.tr('salon_packs_manage') ?? 'Gérer les packs',
                     style: GoogleFonts.dmSans(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -2826,7 +2851,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                 TextButton.icon(
                   onPressed: () => _addOrEditPack(),
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Ajouter'),
+                  label: Text(l?.tr('common_add') ?? 'Ajouter'),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.brand600,
                     textStyle: const TextStyle(
@@ -2850,7 +2875,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                             size: 48, color: AppColors.secondary300),
                         const SizedBox(height: 12),
                         Text(
-                          'Aucun pack',
+                          l?.tr('salon_packs_empty_title') ?? 'Aucun pack',
                           style: GoogleFonts.dmSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -2858,10 +2883,10 @@ class _PacksSheetState extends State<_PacksSheet> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
-                          'Créez des packs de services\nà prix réduit pour vos clients',
+                        Text(
+                          l?.tr('salon_packs_empty_subtitle') ?? 'Créez des packs de services\nà prix réduit pour vos clients',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                               fontSize: 13, color: AppColors.secondary400),
                         ),
                       ],
@@ -2998,7 +3023,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Enregistrer'),
+                    : Text(l?.tr('common_save') ?? 'Enregistrer'),
               ),
             ),
           ),
@@ -3073,12 +3098,13 @@ class _PackFormDialogState extends State<_PackFormDialog> {
   }
 
   void _submit() {
+    final l = AppLocalizations.of(context);
     final name = _nameCtrl.text.trim();
     final priceText = _priceCtrl.text.trim();
     if (name.isEmpty || priceText.isEmpty || _selectedServices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Remplissez le nom, le prix et sélectionnez au moins un service')),
+        SnackBar(
+            content: Text(l?.tr('salon_pack_form_validation') ?? 'Remplissez le nom, le prix et sélectionnez au moins un service')),
       );
       return;
     }
@@ -3094,6 +3120,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final discount = _originalPrice > 0 && _priceCtrl.text.isNotEmpty
         ? ((1 - (double.tryParse(_priceCtrl.text) ?? 0) / _originalPrice) * 100)
             .round()
@@ -3110,7 +3137,9 @@ class _PackFormDialogState extends State<_PackFormDialog> {
           children: [
             // ── Title ──
             Text(
-              widget.existing != null ? 'Modifier le pack' : 'Nouveau pack',
+              widget.existing != null
+                  ? (l?.tr('salon_pack_form_edit') ?? 'Modifier le pack')
+                  : (l?.tr('salon_pack_form_new') ?? 'Nouveau pack'),
               style: GoogleFonts.dmSans(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -3120,22 +3149,22 @@ class _PackFormDialogState extends State<_PackFormDialog> {
             const SizedBox(height: 20),
 
             // ── Pack name ──
-            _buildLabel('Nom du pack'),
+            _buildLabel(l?.tr('salon_pack_form_name') ?? 'Nom du pack'),
             const SizedBox(height: 6),
             TextField(
               controller: _nameCtrl,
-              decoration: _inputDecoration('Ex: Pack Mariée, Pack Soin Complet'),
+              decoration: _inputDecoration(l?.tr('salon_pack_form_name_hint') ?? 'Ex: Pack Mariée, Pack Soin Complet'),
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 16),
 
             // ── Select services ──
-            _buildLabel('Services inclus'),
+            _buildLabel(l?.tr('salon_pack_form_services') ?? 'Services inclus'),
             const SizedBox(height: 8),
             if (widget.services.isEmpty)
-              const Text(
-                'Aucun service disponible. Ajoutez des services d\'abord.',
-                style: TextStyle(fontSize: 13, color: AppColors.secondary400),
+              Text(
+                l?.tr('salon_pack_form_no_services') ?? 'Aucun service disponible. Ajoutez des services d\'abord.',
+                style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
               )
             else
               Wrap(
@@ -3220,7 +3249,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Prix total séparé : ${_originalPrice.toStringAsFixed(0)} MAD',
+                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price} MAD').replaceAll('{price}', _originalPrice.toStringAsFixed(0)),
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.secondary500),
                       ),
@@ -3233,12 +3262,12 @@ class _PackFormDialogState extends State<_PackFormDialog> {
             const SizedBox(height: 16),
 
             // ── Pack price ──
-            _buildLabel('Prix du pack (MAD)'),
+            _buildLabel(l?.tr('salon_pack_form_price') ?? 'Prix du pack (MAD)'),
             const SizedBox(height: 6),
             TextField(
               controller: _priceCtrl,
               keyboardType: TextInputType.number,
-              decoration: _inputDecoration('Ex: 250'),
+              decoration: _inputDecoration(l?.tr('salon_pack_form_price_hint') ?? 'Ex: 250'),
               onChanged: (_) => setState(() {}),
             ),
             if (discount > 0) ...[
@@ -3251,7 +3280,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Réduction de $discount% par rapport aux services séparés',
+                  (l?.tr('salon_pack_form_discount') ?? 'Réduction de {discount}% par rapport aux services séparés').replaceAll('{discount}', '$discount'),
                   style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -3263,12 +3292,12 @@ class _PackFormDialogState extends State<_PackFormDialog> {
             const SizedBox(height: 16),
 
             // ── Description (optional) ──
-            _buildLabel('Description (optionnel)'),
+            _buildLabel(l?.tr('salon_pack_form_description') ?? 'Description (optionnel)'),
             const SizedBox(height: 6),
             TextField(
               controller: _descCtrl,
               maxLines: 2,
-              decoration: _inputDecoration('Description du pack…'),
+              decoration: _inputDecoration(l?.tr('salon_pack_form_description_hint') ?? 'Description du pack…'),
               textCapitalization: TextCapitalization.sentences,
             ),
 
@@ -3287,7 +3316,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: const Text('Annuler'),
+                    child: Text(l?.tr('common_cancel') ?? 'Annuler'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -3303,7 +3332,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                           borderRadius: BorderRadius.circular(10)),
                     ),
                     child: Text(
-                        widget.existing != null ? 'Modifier' : 'Créer'),
+                        widget.existing != null ? (l?.tr('common_edit') ?? 'Modifier') : (l?.tr('salon_pack_form_create') ?? 'Créer')),
                   ),
                 ),
               ],

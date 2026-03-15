@@ -15,6 +15,9 @@ import '../models/user_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../services/auth_service.dart';
+import '../services/app_localizations.dart';
+import '../providers/locale_provider.dart';
+import '../services/locale_service.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 String _hashPin(String pin) {
@@ -71,24 +74,24 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    final l = AppLocalizations.of(context);
     final confirm1 = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Supprimer votre compte ?'),
-        content: const Text(
-          'Cette action est irréversible. Toutes vos données, '
-          'réservations et conversations seront définitivement supprimées.',
+        title: Text(l?.tr('profile_delete_title') ?? 'Supprimer votre compte ?'),
+        content: Text(
+          l?.tr('profile_delete_message') ?? 'Cette action est irréversible. Toutes vos données, réservations et conversations seront définitivement supprimées.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer',
+            child: Text(l?.tr('common_delete') ?? 'Supprimer',
                 style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -101,19 +104,18 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Êtes-vous vraiment sûr ?'),
-        content: const Text(
-          'Votre compte et toutes vos données seront supprimés de façon permanente. '
-          'Cette action ne peut pas être annulée.',
+        title: Text(l?.tr('profile_delete_confirm_title') ?? 'Êtes-vous vraiment sûr ?'),
+        content: Text(
+          l?.tr('profile_delete_confirm_message') ?? 'Votre compte et toutes vos données seront supprimés de façon permanente. Cette action ne peut pas être annulée.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Non, garder mon compte'),
+            child: Text(l?.tr('profile_delete_keep') ?? 'Non, garder mon compte'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Oui, supprimer définitivement',
+            child: Text(l?.tr('profile_delete_confirm') ?? 'Oui, supprimer définitivement',
                 style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -131,9 +133,9 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      String msg = 'Erreur lors de la suppression.';
+      String msg = l?.tr('profile_delete_error') ?? 'Erreur lors de la suppression.';
       if (e.code == 'requires-recent-login') {
-        msg = 'Veuillez vous reconnecter puis réessayer la suppression.';
+        msg = l?.tr('profile_delete_relogin') ?? 'Veuillez vous reconnecter puis réessayer la suppression.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red),
@@ -141,13 +143,14 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')), backgroundColor: Colors.red),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final userAsync = ref.watch(userStreamProvider);
 
     return Scaffold(
@@ -155,17 +158,17 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       body: userAsync.when(
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.brand600)),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text((l?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'))),
         data: (user) {
           if (user == null) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Profil introuvable'),
+                  Text(l?.tr('profile_not_found') ?? 'Profil introuvable'),
                   TextButton(
                     onPressed: () => ref.invalidate(userStreamProvider),
-                    child: const Text('Réessayer'),
+                    child: Text(l?.tr('profile_retry') ?? 'Réessayer'),
                   ),
                 ],
               ),
@@ -218,7 +221,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _signOut,
                           icon: const Icon(Icons.logout_rounded, size: 18),
-                          label: const Text('Se déconnecter'),
+                          label: Text(l?.tr('profile_sign_out') ?? 'Se déconnecter'),
                           style: ElevatedButton.styleFrom(
                             foregroundColor: AppColors.brand950,
                             backgroundColor: AppColors.secondary100,
@@ -243,7 +246,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _deleteAccount,
                           icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                          label: const Text('Supprimer mon compte'),
+                          label: Text(l?.tr('profile_delete_account') ?? 'Supprimer mon compte'),
                           style: ElevatedButton.styleFrom(
                             foregroundColor: const Color(0xFFDC2626),
                             backgroundColor: const Color(0xFFFEF2F2),
@@ -259,7 +262,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
 
                     const SizedBox(height: 16),
                     Text(
-                      'Mon Salon v1.1.2',
+                      l?.tr('profile_version') ?? 'Mon Salon v1.3.0',
                       style: TextStyle(
                           fontSize: 11, color: AppColors.secondary300),
                     ),
@@ -274,13 +277,15 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     );
   }
 
-  SliverAppBar _appBar() => SliverAppBar(
+  SliverAppBar _appBar() {
+    final l = AppLocalizations.of(context);
+    return SliverAppBar(
         pinned: true,
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
         title: Text(
-          'Profil',
+          l?.tr('profile_title') ?? 'Profil',
           style: GoogleFonts.dmSans(
             fontWeight: FontWeight.bold,
             color: AppColors.brand950,
@@ -288,6 +293,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
           ),
         ),
       );
+  }
 }
 
 // ── Avatar section ───────────────────────────────────────────────────────────
@@ -304,6 +310,7 @@ class _AvatarSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isOwner = user.userType == UserType.owner;
     final memberYear = DateFormat('yyyy').format(user.createdAt);
 
@@ -388,14 +395,14 @@ class _AvatarSection extends StatelessWidget {
                 icon: isOwner
                     ? Icons.storefront_outlined
                     : Icons.person_outline_rounded,
-                label: isOwner ? 'Propriétaire' : 'Client',
+                label: isOwner ? (l?.tr('profile_owner') ?? 'Propriétaire') : (l?.tr('profile_client') ?? 'Client'),
                 color: AppColors.brand600,
                 bg: AppColors.brand50,
               ),
               const SizedBox(width: 8),
               _Badge(
                 icon: Icons.calendar_today_outlined,
-                label: 'Membre depuis $memberYear',
+                label: (l?.tr('profile_member_since') ?? 'Membre depuis {year}').replaceAll('{year}', memberYear),
                 color: AppColors.secondary500,
                 bg: AppColors.secondary100,
               ),
@@ -481,12 +488,13 @@ class _AccountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return _Card(
-      title: 'Mon compte',
+      title: l?.tr('profile_my_account') ?? 'Mon compte',
       trailing: GestureDetector(
         onTap: () => _openEdit(context),
-        child: const Text('Modifier',
-            style: TextStyle(
+        child: Text(l?.tr('profile_edit') ?? 'Modifier',
+            style: const TextStyle(
                 fontSize: 13,
                 color: AppColors.brand600,
                 fontWeight: FontWeight.w600)),
@@ -495,19 +503,19 @@ class _AccountCard extends StatelessWidget {
         children: [
           _ProfileRow(
               icon: Icons.person_outline_rounded,
-              label: 'Nom complet',
+              label: l?.tr('profile_full_name') ?? 'Nom complet',
               value: user.fullName),
           _ProfileRow(
               icon: Icons.email_outlined,
-              label: 'Email',
+              label: l?.tr('profile_email') ?? 'Email',
               value: user.email),
           _ProfileRow(
               icon: Icons.phone_outlined,
-              label: 'Téléphone',
+              label: l?.tr('profile_phone') ?? 'Téléphone',
               value: user.phone.isNotEmpty ? user.phone : '—'),
           _ProfileRow(
               icon: Icons.location_city_outlined,
-              label: 'Ville',
+              label: l?.tr('profile_city') ?? 'Ville',
               value: user.city.isNotEmpty ? user.city : '—',
               last: true),
         ],
@@ -580,8 +588,9 @@ class _ClientStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return _Card(
-      title: 'Mon activité',
+      title: l?.tr('profile_my_activity') ?? 'Mon activité',
       child: Row(
         children: [
           Expanded(
@@ -590,7 +599,7 @@ class _ClientStatsCard extends StatelessWidget {
               color: const Color(0xFFDB2777),
               bg: const Color(0xFFFDF2F8),
               value: '${user.favorites.length}',
-              label: 'Favoris',
+              label: l?.tr('profile_favorites') ?? 'Favoris',
             ),
           ),
           Container(width: 1, height: 50, color: AppColors.secondary100),
@@ -600,7 +609,7 @@ class _ClientStatsCard extends StatelessWidget {
               color: const Color(0xFF2563EB),
               bg: const Color(0xFFEFF6FF),
               value: '—',
-              label: 'Réservations',
+              label: l?.tr('profile_bookings') ?? 'Réservations',
             ),
           ),
           Container(width: 1, height: 50, color: AppColors.secondary100),
@@ -610,7 +619,7 @@ class _ClientStatsCard extends StatelessWidget {
               color: const Color(0xFFD97706),
               bg: const Color(0xFFFEF3C7),
               value: '—',
-              label: 'Avis',
+              label: l?.tr('profile_reviews') ?? 'Avis',
             ),
           ),
         ],
@@ -665,14 +674,15 @@ class _OwnerSalonCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
     final salon = salonAsync.value;
 
     return _Card(
-      title: 'Mon Salon',
+      title: l?.tr('profile_my_salon') ?? 'Mon Salon',
       child: salon == null
-          ? const Text(
-              'Aucun salon configuré',
+          ? Text(
+              l?.tr('profile_no_salon') ?? 'Aucun salon configuré',
               style:
                   TextStyle(color: AppColors.secondary400, fontSize: 13),
             )
@@ -728,7 +738,7 @@ class _OwnerSalonCard extends ConsumerWidget {
                   children: [
                     _SalonStat(
                         value: '${salon.services.length}',
-                        label: 'Services'),
+                        label: l?.tr('profile_services') ?? 'Services'),
                     Container(
                         width: 1,
                         height: 28,
@@ -737,7 +747,7 @@ class _OwnerSalonCard extends ConsumerWidget {
                             const EdgeInsets.symmetric(horizontal: 16)),
                     _SalonStat(
                         value: '${salon.reviewCount}',
-                        label: 'Avis'),
+                        label: l?.tr('profile_reviews') ?? 'Avis'),
                     Container(
                         width: 1,
                         height: 28,
@@ -746,7 +756,7 @@ class _OwnerSalonCard extends ConsumerWidget {
                             const EdgeInsets.symmetric(horizontal: 16)),
                     _SalonStat(
                         value: salon.rating.toStringAsFixed(1),
-                        label: 'Note'),
+                        label: l?.tr('home_rating') ?? 'Note'),
                   ],
                 ),
               ],
@@ -819,9 +829,10 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
           _editing = false;
           _saving = false;
         });
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Réseaux sociaux mis à jour'),
+          SnackBar(
+            content: Text(l?.tr('profile_social_updated') ?? 'Réseaux sociaux mis à jour'),
             backgroundColor: Colors.green,
           ),
         );
@@ -844,8 +855,9 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
 
     _initControllers(salon.socialLinks);
 
+    final l = AppLocalizations.of(context);
     return _Card(
-      title: 'Réseaux sociaux',
+      title: l?.tr('profile_social_links') ?? 'Réseaux sociaux',
       trailing: _saving
           ? const SizedBox(
               width: 18,
@@ -862,7 +874,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
                 }
               },
               child: Text(
-                _editing ? 'Enregistrer' : 'Modifier',
+                _editing ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('profile_edit') ?? 'Modifier'),
                 style: const TextStyle(
                   color: AppColors.brand600,
                   fontWeight: FontWeight.w600,
@@ -946,7 +958,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
                               fontSize: 11, color: AppColors.secondary400)),
                       const SizedBox(height: 2),
                       Text(
-                        controller.text.isEmpty ? 'Non renseigné' : controller.text,
+                        controller.text.isEmpty ? (AppLocalizations.of(context)?.tr('profile_social_not_set') ?? 'Non renseigné') : controller.text,
                         style: TextStyle(
                           fontSize: 14,
                           color: controller.text.isEmpty
@@ -989,15 +1001,15 @@ class _SalonStat extends StatelessWidget {
 
 // ── Settings card ─────────────────────────────────────────────────────────────
 
-class _SettingsCard extends StatefulWidget {
+class _SettingsCard extends ConsumerStatefulWidget {
   const _SettingsCard({required this.user});
   final UserModel user;
 
   @override
-  State<_SettingsCard> createState() => _SettingsCardState();
+  ConsumerState<_SettingsCard> createState() => _SettingsCardState();
 }
 
-class _SettingsCardState extends State<_SettingsCard> {
+class _SettingsCardState extends ConsumerState<_SettingsCard> {
   late bool _notifs;
 
   @override
@@ -1051,8 +1063,10 @@ class _SettingsCardState extends State<_SettingsCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final locale = ref.watch(localeProvider);
     return _Card(
-      title: 'Paramètres',
+      title: l?.tr('profile_settings') ?? 'Paramètres',
       child: Column(
         children: [
           // ── Notifications (inline toggle) ──────────────────────────────
@@ -1071,9 +1085,9 @@ class _SettingsCardState extends State<_SettingsCard> {
                       size: 16, color: Color(0xFF2563EB)),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
-                  child: Text('Notifications',
-                      style: TextStyle(
+                Expanded(
+                  child: Text(l?.tr('profile_notifications') ?? 'Notifications',
+                      style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: AppColors.brand950)),
@@ -1104,7 +1118,7 @@ class _SettingsCardState extends State<_SettingsCard> {
             icon: Icons.lock_outline_rounded,
             iconColor: const Color(0xFF059669),
             iconBg: const Color(0xFFDCFCE7),
-            label: 'Sécurité',
+            label: l?.tr('profile_security') ?? 'Sécurité',
             onTap: _openSecurity,
           ),
           const Divider(height: 1, indent: 46),
@@ -1116,19 +1130,119 @@ class _SettingsCardState extends State<_SettingsCard> {
               iconColor: const Color(0xFF7C3AED),
               iconBg: const Color(0xFFF5F3FF),
               label: widget.user.pinHash != null
-                  ? 'Changer le PIN de profil'
-                  : 'Définir un PIN de profil',
+                  ? (l?.tr('profile_change_pin') ?? 'Changer le PIN de profil')
+                  : (l?.tr('profile_set_pin') ?? 'Définir un PIN de profil'),
               onTap: _openChangePin,
             ),
             const Divider(height: 1, indent: 46),
           ],
+
+          // ── Langue ─────────────────────────────────────────────────────
+          InkWell(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                builder: (_) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary200,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Text(
+                        l?.tr('profile_language') ?? 'Langue',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brand950,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        leading: const Icon(Icons.auto_awesome, size: 20, color: AppColors.secondary500),
+                        title: Text(l?.tr('profile_language_auto') ?? 'Automatique'),
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await LocaleService.resetToAuto();
+                          final detected = await LocaleService.getSavedLocale();
+                          ref.read(localeProvider.notifier).setLocale(detected);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Text('🇫🇷', style: TextStyle(fontSize: 20)),
+                        title: const Text('Français'),
+                        selected: locale.languageCode == 'fr',
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref.read(localeProvider.notifier).setLocale(const Locale('fr'));
+                        },
+                      ),
+                      ListTile(
+                        leading: const Text('🇬🇧', style: TextStyle(fontSize: 20)),
+                        title: const Text('English'),
+                        selected: locale.languageCode == 'en',
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref.read(localeProvider.notifier).setLocale(const Locale('en'));
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.language_rounded,
+                        size: 16, color: Color(0xFF0284C7)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(l?.tr('profile_language') ?? 'Langue',
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.brand950)),
+                  ),
+                  Text(
+                    locale.languageCode == 'fr' ? 'Français' : 'English',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.secondary400),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right_rounded,
+                      size: 18, color: AppColors.secondary300),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1, indent: 46),
 
           // ── Aide & Support ────────────────────────────────────────────
           _SettingsRow(
             icon: Icons.help_outline_rounded,
             iconColor: const Color(0xFFD97706),
             iconBg: const Color(0xFFFEF3C7),
-            label: 'Aide & Support',
+            label: l?.tr('profile_help_support') ?? 'Aide & Support',
             onTap: _openSupport,
           ),
         ],
@@ -1215,6 +1329,7 @@ class _SecuritySheetState extends State<_SecuritySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
@@ -1232,7 +1347,7 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          Text('Sécurité',
+          Text(l?.tr('profile_security_title') ?? 'Sécurité',
               style: GoogleFonts.dmSans(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
@@ -1251,7 +1366,7 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Un email de réinitialisation a été envoyé à ${widget.userEmail}',
+                      (l?.tr('profile_security_reset_sent') ?? 'Un email de réinitialisation a été envoyé à {email}').replaceAll('{email}', widget.userEmail),
                       style: const TextStyle(
                           fontSize: 13, color: Color(0xFF166534)),
                     ),
@@ -1270,8 +1385,8 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Fermer',
-                    style: TextStyle(
+                child: Text(l?.tr('profile_security_close') ?? 'Fermer',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
@@ -1290,7 +1405,7 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Un lien de réinitialisation sera envoyé à\n${widget.userEmail}',
+                      (l?.tr('profile_security_reset_hint') ?? 'Un lien de réinitialisation sera envoyé à\n{email}').replaceAll('{email}', widget.userEmail),
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.secondary600),
                     ),
@@ -1315,8 +1430,8 @@ class _SecuritySheetState extends State<_SecuritySheet> {
                         height: 20,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Réinitialiser le mot de passe',
-                        style: TextStyle(
+                    : Text(l?.tr('profile_security_reset_button') ?? 'Réinitialiser le mot de passe',
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 15)),
@@ -1383,6 +1498,7 @@ class _SupportSheetState extends State<_SupportSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
@@ -1400,15 +1516,15 @@ class _SupportSheetState extends State<_SupportSheet> {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          Text('Aide & Support',
+          Text(l?.tr('profile_support_title') ?? 'Aide & Support',
               style: GoogleFonts.dmSans(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
                   color: AppColors.brand950)),
           const SizedBox(height: 4),
-          const Text('Décrivez votre problème ou suggestion',
+          Text(l?.tr('profile_support_subtitle') ?? 'Décrivez votre problème ou suggestion',
               style:
-                  TextStyle(fontSize: 13, color: AppColors.secondary400)),
+                  const TextStyle(fontSize: 13, color: AppColors.secondary400)),
           const SizedBox(height: 20),
           if (_sent) ...[
             Container(
@@ -1417,20 +1533,20 @@ class _SupportSheetState extends State<_SupportSheet> {
               decoration: BoxDecoration(
                   color: const Color(0xFFDCFCE7),
                   borderRadius: BorderRadius.circular(12)),
-              child: const Column(
+              child: Column(
                 children: [
-                  Icon(Icons.check_circle_outline_rounded,
+                  const Icon(Icons.check_circle_outline_rounded,
                       color: Color(0xFF16A34A), size: 36),
-                  SizedBox(height: 10),
-                  Text('Rapport envoyé !',
-                      style: TextStyle(
+                  const SizedBox(height: 10),
+                  Text(l?.tr('profile_support_sent_title') ?? 'Rapport envoyé !',
+                      style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF166534))),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
-                    'Merci pour votre retour. Nous traiterons votre demande dans les meilleurs délais.',
-                    style: TextStyle(
+                    l?.tr('profile_support_sent_message') ?? 'Merci pour votre retour. Nous traiterons votre demande dans les meilleurs délais.',
+                    style: const TextStyle(
                         fontSize: 13, color: Color(0xFF16A34A)),
                     textAlign: TextAlign.center,
                   ),
@@ -1448,8 +1564,8 @@ class _SupportSheetState extends State<_SupportSheet> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Fermer',
-                    style: TextStyle(
+                child: Text(l?.tr('common_close') ?? 'Fermer',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
@@ -1460,6 +1576,11 @@ class _SupportSheetState extends State<_SupportSheet> {
             Row(
               children: _categories.map((cat) {
                 final selected = cat == _category;
+                final catLabel = cat == 'Bug'
+                    ? (l?.tr('profile_support_category_bug') ?? 'Bug')
+                    : cat == 'Suggestion'
+                        ? (l?.tr('profile_support_category_suggestion') ?? 'Suggestion')
+                        : (l?.tr('profile_support_category_question') ?? 'Question');
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(
@@ -1475,7 +1596,7 @@ class _SupportSheetState extends State<_SupportSheet> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        cat,
+                        catLabel,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1497,10 +1618,10 @@ class _SupportSheetState extends State<_SupportSheet> {
                   fontSize: 14, color: AppColors.brand950),
               decoration: InputDecoration(
                 hintText: _category == 'Bug'
-                    ? 'Décrivez le problème rencontré...'
+                    ? (l?.tr('profile_support_bug_hint') ?? 'Décrivez le problème rencontré...')
                     : _category == 'Suggestion'
-                        ? 'Décrivez votre suggestion...'
-                        : 'Posez votre question...',
+                        ? (l?.tr('profile_support_suggestion_hint') ?? 'Décrivez votre suggestion...')
+                        : (l?.tr('profile_support_question_hint') ?? 'Posez votre question...'),
                 hintStyle: const TextStyle(
                     fontSize: 13, color: AppColors.secondary300),
                 filled: true,
@@ -1540,8 +1661,8 @@ class _SupportSheetState extends State<_SupportSheet> {
                         height: 20,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Envoyer',
-                        style: TextStyle(
+                    : Text(l?.tr('profile_support_send') ?? 'Envoyer',
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 15)),
@@ -1586,10 +1707,11 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
     final newPin = _newCtrl.text.trim();
     final confirmPin = _confirmCtrl.text.trim();
 
+    final l = AppLocalizations.of(context);
     if (newPin.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Le PIN doit contenir exactement 6 chiffres'),
+        SnackBar(
+            content: Text(l?.tr('profile_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating),
       );
@@ -1597,8 +1719,8 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
     }
     if (newPin != confirmPin) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Les PINs ne correspondent pas'),
+        SnackBar(
+            content: Text(l?.tr('profile_pin_error_mismatch') ?? 'Les PINs ne correspondent pas'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating),
       );
@@ -1610,8 +1732,8 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
       final currentHash = _hashPin(_currentCtrl.text.trim());
       if (currentHash != widget.user.pinHash) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('PIN actuel incorrect'),
+          SnackBar(
+              content: Text(l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect'),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating),
         );
@@ -1638,6 +1760,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
@@ -1656,7 +1779,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
             ),
           ),
           Text(
-            _hasPinSet ? 'Changer le PIN de profil' : 'Définir un PIN de profil',
+            _hasPinSet ? (l?.tr('profile_pin_title_change') ?? 'Changer le PIN de profil') : (l?.tr('profile_pin_title_set') ?? 'Définir un PIN de profil'),
             style: GoogleFonts.dmSans(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -1664,7 +1787,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Ce PIN sera demandé lors de la sélection de votre profil.',
+            l?.tr('profile_pin_description') ?? 'Ce PIN sera demandé lors de la sélection de votre profil.',
             style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
           ),
           const SizedBox(height: 20),
@@ -1682,8 +1805,8 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
                   Expanded(
                     child: Text(
                       _hasPinSet
-                          ? 'PIN modifié avec succès !'
-                          : 'PIN défini avec succès !',
+                          ? (l?.tr('profile_pin_success_change') ?? 'PIN modifié avec succès !')
+                          : (l?.tr('profile_pin_success_set') ?? 'PIN défini avec succès !'),
                       style: const TextStyle(
                           fontSize: 13, color: Color(0xFF166534)),
                     ),
@@ -1702,8 +1825,8 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Fermer',
-                    style: TextStyle(
+                child: Text(l?.tr('common_close') ?? 'Fermer',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
@@ -1714,7 +1837,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
             if (_hasPinSet) ...[
               _PinInputField(
                 controller: _currentCtrl,
-                label: 'PIN actuel',
+                label: l?.tr('profile_pin_current') ?? 'PIN actuel',
                 showPin: false,
               ),
               const SizedBox(height: 14),
@@ -1722,7 +1845,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
             // Nouveau PIN
             _PinInputField(
               controller: _newCtrl,
-              label: 'Nouveau PIN (6 chiffres)',
+              label: l?.tr('profile_pin_new') ?? 'Nouveau PIN (6 chiffres)',
               showPin: _showNew,
               suffixIcon: IconButton(
                 icon: Icon(_showNew
@@ -1736,7 +1859,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
             // Confirmer PIN
             _PinInputField(
               controller: _confirmCtrl,
-              label: 'Confirmer le PIN',
+              label: l?.tr('profile_pin_confirm') ?? 'Confirmer le nouveau PIN',
               showPin: false,
             ),
             const SizedBox(height: 24),
@@ -1757,7 +1880,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
                     : Text(
-                        _hasPinSet ? 'Modifier le PIN' : 'Définir le PIN',
+                        _hasPinSet ? (l?.tr('profile_change_pin') ?? 'Changer le PIN de profil') : (l?.tr('profile_set_pin') ?? 'Définir un PIN de profil'),
                         style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -1883,6 +2006,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
@@ -1902,21 +2026,21 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             ),
           ),
           Text(
-            'Modifier mon profil',
+            l?.tr('profile_edit_title') ?? 'Modifier mon profil',
             style: GoogleFonts.dmSans(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950),
           ),
           const SizedBox(height: 20),
-          _InputField(controller: _name, label: 'Nom complet'),
+          _InputField(controller: _name, label: l?.tr('profile_full_name') ?? 'Nom complet'),
           const SizedBox(height: 12),
           _InputField(
               controller: _phone,
-              label: 'Téléphone',
+              label: l?.tr('profile_phone') ?? 'Téléphone',
               keyboardType: TextInputType.phone),
           const SizedBox(height: 12),
-          _InputField(controller: _city, label: 'Ville'),
+          _InputField(controller: _city, label: l?.tr('profile_city') ?? 'Ville'),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -1934,8 +2058,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                       height: 20,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Text('Enregistrer',
-                      style: TextStyle(
+                  : Text(l?.tr('common_save') ?? 'Enregistrer',
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 15)),

@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
 import '../models/notification_model.dart';
+import '../services/app_localizations.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -26,15 +27,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  String _formatTime(DateTime date) {
+  String _formatTime(DateTime date, AppLocalizations? l) {
     final now = DateTime.now();
     final diff = now.difference(date);
 
-    if (diff.inMinutes < 1) return 'À l\'instant';
-    if (diff.inMinutes < 60) return 'Il y a ${diff.inMinutes}min';
-    if (diff.inHours < 24) return 'Il y a ${diff.inHours}h';
-    if (diff.inDays == 1) return 'Hier';
-    if (diff.inDays < 7) return 'Il y a ${diff.inDays}j';
+    if (diff.inMinutes < 1) return l?.tr('notifications_just_now') ?? 'À l\'instant';
+    if (diff.inMinutes < 60) return (l?.tr('notifications_minutes_ago') ?? 'Il y a {min}min').replaceAll('{min}', '${diff.inMinutes}');
+    if (diff.inHours < 24) return (l?.tr('notifications_hours_ago') ?? 'Il y a {hours}h').replaceAll('{hours}', '${diff.inHours}');
+    if (diff.inDays == 1) return l?.tr('notifications_yesterday') ?? 'Hier';
+    if (diff.inDays < 7) return (l?.tr('notifications_days_ago') ?? 'Il y a {days}j').replaceAll('{days}', '${diff.inDays}');
     return '${date.day}/${date.month}/${date.year}';
   }
 
@@ -81,13 +82,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final uid = _auth.currentUserId;
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
       appBar: AppBar(
         title: Text(
-          'Notifications',
+          l?.tr('notifications_title') ?? 'Notifications',
           style: GoogleFonts.dmSans(
             fontWeight: FontWeight.bold,
             color: AppColors.brand950,
@@ -101,7 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       ),
       body: uid == null
-          ? const Center(child: Text('Non connecté'))
+          ? Center(child: Text(l?.tr('notifications_not_connected') ?? 'Non connecté'))
           : StreamBuilder<List<NotificationModel>>(
               stream: _db.getNotifications(uid),
               builder: (context, snapshot) {
@@ -125,7 +127,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Aucune notification',
+                          l?.tr('notifications_empty') ?? 'Aucune notification',
                           style: GoogleFonts.plusJakartaSans(
                             color: AppColors.secondary500,
                             fontSize: 16,
@@ -200,7 +202,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        _formatTime(n.createdAt),
+                                        _formatTime(n.createdAt, l),
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 11,
                                           color: AppColors.secondary400,

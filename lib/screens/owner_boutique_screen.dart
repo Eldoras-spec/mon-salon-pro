@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../models/product_model.dart';
 import '../models/order_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 
@@ -39,6 +40,7 @@ class _OwnerBoutiqueScreenState extends ConsumerState<OwnerBoutiqueScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: AppColors.secondary50,
       appBar: AppBar(
@@ -50,7 +52,7 @@ class _OwnerBoutiqueScreenState extends ConsumerState<OwnerBoutiqueScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Boutique',
+          l?.tr('boutique_title') ?? 'Boutique',
           style: GoogleFonts.dmSans(
             fontWeight: FontWeight.bold,
             color: AppColors.brand950,
@@ -75,9 +77,9 @@ class _OwnerBoutiqueScreenState extends ConsumerState<OwnerBoutiqueScreen>
               GoogleFonts.dmSans(fontWeight: FontWeight.w600, fontSize: 14),
           unselectedLabelStyle:
               GoogleFonts.dmSans(fontWeight: FontWeight.w500, fontSize: 14),
-          tabs: const [
-            Tab(text: 'Produits'),
-            Tab(text: 'Commandes'),
+          tabs: [
+            Tab(text: l?.tr('boutique_products_tab') ?? 'Produits'),
+            Tab(text: l?.tr('boutique_orders_tab') ?? 'Commandes'),
           ],
         ),
       ),
@@ -115,9 +117,10 @@ class _ProductsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final productsAsync = ref.watch(ownerProductsProvider);
 
+    final l = AppLocalizations.of(context);
     return productsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Erreur: $e')),
+      error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')),
       data: (products) {
         if (products.isEmpty) {
           return Center(
@@ -128,7 +131,7 @@ class _ProductsTab extends ConsumerWidget {
                     size: 64, color: AppColors.secondary300),
                 const SizedBox(height: 16),
                 Text(
-                  'Aucun produit',
+                  l?.tr('boutique_no_products') ?? 'Aucun produit',
                   style: GoogleFonts.dmSans(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -137,7 +140,7 @@ class _ProductsTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Ajoutez des produits pour créer votre boutique',
+                  l?.tr('boutique_no_products_hint') ?? 'Ajoutez des produits pour créer votre boutique',
                   style: TextStyle(
                       fontSize: 14, color: AppColors.secondary400),
                 ),
@@ -160,14 +163,14 @@ class _ProductsTab extends ConsumerWidget {
               children: [
                 _StatCard(
                   icon: Icons.inventory_2_outlined,
-                  label: 'Produits',
+                  label: l?.tr('boutique_products_tab') ?? 'Produits',
                   value: '${products.length}',
                   color: AppColors.brand600,
                 ),
                 const SizedBox(width: 12),
                 _StatCard(
                   icon: Icons.warning_amber_rounded,
-                  label: 'Stock bas',
+                  label: l?.tr('boutique_low_stock') ?? 'Stock bas',
                   value:
                       '${products.where((p) => p.isLowStock).length}',
                   color: const Color(0xFFEA580C),
@@ -257,6 +260,7 @@ class _ProductCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -311,7 +315,7 @@ class _ProductCard extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        'Stock: ${product.stock}',
+                        (l?.tr('boutique_stock') ?? 'Stock: {count}').replaceAll('{count}', '${product.stock}'),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -330,8 +334,8 @@ class _ProductCard extends ConsumerWidget {
                           color: AppColors.secondary100,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text('Inactif',
-                            style: TextStyle(
+                        child: Text(l?.tr('boutique_inactive') ?? 'Inactif',
+                            style: const TextStyle(
                                 fontSize: 11,
                                 color: AppColors.secondary500)),
                       ),
@@ -350,12 +354,12 @@ class _ProductCard extends ConsumerWidget {
             onSelected: (val) =>
                 _handleAction(context, ref, val),
             itemBuilder: (_) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'edit',
                   child: Row(children: [
                     Icon(Icons.edit_outlined, size: 18),
                     SizedBox(width: 8),
-                    Text('Modifier')
+                    Text(l?.tr('boutique_edit') ?? 'Modifier')
                   ])),
               PopupMenuItem(
                   value: 'toggle',
@@ -366,14 +370,14 @@ class _ProductCard extends ConsumerWidget {
                             : Icons.visibility_outlined,
                         size: 18),
                     const SizedBox(width: 8),
-                    Text(product.isActive ? 'Désactiver' : 'Activer')
+                    Text(product.isActive ? (l?.tr('boutique_deactivate') ?? 'Désactiver') : (l?.tr('boutique_activate') ?? 'Activer'))
                   ])),
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'delete',
                   child: Row(children: [
                     Icon(Icons.delete_outline, size: 18, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Supprimer',
+                    Text(l?.tr('boutique_delete') ?? 'Supprimer',
                         style: TextStyle(color: Colors.red))
                   ])),
             ],
@@ -400,25 +404,26 @@ class _ProductCard extends ConsumerWidget {
         _db.updateProduct(product.id, {'isActive': !product.isActive});
         break;
       case 'delete':
+        final l = AppLocalizations.of(context);
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16)),
-            title: const Text('Supprimer ce produit ?'),
-            content: Text('${product.name} sera supprimé définitivement.'),
+            title: Text(l?.tr('boutique_delete_title') ?? 'Supprimer ce produit ?'),
+            content: Text((l?.tr('boutique_delete_message') ?? '{name} sera supprimé définitivement.').replaceAll('{name}', product.name)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler'),
+                child: Text(l?.tr('common_cancel') ?? 'Annuler'),
               ),
               TextButton(
                 onPressed: () {
                   _db.deleteProduct(product.id);
                   Navigator.pop(ctx);
                 },
-                child: const Text('Supprimer',
-                    style: TextStyle(color: Colors.red)),
+                child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                    style: const TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -503,8 +508,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
 
   Future<void> _pickImage() async {
     if (_imageUrls.length + _newImages.length >= 3) {
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 3 photos')),
+        SnackBar(content: Text(l?.tr('boutique_photos_max') ?? 'Maximum 3 photos')),
       );
       return;
     }
@@ -580,8 +586,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Erreur: $e')));
+            .showSnackBar(SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -590,6 +597,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isEdit = widget.product != null;
     return Container(
       height: MediaQuery.of(context).size.height * 0.92,
@@ -615,7 +623,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    isEdit ? 'Modifier le produit' : 'Nouveau produit',
+                    isEdit ? (l?.tr('boutique_edit_product') ?? 'Modifier le produit') : (l?.tr('boutique_new_product') ?? 'Nouveau produit'),
                     style: GoogleFonts.dmSans(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -639,7 +647,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                 padding: const EdgeInsets.all(20),
                 children: [
                   // Images
-                  Text('Photos (max 3)',
+                  Text(l?.tr('boutique_photos') ?? 'Photos (max 3)',
                       style: GoogleFonts.dmSans(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -685,13 +693,13 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   ),
                   const SizedBox(height: 20),
 
-                  _buildField('Nom du produit', _nameCtrl, required: true),
-                  _buildField('Description', _descCtrl, maxLines: 2),
-                  _buildField('Prix (MAD)', _priceCtrl,
+                  _buildField(l?.tr('boutique_product_name') ?? 'Nom du produit', _nameCtrl, required: true),
+                  _buildField(l?.tr('boutique_description') ?? 'Description', _descCtrl, maxLines: 2),
+                  _buildField(l?.tr('boutique_price') ?? 'Prix (MAD)', _priceCtrl,
                       required: true, keyboard: TextInputType.number),
 
                   // Category dropdown
-                  Text('Catégorie',
+                  Text(l?.tr('inventory_category') ?? 'Catégorie',
                       style: GoogleFonts.dmSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -713,19 +721,19 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   Row(
                     children: [
                       Expanded(
-                          child: _buildField('Stock', _stockCtrl,
+                          child: _buildField(l?.tr('boutique_stock_label') ?? 'Stock', _stockCtrl,
                               required: true,
                               keyboard: TextInputType.number)),
                       const SizedBox(width: 12),
                       Expanded(
                           child: _buildField(
-                              'Seuil alerte', _thresholdCtrl,
+                              l?.tr('boutique_alert_threshold') ?? 'Seuil alerte', _thresholdCtrl,
                               keyboard: TextInputType.number)),
                     ],
                   ),
 
                   const Divider(height: 32),
-                  Text('Livraison',
+                  Text(l?.tr('boutique_delivery') ?? 'Livraison',
                       style: GoogleFonts.dmSans(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -770,11 +778,11 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   SwitchListTile(
                     value: _isActive,
                     onChanged: (v) => setState(() => _isActive = v),
-                    title: const Text('Produit actif',
-                        style: TextStyle(fontSize: 14)),
-                    subtitle: const Text(
-                        'Visible par les clients',
-                        style: TextStyle(fontSize: 12)),
+                    title: Text(l?.tr('boutique_active_product') ?? 'Produit actif',
+                        style: const TextStyle(fontSize: 14)),
+                    subtitle: Text(
+                        l?.tr('boutique_visible_to_clients') ?? 'Visible par les clients',
+                        style: const TextStyle(fontSize: 12)),
                     activeColor: AppColors.brand600,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -805,7 +813,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                         height: 22,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : Text(isEdit ? 'Enregistrer' : 'Ajouter le produit',
+                    : Text(isEdit ? (l?.tr('boutique_save') ?? 'Enregistrer') : (l?.tr('boutique_add_product') ?? 'Ajouter le produit'),
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600)),
               ),
@@ -836,7 +844,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
           maxLines: maxLines,
           decoration: _inputDecoration(hint: hint),
           validator: required
-              ? (v) => (v == null || v.trim().isEmpty) ? 'Requis' : null
+              ? (v) => (v == null || v.trim().isEmpty) ? (AppLocalizations.of(context)?.tr('common_required') ?? 'Requis') : null
               : null,
         ),
         const SizedBox(height: 16),
@@ -911,11 +919,12 @@ class _OrdersTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final ordersAsync = ref.watch(ownerOrdersProvider);
 
     return ordersAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Erreur: $e')),
+      error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')),
       data: (orders) {
         if (orders.isEmpty) {
           return Center(
@@ -926,7 +935,7 @@ class _OrdersTab extends ConsumerWidget {
                     size: 64, color: AppColors.secondary300),
                 const SizedBox(height: 16),
                 Text(
-                  'Aucune commande',
+                  l?.tr('boutique_no_orders') ?? 'Aucune commande',
                   style: GoogleFonts.dmSans(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -970,6 +979,7 @@ class _OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1043,9 +1053,9 @@ class _OrderCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Row(
                 children: [
-                  const Expanded(
-                      child: Text('Livraison',
-                          style: TextStyle(
+                  Expanded(
+                      child: Text(l?.tr('boutique_delivery') ?? 'Livraison',
+                          style: const TextStyle(
                               fontSize: 12, color: AppColors.secondary400))),
                   Text('${order.deliveryFee.toStringAsFixed(0)} MAD',
                       style: const TextStyle(
@@ -1057,7 +1067,7 @@ class _OrderCard extends StatelessWidget {
           // Total + actions
           Row(
             children: [
-              Text('Total: ${order.grandTotal.toStringAsFixed(0)} MAD',
+              Text('${l?.tr('boutique_total') ?? 'Total:'} ${order.grandTotal.toStringAsFixed(0)} MAD',
                   style: GoogleFonts.dmSans(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -1065,14 +1075,14 @@ class _OrderCard extends StatelessWidget {
               const Spacer(),
               if (order.status == 'pending')
                 _ActionBtn(
-                  label: 'Confirmer',
+                  label: l?.tr('boutique_confirm') ?? 'Confirmer',
                   color: AppColors.brand600,
                   onTap: () =>
                       _db.updateOrderStatus(order.id, 'confirmed'),
                 ),
               if (order.status == 'confirmed')
                 _ActionBtn(
-                  label: 'Livrée',
+                  label: l?.tr('boutique_delivered') ?? 'Livrée',
                   color: const Color(0xFF16A34A),
                   onTap: () =>
                       _db.updateOrderStatus(order.id, 'delivered'),
@@ -1080,7 +1090,7 @@ class _OrderCard extends StatelessWidget {
               if (order.status == 'pending' || order.status == 'confirmed') ...[
                 const SizedBox(width: 8),
                 _ActionBtn(
-                  label: 'Annuler',
+                  label: l?.tr('boutique_cancel') ?? 'Annuler',
                   color: const Color(0xFFDC2626),
                   outlined: true,
                   onTap: () =>

@@ -8,6 +8,7 @@ import '../models/salon_model.dart';
 import '../widgets/custom_button.dart';
 import 'registration_success_screen.dart';
 import '../theme/app_constants.dart';
+import '../services/app_localizations.dart';
 
 class ServiceEntry {
   String name;
@@ -193,6 +194,7 @@ class _OwnerOnboardingStep4ScreenState
   }
 
   Widget _buildBody() {
+    final l = AppLocalizations.of(context);
     return Column(
       children: [
         // Nav + progress
@@ -218,8 +220,8 @@ class _OwnerOnboardingStep4ScreenState
                       color: AppColors.brand50,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
-                      'Étape 6 sur 6',
+                    child: Text(
+                      l?.tr('onboarding_step4_step') ?? 'Étape 6 sur 6',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -253,7 +255,7 @@ class _OwnerOnboardingStep4ScreenState
               children: [
                 const SizedBox(height: 8),
                 Text(
-                  'Vos Services',
+                  l?.tr('onboarding_step4_title') ?? 'Vos Services',
                   style: GoogleFonts.dmSans(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -261,8 +263,8 @@ class _OwnerOnboardingStep4ScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Créez vos services et assignez-les aux membres de votre équipe.',
+                Text(
+                  l?.tr('onboarding_step4_subtitle') ?? 'Créez vos services et assignez-les à vos employés.',
                   style: TextStyle(
                     fontSize: 14,
                     color: AppColors.secondary500,
@@ -282,21 +284,21 @@ class _OwnerOnboardingStep4ScreenState
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.secondary200),
                     ),
-                    child: const Column(
+                    child: Column(
                       children: [
-                        Icon(Icons.design_services_outlined,
+                        const Icon(Icons.design_services_outlined,
                             size: 40, color: AppColors.secondary300),
-                        SizedBox(height: 12),
+                        const SizedBox(height: 12),
                         Text(
-                          'Aucun service ajouté',
-                          style: TextStyle(
+                          l?.tr('onboarding_step4_empty_title') ?? 'Aucun service ajouté',
+                          style: const TextStyle(
                             color: AppColors.secondary400,
                             fontSize: 14,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          'Ajoutez au moins un service pour votre salon',
+                          l?.tr('onboarding_step4_empty_subtitle') ?? 'Ajoutez au moins un service pour votre salon',
                           style: TextStyle(
                             color: AppColors.secondary400,
                             fontSize: 12,
@@ -318,7 +320,7 @@ class _OwnerOnboardingStep4ScreenState
                 OutlinedButton.icon(
                   onPressed: () => _showServiceModal(),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Ajouter un service'),
+                  label: Text(l?.tr('onboarding_step4_add') ?? 'Ajouter un service'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.brand600,
                     side: const BorderSide(color: AppColors.brand300),
@@ -339,7 +341,7 @@ class _OwnerOnboardingStep4ScreenState
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           child: CustomButton(
-            text: 'Terminer la configuration',
+            text: l?.tr('onboarding_step4_finish') ?? 'Terminer la configuration',
             onPressed: _finishSetup,
             isLoading: _isLoading,
             icon: Icons.check,
@@ -570,11 +572,12 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
       title: Text(
         widget.existing != null
-            ? 'Modifier le service'
-            : 'Ajouter un service',
+            ? (l?.tr('onboarding_step4_edit_service') ?? 'Modifier le service')
+            : (l?.tr('onboarding_step4_add') ?? 'Ajouter un service'),
         style: GoogleFonts.dmSans(
           fontWeight: FontWeight.bold,
           color: AppColors.brand950,
@@ -794,9 +797,9 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
-            'Annuler',
-            style: TextStyle(color: AppColors.secondary600),
+          child: Text(
+            l?.tr('common_cancel') ?? 'Annuler',
+            style: const TextStyle(color: AppColors.secondary600),
           ),
         ),
         ElevatedButton(
@@ -813,7 +816,7 @@ class _ServiceFormDialogState extends State<_ServiceFormDialog> {
             ),
           ),
           child: Text(
-              widget.existing != null ? 'Enregistrer' : 'Ajouter'),
+              widget.existing != null ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter')),
         ),
       ],
     );

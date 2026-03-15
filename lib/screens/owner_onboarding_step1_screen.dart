@@ -12,6 +12,7 @@ import 'package:latlong2/latlong.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
+import '../services/app_localizations.dart';
 import 'owner_onboarding_step2_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
@@ -71,18 +72,19 @@ class _OwnerOnboardingStep1ScreenState
   Future<void> _getCurrentLocation() async {
     setState(() => _isGettingLocation = true);
     try {
+      final l = AppLocalizations.of(context);
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw 'Le service de localisation est désactivé.';
+      if (!serviceEnabled) throw l?.tr('salon_edit_info_location_disabled') ?? 'Le service de localisation est désactivé.';
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          throw 'Permission de localisation refusée.';
+          throw l?.tr('salon_edit_info_location_denied') ?? 'Permission de localisation refusée.';
         }
       }
       if (permission == LocationPermission.deniedForever) {
-        throw 'Permission de localisation définitivement refusée. Activez-la dans les paramètres.';
+        throw l?.tr('salon_edit_info_location_denied_forever') ?? 'Permission de localisation définitivement refusée. Activez-la dans les paramètres.';
       }
 
       final position = await Geolocator.getCurrentPosition();
@@ -133,10 +135,11 @@ class _OwnerOnboardingStep1ScreenState
     final name = _salonNameController.text.trim();
     final city = _cityController.text.trim();
 
+    final l = AppLocalizations.of(context);
     if (name.isEmpty || city.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez remplir les champs obligatoires (nom et ville)'),
+        SnackBar(
+          content: Text(l?.tr('salon_edit_info_required') ?? 'Veuillez remplir les champs obligatoires (nom et ville)'),
         ),
       );
       return;
@@ -166,12 +169,12 @@ class _OwnerOnboardingStep1ScreenState
       if (lat == null || lng == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Impossible de localiser cette adresse. Veuillez utiliser le bouton GPS pour géolocaliser votre salon.',
+              l?.tr('salon_edit_info_geocode_error') ?? 'Impossible de localiser cette adresse. Veuillez utiliser le bouton GPS.',
             ),
             backgroundColor: Colors.redAccent,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 4),
           ),
         );
         return;
@@ -340,6 +343,7 @@ class _OwnerOnboardingStep1ScreenState
   }
 
   Widget _buildFormSection() {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       child: Center(
@@ -368,9 +372,9 @@ class _OwnerOnboardingStep1ScreenState
                           color: AppColors.secondary500,
                         ),
                       ),
-                      label: const Text(
-                        'Retour',
-                        style: TextStyle(
+                      label: Text(
+                        l?.tr('onboarding_back') ?? 'Retour',
+                        style: const TextStyle(
                           color: AppColors.secondary500,
                           fontWeight: FontWeight.w600,
                         ),
@@ -384,9 +388,9 @@ class _OwnerOnboardingStep1ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Détails du salon',
-                      style: TextStyle(
+                    Text(
+                      l?.tr('onboarding_step1_title') ?? 'Détails du salon',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: AppColors.brand900,
@@ -401,9 +405,9 @@ class _OwnerOnboardingStep1ScreenState
                         color: AppColors.brand50,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        'Étape 2 sur 6',
-                        style: TextStyle(
+                      child: Text(
+                        l?.tr('onboarding_step1_step') ?? 'Étape 2 sur 6',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.brand600,
@@ -452,7 +456,7 @@ class _OwnerOnboardingStep1ScreenState
 
                 // Header
                 Text(
-                  'Parlez-nous de votre salon',
+                  l?.tr('onboarding_step1_subtitle') ?? 'Parlez-nous de votre salon',
                   style: GoogleFonts.dmSans(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
@@ -470,7 +474,7 @@ class _OwnerOnboardingStep1ScreenState
                 // ── Salon Name ───────────────────────────────────────────────
                 _buildAddressField(
                   controller: _salonNameController,
-                  label: 'Nom du salon',
+                  label: l?.tr('onboarding_step1_name') ?? 'Nom du salon',
                   hint: 'ex. Luxe Beauty Lounge',
                   icon: Icons.store_mall_directory_outlined,
                   required: true,
@@ -481,8 +485,8 @@ class _OwnerOnboardingStep1ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Adresse',
+                    Text(
+                      l?.tr('onboarding_step1_address') ?? 'Adresse',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -512,10 +516,10 @@ class _OwnerOnboardingStep1ScreenState
                             ),
                       label: Text(
                         _isGettingLocation
-                            ? 'Localisation...'
+                            ? (l?.tr('salon_edit_info_gps_loading') ?? 'Localisation...')
                             : (_latitude != null
-                                ? 'Position capturée'
-                                : 'Utiliser ma position'),
+                                ? (l?.tr('salon_edit_info_gps_captured') ?? 'Position capturée')
+                                : (l?.tr('salon_edit_info_gps_use') ?? 'Utiliser ma position')),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -537,7 +541,7 @@ class _OwnerOnboardingStep1ScreenState
                 // Country
                 _buildAddressField(
                   controller: _countryController,
-                  label: 'Pays',
+                  label: l?.tr('salon_edit_info_country') ?? 'Pays',
                   hint: 'Maroc',
                   icon: Icons.public_outlined,
                 ),
@@ -546,7 +550,7 @@ class _OwnerOnboardingStep1ScreenState
                 // Street
                 _buildAddressField(
                   controller: _streetController,
-                  label: 'Adresse (rue et numéro)',
+                  label: l?.tr('salon_edit_info_street') ?? 'Adresse (rue et numéro)',
                   hint: 'ex. 12 Rue Mohammed V',
                   icon: Icons.signpost_outlined,
                 ),
@@ -560,7 +564,7 @@ class _OwnerOnboardingStep1ScreenState
                       flex: 3,
                       child: _buildAddressField(
                         controller: _cityController,
-                        label: 'Ville',
+                        label: l?.tr('salon_edit_info_city') ?? 'Ville *',
                         hint: 'ex. Casablanca',
                         icon: Icons.location_city_outlined,
                         required: true,
@@ -571,7 +575,7 @@ class _OwnerOnboardingStep1ScreenState
                       flex: 2,
                       child: _buildAddressField(
                         controller: _postalCodeController,
-                        label: 'Code postal',
+                        label: l?.tr('salon_edit_info_postal') ?? 'Code postal',
                         hint: 'ex. 20000',
                         icon: Icons.markunread_mailbox_outlined,
                         keyboardType: TextInputType.number,
@@ -632,8 +636,8 @@ class _OwnerOnboardingStep1ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Description',
+                    Text(
+                      l?.tr('onboarding_step1_description') ?? 'Description',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -701,9 +705,9 @@ class _OwnerOnboardingStep1ScreenState
                 // ── Social media ─────────────────────────────────────────────
                 Row(
                   children: [
-                    const Text(
-                      'Réseaux sociaux',
-                      style: TextStyle(
+                    Text(
+                      l?.tr('onboarding_step1_social') ?? 'Réseaux sociaux',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: AppColors.secondary700,
@@ -717,17 +721,17 @@ class _OwnerOnboardingStep1ScreenState
                         color: AppColors.secondary100,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        'Optionnel',
-                        style: TextStyle(
+                      child: Text(
+                        l?.tr('onboarding_step1_optional') ?? 'Optionnel',
+                        style: const TextStyle(
                             fontSize: 11, color: AppColors.secondary500),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Permet aux clients de vous retrouver facilement.',
+                Text(
+                  l?.tr('onboarding_step1_social_hint') ?? 'Permet aux clients de vous retrouver facilement.',
                   style:
                       TextStyle(fontSize: 12, color: AppColors.secondary400),
                 ),
@@ -771,7 +775,7 @@ class _OwnerOnboardingStep1ScreenState
 
                 // Actions
                 CustomButton(
-                  text: 'Next Step',
+                  text: l?.tr('onboarding_step1_next') ?? 'Étape suivante',
                   onPressed: _handleNext,
                   icon: Icons.arrow_forward,
                 ),

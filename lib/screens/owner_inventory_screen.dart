@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/inventory_model.dart';
 import '../models/product_model.dart';
 import '../providers/owner_providers.dart';
+import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import 'owner_boutique_screen.dart';
@@ -17,6 +18,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
     final inventoryAsync = ref.watch(ownerInventoryProvider);
 
@@ -34,7 +36,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              'Stock & Produits',
+              l?.tr('inventory_title') ?? 'Stock & Produits',
               style: GoogleFonts.dmSans(
                 fontWeight: FontWeight.bold,
                 color: AppColors.brand950,
@@ -61,7 +63,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
             error: (e, _) => SliverFillRemaining(
-              child: Center(child: Text('Erreur: $e')),
+              child: Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')),
             ),
             data: (items) {
               final lowCount = items.where((i) => i.isLow).length;
@@ -79,7 +81,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
                               icon: Icons.inventory_2_outlined,
                               iconBg: AppColors.brand50,
                               iconColor: AppColors.brand600,
-                              label: 'Produits',
+                              label: l?.tr('inventory_products_tab') ?? 'Produits',
                               value: '${items.length}',
                             ),
                           ),
@@ -89,7 +91,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
                               icon: Icons.warning_amber_rounded,
                               iconBg: const Color(0xFFFEF3C7),
                               iconColor: const Color(0xFFD97706),
-                              label: 'Stock faible',
+                              label: l?.tr('inventory_low_stock_tab') ?? 'Stock faible',
                               value: '$lowCount',
                             ),
                           ),
@@ -100,10 +102,10 @@ class OwnerInventoryScreen extends ConsumerWidget {
                       if (items.isEmpty)
                         _EmptySection(
                           icon: Icons.inventory_2_outlined,
-                          title: 'Aucun produit ajouté',
-                          subtitle:
-                              'Gérez vos produits et consommables utilisés dans le salon.\nSuivez les stocks et recevez des alertes.',
-                          actionLabel: 'Ajouter un produit',
+                          title: l?.tr('inventory_empty_title') ?? 'Aucun produit ajouté',
+                          subtitle: l?.tr('inventory_empty_subtitle') ??
+                              'Gérez vos produits et consommables en ajoutant des articles à votre inventaire.',
+                          actionLabel: l?.tr('inventory_add_product') ?? 'Ajouter un produit',
                           onAction: () {
                             final salonId = salonAsync.value?.id;
                             if (salonId != null) {
@@ -113,7 +115,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
                         )
                       else ...[
                         Text(
-                          'Inventaire',
+                          l?.tr('inventory_section_title') ?? 'Inventaire',
                           style: GoogleFonts.dmSans(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -172,19 +174,20 @@ class OwnerInventoryScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, String id) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Supprimer ce produit ?'),
-        content: const Text('Cette action est irréversible.'),
+        title: Text(l?.tr('inventory_delete_title') ?? 'Supprimer ce produit ?'),
+        content: Text(l?.tr('inventory_delete_message') ?? 'Cette action est irréversible.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annuler')),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Supprimer',
-                  style: TextStyle(color: Colors.red))),
+              child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                  style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -249,8 +252,9 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     } catch (e) {
       debugPrint('❌ addInventoryItem error: $e');
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e'), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -260,6 +264,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottom),
@@ -267,13 +272,13 @@ class _AddItemSheetState extends State<_AddItemSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Ajouter un produit',
+          Text(l?.tr('inventory_add_product') ?? 'Ajouter un produit',
               style: GoogleFonts.dmSans(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.brand950)),
           const SizedBox(height: 20),
-          _Field(label: 'Nom du produit', controller: _nameCtrl),
+          _Field(label: l?.tr('inventory_product_name') ?? 'Nom du produit', controller: _nameCtrl),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -281,8 +286,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Catégorie',
-                        style: TextStyle(
+                    Text(l?.tr('inventory_category') ?? 'Catégorie',
+                        style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.secondary500,
                             fontWeight: FontWeight.w500)),
@@ -300,8 +305,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Unité',
-                        style: TextStyle(
+                    Text(l?.tr('inventory_unit') ?? 'Unité',
+                        style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.secondary500,
                             fontWeight: FontWeight.w500)),
@@ -320,21 +325,21 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           Row(children: [
             Expanded(
                 child: _Field(
-                    label: 'Quantité',
+                    label: l?.tr('inventory_quantity') ?? 'Quantité',
                     controller: _qtyCtrl,
                     keyboard: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly])),
             const SizedBox(width: 12),
             Expanded(
                 child: _Field(
-                    label: 'Alerte stock (min)',
+                    label: l?.tr('inventory_alert_threshold') ?? 'Alerte stock (min)',
                     controller: _minCtrl,
                     keyboard: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly])),
           ]),
           const SizedBox(height: 14),
           _Field(
-              label: 'Prix unitaire (MAD, optionnel)',
+              label: l?.tr('inventory_unit_price') ?? 'Prix unitaire (MAD, optionnel)',
               controller: _priceCtrl,
               keyboard:
                   const TextInputType.numberWithOptions(decimal: true)),
@@ -357,8 +362,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       height: 20,
                       child:
                           CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('Ajouter',
-                      style: TextStyle(
+                  : Text(l?.tr('common_add') ?? 'Ajouter',
+                      style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 14)),
             ),
           ),
@@ -409,6 +414,7 @@ class _EditQuantitySheetState extends State<_EditQuantitySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottom),
@@ -416,7 +422,7 @@ class _EditQuantitySheetState extends State<_EditQuantitySheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Modifier le stock',
+          Text(l?.tr('inventory_edit_stock') ?? 'Modifier le stock',
               style: GoogleFonts.dmSans(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -427,7 +433,7 @@ class _EditQuantitySheetState extends State<_EditQuantitySheet> {
                   color: AppColors.secondary500, fontSize: 13)),
           const SizedBox(height: 20),
           _Field(
-            label: 'Nouvelle quantité (${widget.item.unit})',
+            label: '${l?.tr('inventory_new_quantity') ?? 'Nouvelle quantité'} (${widget.item.unit})',
             controller: _qtyCtrl,
             keyboard: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -451,8 +457,8 @@ class _EditQuantitySheetState extends State<_EditQuantitySheet> {
                       height: 20,
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
-                  : const Text('Enregistrer',
-                      style: TextStyle(
+                  : Text(l?.tr('common_save') ?? 'Enregistrer',
+                      style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 14)),
             ),
           ),
@@ -800,6 +806,7 @@ class _DropdownField<T> extends StatelessWidget {
 class _BoutiqueStockSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final productsAsync = ref.watch(ownerProductsProvider);
 
     return productsAsync.when(
@@ -817,7 +824,7 @@ class _BoutiqueStockSection extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Produits Boutique',
+                    l?.tr('inventory_boutique_products') ?? 'Produits Boutique',
                     style: GoogleFonts.dmSans(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -831,8 +838,8 @@ class _BoutiqueStockSection extends ConsumerWidget {
                     MaterialPageRoute(
                         builder: (_) => const OwnerBoutiqueScreen()),
                   ),
-                  child: const Text('Voir tout',
-                      style: TextStyle(fontSize: 13)),
+                  child: Text(l?.tr('inventory_see_all') ?? 'Voir tout',
+                      style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ),

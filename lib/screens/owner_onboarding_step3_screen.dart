@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
+import '../services/app_localizations.dart';
 import 'owner_onboarding_step5_screen.dart';
 
 class DaySchedule {
@@ -105,7 +106,7 @@ class _OwnerOnboardingStep3ScreenState
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Text(
-              'Choisir le fuseau horaire',
+              AppLocalizations.of(context)?.tr('onboarding_step3_timezone') ?? 'Choisir le fuseau horaire',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -186,8 +187,8 @@ class _OwnerOnboardingStep3ScreenState
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Horaires du lundi copiés vers Mar–Ven'),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)?.tr('onboarding_step3_copied') ?? 'Horaires du lundi copiés vers Mar–Ven'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -234,6 +235,7 @@ class _OwnerOnboardingStep3ScreenState
   }
 
   Widget _buildFormSection() {
+    final l = AppLocalizations.of(context);
     return Container(
       color: Colors.white,
       child: Center(
@@ -262,9 +264,9 @@ class _OwnerOnboardingStep3ScreenState
                           color: AppColors.secondary500,
                         ),
                       ),
-                      label: const Text(
-                        'Retour',
-                        style: TextStyle(
+                      label: Text(
+                        l?.tr('onboarding_back') ?? 'Retour',
+                        style: const TextStyle(
                           color: AppColors.secondary500,
                           fontWeight: FontWeight.w600,
                         ),
@@ -278,9 +280,9 @@ class _OwnerOnboardingStep3ScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Horaires d\'ouverture',
-                      style: TextStyle(
+                    Text(
+                      l?.tr('onboarding_step3_title') ?? 'Horaires d\'ouverture',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: AppColors.brand900,
@@ -295,9 +297,9 @@ class _OwnerOnboardingStep3ScreenState
                         color: AppColors.brand50,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        'Étape 4 sur 6',
-                        style: TextStyle(
+                      child: Text(
+                        l?.tr('onboarding_step3_step') ?? 'Étape 4 sur 6',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: AppColors.brand600,
@@ -348,7 +350,7 @@ class _OwnerOnboardingStep3ScreenState
 
                 // Header
                 Text(
-                  'Définissez votre planning hebdomadaire',
+                  l?.tr('onboarding_step3_subtitle') ?? 'Définissez votre planning hebdomadaire',
                   style: GoogleFonts.dmSans(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -395,8 +397,8 @@ class _OwnerOnboardingStep3ScreenState
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: _showTimezoneSelector,
-                        child: const Text(
-                          'Changer',
+                        child: Text(
+                          l?.tr('onboarding_step3_timezone_change') ?? 'Changer',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.brand600,
@@ -415,8 +417,8 @@ class _OwnerOnboardingStep3ScreenState
                   child: TextButton.icon(
                     onPressed: _copyMondayToWeekdays,
                     icon: const Icon(Icons.copy, size: 14),
-                    label: const Text(
-                      'Copier Lun → Mar–Ven',
+                    label: Text(
+                      l?.tr('onboarding_step3_copy_monday') ?? 'Copier Lun → Mar–Ven',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
@@ -438,7 +440,7 @@ class _OwnerOnboardingStep3ScreenState
 
                 // Actions
                 CustomButton(
-                  text: 'Continuer vers l\'équipe',
+                  text: l?.tr('onboarding_step3_continue') ?? 'Continuer vers l\'équipe',
                   onPressed: _handleNext,
                   icon: Icons.arrow_forward,
                 ),
@@ -454,15 +456,15 @@ class _OwnerOnboardingStep3ScreenState
                       ),
                       side: const BorderSide(color: AppColors.secondary200),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.arrow_back,
+                        const Icon(Icons.arrow_back,
                             size: 14, color: AppColors.secondary700),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'Retour',
-                          style: TextStyle(
+                          l?.tr('onboarding_back') ?? 'Retour',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppColors.secondary700,
                           ),
@@ -572,8 +574,8 @@ class _OwnerOnboardingStep3ScreenState
                     const SizedBox(height: 2),
                   ] else ...[
                     const SizedBox(height: 4),
-                    const Text(
-                      'Fermé',
+                    Text(
+                      AppLocalizations.of(context)?.tr('onboarding_step3_closed') ?? 'Fermé',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary400,

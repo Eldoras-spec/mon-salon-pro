@@ -14,6 +14,7 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import '../services/app_localizations.dart';
 import '../services/message_service.dart';
 import 'conversations_screen.dart';
 
@@ -57,9 +58,10 @@ class OwnerHomeScreen extends ConsumerWidget {
       body: userAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator(color: AppColors.brand600)),
-        error: (e, _) => Center(child: Text('Erreur : $e')),
+        error: (e, _) => Center(child: Text((AppLocalizations.of(context)?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e'))),
         data: (user) {
-          final userName = activeMember?.name ?? user?.fullName ?? 'Propriétaire';
+          final l = AppLocalizations.of(context);
+          final userName = activeMember?.name ?? user?.fullName ?? (l?.tr('home_owner') ?? 'Propriétaire');
           final salon = salonAsync.value;
           final appointments = appointmentsAsync.value ?? [];
 
@@ -119,6 +121,10 @@ class OwnerHomeScreen extends ConsumerWidget {
                           Color(0xFFDB2777), // brand600
                         ],
                       ),
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(0),
+                        bottomRight: Radius.circular(0),
+                      ),
                     ),
                     child: SafeArea(
                       bottom: false,
@@ -136,7 +142,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Bonjour,',
+                                        l?.tr('home_hello') ?? 'Bonjour,',
                                         style: TextStyle(
                                           fontSize: 13,
                                           color: Colors.white
@@ -225,20 +231,20 @@ class OwnerHomeScreen extends ConsumerWidget {
                                         shape: RoundedRectangleBorder(
                                             borderRadius:
                                                 BorderRadius.circular(16)),
-                                        title: const Text('Déconnexion'),
-                                        content: const Text(
-                                            'Êtes-vous sûr de vouloir vous déconnecter ?'),
+                                        title: Text(l?.tr('home_logout_title') ?? 'Déconnexion'),
+                                        content: Text(
+                                            l?.tr('home_logout_message') ?? 'Êtes-vous sûr de vouloir vous déconnecter ?'),
                                         actions: [
                                           TextButton(
                                             onPressed: () =>
                                                 Navigator.pop(ctx, false),
-                                            child: const Text('Annuler'),
+                                            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
                                           ),
                                           TextButton(
                                             onPressed: () =>
                                                 Navigator.pop(ctx, true),
-                                            child: const Text('Déconnecter',
-                                                style: TextStyle(
+                                            child: Text(l?.tr('profile_sign_out') ?? 'Se déconnecter',
+                                                style: const TextStyle(
                                                     color: Colors.red)),
                                           ),
                                         ],
@@ -286,7 +292,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                                   value: appointmentsAsync.isLoading
                                       ? '…'
                                       : '${todayUpcoming.length}',
-                                  label: "Aujourd'hui",
+                                  label: l?.tr('home_today') ?? "Aujourd'hui",
                                   icon: Icons.calendar_today_rounded,
                                 ),
                                 const SizedBox(width: 10),
@@ -294,7 +300,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                                   value: appointmentsAsync.isLoading
                                       ? '…'
                                       : '$completedCount',
-                                  label: 'Terminés',
+                                  label: l?.tr('home_completed') ?? 'Terminés',
                                   icon: Icons.check_circle_outline_rounded,
                                 ),
                                 const SizedBox(width: 10),
@@ -302,7 +308,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                                   value: salon?.rating != null
                                       ? salon!.rating.toStringAsFixed(1)
                                       : '—',
-                                  label: 'Note',
+                                  label: l?.tr('home_rating') ?? 'Note',
                                   icon: Icons.star_rounded,
                                 ),
                               ],
@@ -377,7 +383,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: _SectionHeader(
-                          title: "Rendez-vous d'aujourd'hui",
+                          title: l?.tr('home_today_appointments') ?? "Rendez-vous d'aujourd'hui",
                           count: todayUpcoming.length,
                         ),
                       ),
@@ -391,7 +397,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                           child: _EmptyCard(
                             icon: Icons.calendar_today_outlined,
                             message:
-                                "Aucun rendez-vous prévu aujourd'hui",
+                                l?.tr('home_no_appointments_today') ?? "Aucun rendez-vous prévu aujourd'hui",
                           ),
                         )
                       else
@@ -427,10 +433,10 @@ class OwnerHomeScreen extends ConsumerWidget {
                       const SizedBox(height: 24),
 
                       // ── Recent appointments ─────────────────────────────
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         child:
-                            _SectionHeader(title: 'Rendez-vous récents'),
+                            _SectionHeader(title: l?.tr('home_recent_appointments') ?? 'Rendez-vous récents'),
                       ),
                       const SizedBox(height: 12),
                       if (appointmentsAsync.isLoading)
@@ -442,7 +448,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                           child: _EmptyCard(
                             icon: Icons.history_rounded,
                             message:
-                                "Aucun rendez-vous pour l'instant",
+                                l?.tr('home_no_appointments_yet') ?? "Aucun rendez-vous pour l'instant",
                           ),
                         )
                       else
@@ -534,6 +540,7 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -563,7 +570,7 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Lien de votre salon',
+                  l?.tr('home_salon_link') ?? 'Lien de votre salon',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -589,7 +596,7 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
               Clipboard.setData(ClipboardData(text: _salonUrl));
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('Lien copie ! Collez-le dans votre bio Instagram.'),
+                  content: Text(l?.tr('home_link_copied') ?? 'Lien copié ! Collez-le dans votre bio Instagram.'),
                   backgroundColor: AppColors.brand600,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -603,9 +610,9 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
                 color: AppColors.brand600,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Text(
-                'Copier',
-                style: TextStyle(
+              child: Text(
+                l?.tr('home_copy') ?? 'Copier',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -684,6 +691,7 @@ class _RevenueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final revenueStr = totalRevenue >= 1000
         ? '${(totalRevenue / 1000).toStringAsFixed(1)}k MAD'
         : '${totalRevenue.toStringAsFixed(0)} MAD';
@@ -724,9 +732,9 @@ class _RevenueCard extends StatelessWidget {
                           size: 16, color: Color(0xFF059669)),
                     ),
                     const SizedBox(width: 10),
-                    const Text(
-                      'Revenus totaux',
-                      style: TextStyle(
+                    Text(
+                      l?.tr('home_total_revenue') ?? 'Revenus totaux',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary500,
                       ),
@@ -789,7 +797,7 @@ class _RevenueCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        open ? 'Ouvert' : 'Fermé',
+                        open ? (l?.tr('home_open') ?? 'Ouvert') : (l?.tr('home_closed') ?? 'Fermé'),
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -837,6 +845,7 @@ class _WeeklyChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final maxCount = dayCounts.reduce((a, b) => a > b ? a : b);
     final todayIndex = DateTime.now().weekday - 1;
 
@@ -864,7 +873,7 @@ class _WeeklyChart extends StatelessWidget {
           Row(
             children: [
               Text(
-                'Cette semaine',
+                l?.tr('home_this_week') ?? 'Cette semaine',
                 style: GoogleFonts.dmSans(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -1030,7 +1039,11 @@ class _AppointmentCardState extends State<_AppointmentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final a = widget.appointment;
+    if (a.clientId == 'walk-in' && a.clientName == null) {
+      _clientName = l?.tr('appointments_walk_in_client') ?? 'Client sans compte';
+    }
 
     final timeStr = DateFormat('HH:mm').format(a.dateTime);
     final dateStr = widget.showDate
@@ -1039,16 +1052,16 @@ class _AppointmentCardState extends State<_AppointmentCard> {
 
     final (statusLabel, statusBg, statusFg) = switch (a.status) {
       'completed' => (
-          'Terminé',
+          l?.tr('appointments_status_completed') ?? 'Terminé',
           const Color(0xFFDCFCE7),
           const Color(0xFF16A34A)
         ),
       'cancelled' => (
-          'Annulé',
+          l?.tr('appointments_status_cancelled') ?? 'Annulé',
           const Color(0xFFFEE2E2),
           const Color(0xFFDC2626)
         ),
-      _ => ('À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
+      _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
     };
 
     return Container(
@@ -1323,7 +1336,10 @@ class _AISummaryCardState extends State<_AISummaryCard> {
       final cachedDate = data?['aiSummaryDate'] as String?;
       final today = DateTime.now().toIso8601String().substring(0, 10);
 
-      if (cachedDate == today && data?['aiSummary'] != null) {
+      if (!mounted) return;
+      final cachedLang = data?['aiSummaryLang'] as String?;
+      final currentLang = Localizations.localeOf(context).languageCode;
+      if (cachedDate == today && data?['aiSummary'] != null && cachedLang == currentLang) {
         _applyCache(data!);
         return;
       }
@@ -1352,7 +1368,8 @@ class _AISummaryCardState extends State<_AISummaryCard> {
         'generateDailySummary',
         options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
       );
-      final result = await callable.call({'salonId': widget.salonId});
+      final lang = Localizations.localeOf(context).languageCode;
+      final result = await callable.call({'salonId': widget.salonId, 'lang': lang});
       final data = result.data as Map<String, dynamic>;
 
       setState(() {
@@ -1373,6 +1390,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
           .update({
         'aiSummary': _summary,
         'aiSummaryDate': today,
+        'aiSummaryLang': lang,
         'aiNoShowAlerts': _noShowAlerts,
         'aiPriceSuggestions': _priceSuggestions,
         'aiActionSuggestions': _actionSuggestions,
@@ -1390,6 +1408,8 @@ class _AISummaryCardState extends State<_AISummaryCard> {
       _actionSuggestions.isNotEmpty ||
       (_monthlyComparison ?? '').isNotEmpty ||
       (_financialInsights ?? '').isNotEmpty;
+
+  bool get _isEn => Localizations.localeOf(context).languageCode == 'en';
 
   @override
   Widget build(BuildContext context) {
@@ -1422,7 +1442,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Assistant IA',
+                  _isEn ? 'AI Assistant' : 'Assistant IA',
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -1453,7 +1473,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
             GestureDetector(
               onTap: _fetchFromGemini,
               child: Text(
-                'Impossible de générer le résumé. Appuie pour réessayer.',
+                _isEn ? 'Unable to generate summary. Tap to retry.' : 'Impossible de générer le résumé. Appuie pour réessayer.',
                 style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.secondary400, height: 1.5),
               ),
             )
@@ -1468,7 +1488,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
             // ── No-show alerts ──
             if (_noShowAlerts.isNotEmpty) ...[
               const SizedBox(height: 14),
-              _AISectionHeader(icon: Icons.warning_amber_rounded, color: const Color(0xFFEA580C), label: 'Risque no-show'),
+              _AISectionHeader(icon: Icons.warning_amber_rounded, color: const Color(0xFFEA580C), label: _isEn ? 'No-show risk' : 'Risque no-show'),
               for (final alert in _noShowAlerts)
                 _AISectionRow(icon: Icons.person_off_rounded, color: const Color(0xFFEA580C), text: alert),
             ],
@@ -1481,7 +1501,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Voir plus', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    Text(_isEn ? 'See more' : 'Voir plus', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.brand600),
                   ],
@@ -1493,7 +1513,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               // ── Action suggestions ──
               if (_actionSuggestions.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                _AISectionHeader(icon: Icons.lightbulb_outline_rounded, color: const Color(0xFF0891B2), label: 'Suggestions'),
+                _AISectionHeader(icon: Icons.lightbulb_outline_rounded, color: const Color(0xFF0891B2), label: _isEn ? 'Suggestions' : 'Suggestions'),
                 for (final s in _actionSuggestions)
                   _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF0891B2), text: s),
               ],
@@ -1501,7 +1521,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               // ── Price suggestions ──
               if (_priceSuggestions.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                _AISectionHeader(icon: Icons.monetization_on_outlined, color: const Color(0xFF059669), label: 'Suggestions de prix'),
+                _AISectionHeader(icon: Icons.monetization_on_outlined, color: const Color(0xFF059669), label: _isEn ? 'Price suggestions' : 'Suggestions de prix'),
                 for (final s in _priceSuggestions)
                   _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF059669), text: s),
               ],
@@ -1513,7 +1533,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                   icon: Icons.compare_arrows_rounded,
                   color: const Color(0xFF7C3AED),
                   text: _monthlyComparison!,
-                  label: 'Comparaison mensuelle',
+                  label: _isEn ? 'Monthly comparison' : 'Comparaison mensuelle',
                 ),
               ],
 
@@ -1524,7 +1544,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                   icon: Icons.insights_rounded,
                   color: const Color(0xFF0369A1),
                   text: _financialInsights!,
-                  label: 'Insights financiers',
+                  label: _isEn ? 'Financial insights' : 'Insights financiers',
                 ),
               ],
 
@@ -1534,7 +1554,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Voir moins', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    Text(_isEn ? 'See less' : 'Voir moins', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: AppColors.brand600),
                   ],
@@ -1630,6 +1650,7 @@ class _MessagesWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return StreamBuilder<List<dynamic>>(
       stream: MessageService().getOwnerConversations(salonId),
       builder: (context, snap) {
@@ -1695,7 +1716,7 @@ class _MessagesWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Messages',
+                        l?.tr('home_messages') ?? 'Messages',
                         style: GoogleFonts.dmSans(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -1707,8 +1728,8 @@ class _MessagesWidget extends StatelessWidget {
                         preview != null
                             ? (preview.lastMessage as String).isNotEmpty
                                 ? '${preview.clientName} : ${preview.lastMessage}'
-                                : '${convs.length} conversation${convs.length > 1 ? 's' : ''}'
-                            : 'Aucun message pour l\'instant',
+                                : (l?.tr('home_conversations_count') ?? '{count} conversation{plural}').replaceAll('{count}', '${convs.length}').replaceAll('{plural}', convs.length > 1 ? 's' : '')
+                            : l?.tr('home_no_messages_yet') ?? 'Aucun message pour l\'instant',
                         style: TextStyle(
                           fontSize: 12,
                           color: hasUnread
@@ -1780,7 +1801,7 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text((AppLocalizations.of(context)?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')), backgroundColor: Colors.red),
         );
       }
     }
@@ -1788,6 +1809,7 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
@@ -1805,7 +1827,7 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          Text('Sécurité',
+          Text(l?.tr('profile_security_title') ?? 'Sécurité',
               style: GoogleFonts.dmSans(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
@@ -1826,7 +1848,7 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Un email de réinitialisation a été envoyé à ${widget.userEmail}',
+                      (l?.tr('profile_security_reset_sent') ?? 'Un email de réinitialisation a été envoyé à {email}').replaceAll('{email}', widget.userEmail),
                       style: const TextStyle(
                           fontSize: 13, color: Color(0xFF166534)),
                     ),
@@ -1847,7 +1869,7 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Un lien de réinitialisation sera envoyé à\n${widget.userEmail}',
+                      (l?.tr('profile_security_reset_hint') ?? 'Un lien de réinitialisation sera envoyé à\n{email}').replaceAll('{email}', widget.userEmail),
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.secondary600),
                     ),
@@ -1872,8 +1894,8 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
                         height: 20,
                         child: CircularProgressIndicator(
                             color: Colors.white, strokeWidth: 2))
-                    : const Text('Réinitialiser le mot de passe',
-                        style: TextStyle(
+                    : Text(l?.tr('profile_security_reset_button') ?? 'Réinitialiser le mot de passe',
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 15)),

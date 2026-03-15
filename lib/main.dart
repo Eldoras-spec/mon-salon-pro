@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'theme/app_colors.dart';
@@ -15,9 +16,12 @@ import 'screens/member_home_screen.dart';
 import 'screens/team_profile_selector_screen.dart';
 import 'services/notification_service.dart';
 import 'services/version_service.dart';
+import 'services/app_localizations.dart';
+import 'services/locale_service.dart';
 import 'screens/force_update_screen.dart';
 import 'providers/auth_providers.dart';
 import 'providers/team_providers.dart';
+import 'providers/locale_provider.dart';
 import 'models/user_model.dart';
 
 void main() async {
@@ -31,8 +35,9 @@ void main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialize French locale data for intl date formatting
+  // Initialize locale data for intl date formatting
   await initializeDateFormatting('fr_FR', null);
+  await initializeDateFormatting('en_US', null);
 
   // Register background message handler before NotificationService init
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -49,6 +54,7 @@ class MonSalonProApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+    final locale = ref.watch(localeProvider);
 
     // Reset profile selection on every new login (auth state null → user)
     ref.listen(authStateProvider, (previous, next) {
@@ -64,6 +70,14 @@ class MonSalonProApp extends ConsumerWidget {
       title: 'Mon Salon Pro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      locale: locale,
+      supportedLocales: LocaleService.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: FutureBuilder<bool>(
         future: VersionService.needsForceUpdate(),
         builder: (context, snapshot) {
@@ -77,13 +91,14 @@ class MonSalonProApp extends ConsumerWidget {
           if (snapshot.data == true) {
             return const ForceUpdateScreen();
           }
-          return _buildAuthHome(authState, ref);
+          return _buildAuthHome(context, authState, ref);
         },
       ),
     );
   }
 
-  Widget _buildAuthHome(AsyncValue authState, WidgetRef ref) {
+  Widget _buildAuthHome(BuildContext context, AsyncValue authState, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     return authState.when(
         data: (user) {
           if (user == null) {
@@ -134,15 +149,15 @@ class MonSalonProApp extends ConsumerWidget {
                           color: Colors.orange,
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'Profil introuvable.',
-                          style: TextStyle(
+                        Text(
+                          l?.tr('main_profile_not_found') ?? 'Profil introuvable.',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text('Redirection vers la connexion...'),
+                        Text(l?.tr('main_redirecting') ?? 'Redirection vers la connexion...'),
                         const SizedBox(height: 24),
                         const CircularProgressIndicator(
                           color: AppColors.brand600,
@@ -166,14 +181,14 @@ class MonSalonProApp extends ConsumerWidget {
               }
               return MainAppScaffold(userModel: model);
             },
-            loading: () => const Scaffold(
+            loading: () => Scaffold(
               body: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: AppColors.brand600),
-                    SizedBox(height: 20),
-                    Text('Chargement du profil...'),
+                    const CircularProgressIndicator(color: AppColors.brand600),
+                    const SizedBox(height: 20),
+                    Text(l?.tr('main_loading_profile') ?? 'Chargement du profil...'),
                   ],
                 ),
               ),
@@ -190,16 +205,16 @@ class MonSalonProApp extends ConsumerWidget {
                         size: 60,
                       ),
                       const SizedBox(height: 16),
-                      Text('Erreur de connexion : $err'),
+                      Text((l?.tr('main_connection_error') ?? 'Erreur de connexion : {error}').replaceAll('{error}', err.toString())),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: () => ref.invalidate(userModelProvider),
-                        child: const Text('Réessayer'),
+                        child: Text(l?.tr('main_retry') ?? 'Réessayer'),
                       ),
                       TextButton(
                         onPressed: () =>
                             ref.read(authServiceProvider).signOut(),
-                        child: const Text('Se déconnecter'),
+                        child: Text(l?.tr('main_logout') ?? 'Se déconnecter'),
                       ),
                     ],
                   ),
@@ -215,7 +230,7 @@ class MonSalonProApp extends ConsumerWidget {
         ),
         error: (err, stack) {
           return Scaffold(
-            body: Center(child: Text('Erreur d\'authentification: $err')),
+            body: Center(child: Text((l?.tr('main_auth_error') ?? 'Erreur d\'authentification: {error}').replaceAll('{error}', err.toString()))),
           );
         },
       );
