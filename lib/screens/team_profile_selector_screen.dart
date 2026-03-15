@@ -481,8 +481,8 @@ class _PinDialogState extends State<_PinDialog>
                         .update({'pinHash': FieldValue.delete()});
 
                     if (ctx.mounted) Navigator.pop(ctx); // close forgot dialog
-                    if (mounted) Navigator.pop(context); // close pin dialog
-                    widget.onSuccess(); // enter as owner
+                    // onSuccess will pop the PIN dialog and call onEnter()
+                    widget.onSuccess();
 
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
