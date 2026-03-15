@@ -1693,6 +1693,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
   bool _success = false;
   bool _removed = false;
   bool _showNew = false;
+  String? _errorText;
 
   bool get _hasPinSet => widget.user.pinHash != null;
 
@@ -1710,21 +1711,11 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
 
     final l = AppLocalizations.of(context);
     if (newPin.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(l?.tr('profile_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating),
-      );
+      setState(() => _errorText = l?.tr('profile_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres');
       return;
     }
     if (newPin != confirmPin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(l?.tr('profile_pin_error_mismatch') ?? 'Les PINs ne correspondent pas'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating),
-      );
+      setState(() => _errorText = l?.tr('profile_pin_error_mismatch') ?? 'Les PINs ne correspondent pas');
       return;
     }
 
@@ -1732,15 +1723,11 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
     if (_hasPinSet) {
       final currentHash = _hashPin(_currentCtrl.text.trim());
       if (currentHash != widget.user.pinHash) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect'),
-              backgroundColor: Colors.red,
-              behavior: SnackBarBehavior.floating),
-        );
+        setState(() => _errorText = l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect');
         return;
       }
     }
+    setState(() => _errorText = null);
 
     setState(() => _loading = true);
     try {
@@ -1764,14 +1751,10 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
     // Verify current PIN before removing
     final currentHash = _hashPin(_currentCtrl.text.trim());
     if (currentHash != widget.user.pinHash) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating),
-      );
+      setState(() => _errorText = l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect');
       return;
     }
+    setState(() => _errorText = null);
 
     setState(() => _loading = true);
     try {
@@ -1896,6 +1879,29 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
               label: l?.tr('profile_pin_confirm') ?? 'Confirmer le nouveau PIN',
               showPin: false,
             ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorText!,
+                        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
