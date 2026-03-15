@@ -1691,6 +1691,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
   final _confirmCtrl = TextEditingController();
   bool _loading = false;
   bool _success = false;
+  bool _removed = false;
   bool _showNew = false;
 
   bool get _hasPinSet => widget.user.pinHash != null;
@@ -1758,6 +1759,37 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
     }
   }
 
+  Future<void> _removePin() async {
+    final l = AppLocalizations.of(context);
+    // Verify current PIN before removing
+    final currentHash = _hashPin(_currentCtrl.text.trim());
+    if (currentHash != widget.user.pinHash) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(l?.tr('profile_pin_error_wrong') ?? 'PIN actuel incorrect'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.id)
+          .update({'pinHash': FieldValue.delete()});
+      if (mounted) setState(() { _removed = true; _loading = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -1791,7 +1823,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
             style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
           ),
           const SizedBox(height: 20),
-          if (_success) ...[
+          if (_success || _removed) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1804,9 +1836,11 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      _hasPinSet
-                          ? (l?.tr('profile_pin_success_change') ?? 'PIN modifié avec succès !')
-                          : (l?.tr('profile_pin_success_set') ?? 'PIN défini avec succès !'),
+                      _removed
+                          ? (l?.tr('profile_pin_success_remove') ?? 'PIN supprimé avec succès !')
+                          : _hasPinSet
+                              ? (l?.tr('profile_pin_success_change') ?? 'PIN modifié avec succès !')
+                              : (l?.tr('profile_pin_success_set') ?? 'PIN défini avec succès !'),
                       style: const TextStyle(
                           fontSize: 13, color: Color(0xFF166534)),
                     ),
@@ -1887,6 +1921,28 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
                             fontSize: 15)),
               ),
             ),
+            // Remove PIN button (only when a PIN is already set)
+            if (_hasPinSet) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: _loading ? null : _removePin,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                      l?.tr('profile_remove_pin') ?? 'Supprimer le PIN',
+                      style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                ),
+              ),
+            ],
           ],
         ],
       ),

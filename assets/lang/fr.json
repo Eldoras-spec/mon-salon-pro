@@ -593,6 +593,8 @@
   "profile_pin_error_wrong": "PIN actuel incorrect",
   "profile_pin_success_change": "PIN modifié avec succès !",
   "profile_pin_success_set": "PIN défini avec succès !",
+  "profile_pin_success_remove": "PIN supprimé avec succès !",
+  "profile_remove_pin": "Supprimer le PIN",
   "profile_support_title": "Aide & Support",
   "profile_support_subtitle": "Décrivez votre problème ou suggestion",
   "profile_support_category_bug": "Bug",
