@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/team_member_model.dart';
 import '../models/user_model.dart';
+import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
@@ -20,7 +21,9 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final teamAsync = ref.watch(ownerTeamProvider);
-    final hasPinSet = userModel.pinHash != null;
+    // Watch the live stream so pinHash updates in real-time
+    final liveUser = ref.watch(userStreamProvider).value ?? userModel;
+    final hasPinSet = liveUser.pinHash != null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
@@ -50,7 +53,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
 
               // Owner tile — PIN requis si défini
               _OwnerTile(
-                userModel: userModel,
+                userModel: liveUser,
                 onEnter: () {
                   ref.read(activeTeamMemberProvider.notifier).state = null;
                   ref.read(profileSelectedProvider.notifier).state = true;
