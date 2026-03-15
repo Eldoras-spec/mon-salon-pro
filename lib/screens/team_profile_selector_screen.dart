@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -123,6 +125,8 @@ class _OwnerTile extends ConsumerWidget {
         builder: (ctx) => _PinDialog(
           memberName: userModel.fullName,
           expectedHash: userModel.pinHash!,
+          isOwner: true,
+          userId: userModel.id,
           onSuccess: () {
             Navigator.pop(ctx);
             onEnter();
@@ -345,10 +349,14 @@ class _PinDialog extends StatefulWidget {
     required this.memberName,
     required this.expectedHash,
     required this.onSuccess,
+    this.isOwner = false,
+    this.userId,
   });
   final String memberName;
   final String expectedHash;
   final VoidCallback onSuccess;
+  final bool isOwner;
+  final String? userId;
 
   @override
   State<_PinDialog> createState() => _PinDialogState();
@@ -389,6 +397,135 @@ class _PinDialogState extends State<_PinDialog>
       _pinCtrl.clear();
       _shakeCtrl.forward(from: 0);
     }
+  }
+
+  void _showForgotPin() {
+    final l = AppLocalizations.of(context);
+    final emailCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool loading = false;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Column(
+              children: [
+                const Icon(Icons.lock_reset_rounded, color: AppColors.brand600, size: 32),
+                const SizedBox(height: 8),
+                Text(
+                  l?.tr('selector_forgot_pin_title') ?? 'PIN oublié ?',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: AppColors.brand950, fontSize: 18),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l?.tr('selector_forgot_pin_subtitle') ?? 'Connectez-vous avec votre email et mot de passe pour supprimer le PIN.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.secondary500, fontWeight: FontWeight.normal),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: l?.tr('login_email') ?? 'Email',
+                    filled: true,
+                    fillColor: AppColors.secondary50,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.secondary200)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.brand500, width: 1.5)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passwordCtrl,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l?.tr('login_password') ?? 'Mot de passe',
+                    filled: true,
+                    fillColor: AppColors.secondary50,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.secondary200)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.brand500, width: 1.5)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(l?.tr('selector_cancel') ?? 'Annuler', style: const TextStyle(color: AppColors.secondary500)),
+              ),
+              ElevatedButton(
+                onPressed: loading ? null : () async {
+                  setDialogState(() => loading = true);
+                  try {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null || user.email == null) throw Exception('No user');
+
+                    final credential = EmailAuthProvider.credential(
+                      email: emailCtrl.text.trim(),
+                      password: passwordCtrl.text.trim(),
+                    );
+                    await user.reauthenticateWithCredential(credential);
+
+                    // Re-auth successful — remove PIN
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(widget.userId)
+                        .update({'pinHash': FieldValue.delete()});
+
+                    if (ctx.mounted) Navigator.pop(ctx); // close forgot dialog
+                    if (mounted) Navigator.pop(context); // close pin dialog
+                    widget.onSuccess(); // enter as owner
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(l?.tr('selector_pin_removed') ?? 'PIN supprimé. Vous pouvez en définir un nouveau depuis votre profil.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } on FirebaseAuthException catch (e) {
+                    setDialogState(() => loading = false);
+                    final msg = e.code == 'wrong-password' || e.code == 'invalid-credential'
+                        ? (l?.tr('selector_wrong_credentials') ?? 'Email ou mot de passe incorrect')
+                        : (l?.tr('common_error_short') ?? 'Erreur');
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+                      );
+                    }
+                  } catch (e) {
+                    setDialogState(() => loading = false);
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand700,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: loading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Text(l?.tr('selector_confirm') ?? 'Confirmer'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -470,6 +607,15 @@ class _PinDialogState extends State<_PinDialog>
         ),
       ),
       actions: [
+        if (widget.isOwner)
+          TextButton(
+            onPressed: _showForgotPin,
+            child: Text(
+              l?.tr('selector_forgot_pin') ?? 'PIN oublié ?',
+              style: const TextStyle(color: AppColors.brand500, fontSize: 12),
+            ),
+          ),
+        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(l?.tr('selector_cancel') ?? 'Annuler',

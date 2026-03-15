@@ -620,6 +620,12 @@
   "selector_pin_incorrect": "Incorrect PIN",
   "selector_cancel": "Cancel",
   "selector_enter": "Enter",
+  "selector_forgot_pin": "Forgot PIN?",
+  "selector_forgot_pin_title": "Forgot PIN?",
+  "selector_forgot_pin_subtitle": "Sign in with your email and password to remove the PIN.",
+  "selector_pin_removed": "PIN removed. You can set a new one from your profile.",
+  "selector_wrong_credentials": "Incorrect email or password",
+  "selector_confirm": "Confirm",
 
   "chat_quick_rdv_confirmed": "Appointment confirmed",
   "chat_quick_rdv_confirmed_text": "Your appointment is confirmed. See you soon!",
