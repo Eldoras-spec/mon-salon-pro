@@ -1357,13 +1357,21 @@ export const generateSmartPromotions = functions.pubsub
                     if (promos.length >= 3) break;
                     if (targeted.has(c.id)) continue;
                     const absentDays = Math.round((now - c.lastVisit) / dayMs);
+                    // Get client lang for personalized promo text
+                    let cIsEn = false;
+                    try {
+                        const cDoc = await db.collection("users").doc(c.id).get();
+                        cIsEn = cDoc.data()?.lang === "en";
+                    } catch (_) { /* default fr */ }
                     promos.push({
                         clientId: c.id,
                         clientName: c.name,
                         reason: "win_back",
                         discountPercent: winBackPct,
-                        title: `${c.name}, tu nous manques !`,
-                        description: `Cela fait ${absentDays} jours ! Profite de -${winBackPct}% sur ta prochaine visite.`,
+                        title: cIsEn ? `${c.name}, we miss you!` : `${c.name}, tu nous manques !`,
+                        description: cIsEn
+                            ? `It's been ${absentDays} days! Enjoy -${winBackPct}% on your next visit.`
+                            : `Cela fait ${absentDays} jours ! Profite de -${winBackPct}% sur ta prochaine visite.`,
                     });
                     targeted.add(c.id);
                 }
@@ -1376,13 +1384,20 @@ export const generateSmartPromotions = functions.pubsub
                 for (const c of loyalClients) {
                     if (promos.length >= 3) break;
                     if (targeted.has(c.id)) continue;
+                    let cIsEn2 = false;
+                    try {
+                        const cDoc = await db.collection("users").doc(c.id).get();
+                        cIsEn2 = cDoc.data()?.lang === "en";
+                    } catch (_) { /* default fr */ }
                     promos.push({
                         clientId: c.id,
                         clientName: c.name,
                         reason: "loyal",
                         discountPercent: loyalPct,
-                        title: `Merci pour ta fidélité, ${c.name} !`,
-                        description: `${c.visits} visites chez nous ! Voici -${loyalPct}% pour te remercier.`,
+                        title: cIsEn2 ? `Thank you for your loyalty, ${c.name}!` : `Merci pour ta fidélité, ${c.name} !`,
+                        description: cIsEn2
+                            ? `${c.visits} visits with us! Here's -${loyalPct}% to thank you.`
+                            : `${c.visits} visites chez nous ! Voici -${loyalPct}% pour te remercier.`,
                     });
                     targeted.add(c.id);
                 }
@@ -1404,13 +1419,20 @@ export const generateSmartPromotions = functions.pubsub
 
                 if (topClient && promos.length < 3) {
                     const c = clientMap[topClient[0]];
+                    let cIsEn3 = false;
+                    try {
+                        const cDoc = await db.collection("users").doc(c.id).get();
+                        cIsEn3 = cDoc.data()?.lang === "en";
+                    } catch (_) { /* default fr */ }
                     promos.push({
                         clientId: c.id,
                         clientName: c.name,
                         reason: "top_client",
                         discountPercent: topPct,
-                        title: `${c.name}, notre meilleur client du mois !`,
-                        description: `${topClient[1]} visites ce mois-ci ! Profite de -${topPct}% en récompense.`,
+                        title: cIsEn3 ? `${c.name}, our best client this month!` : `${c.name}, notre meilleur client du mois !`,
+                        description: cIsEn3
+                            ? `${topClient[1]} visits this month! Enjoy -${topPct}% as a reward.`
+                            : `${topClient[1]} visites ce mois-ci ! Profite de -${topPct}% en récompense.`,
                     });
                     targeted.add(c.id);
                 }
@@ -1446,12 +1468,14 @@ export const generateSmartPromotions = functions.pubsub
                         try {
                             const clientDoc = await db.collection("users").doc(promo.clientId).get();
                             const fcmToken = clientDoc.data()?.fcmToken;
+                            const pLang: string = clientDoc.data()?.lang || "fr";
+                            const pIsEn = pLang === "en";
 
                             if (fcmToken) {
                                 await messaging.send({
                                     token: fcmToken,
                                     notification: {
-                                        title: `${salon.name} - Offre spéciale pour toi !`,
+                                        title: pIsEn ? `${salon.name} - Special offer for you!` : `${salon.name} - Offre spéciale pour toi !`,
                                         body: promo.title,
                                     },
                                     data: {
@@ -1466,7 +1490,7 @@ export const generateSmartPromotions = functions.pubsub
                             // Save in-app notification
                             await db.collection("notifications").add({
                                 userId: promo.clientId,
-                                title: `${salon.name} - Offre spéciale`,
+                                title: pIsEn ? `${salon.name} - Special offer` : `${salon.name} - Offre spéciale`,
                                 body: promo.title,
                                 type: "smart_promotion",
                                 salonId,
@@ -1484,4 +1508,230 @@ export const generateSmartPromotions = functions.pubsub
         }
 
         console.log("Smart promotions generation complete.");
+    });
+
+// ============================================================
+// 13. RATE LIMIT: Callable function to check before signup
+// ============================================================
+export const checkSignupLimit = functions.https.onCall(async (data, context) => {
+    const email: string = data.email || "";
+    const ip: string = context.rawRequest.ip || "unknown";
+
+    // --- Block disposable email domains ---
+    const disposable = [
+        "yopmail.com", "tempmail.com", "guerrillamail.com", "mailinator.com",
+        "throwaway.email", "temp-mail.org", "fakeinbox.com", "sharklasers.com",
+        "guerrillamailblock.com", "grr.la", "dispostable.com", "trashmail.com",
+        "10minutemail.com", "mailnesia.com", "getairmail.com",
+    ];
+    const domain = email.split("@")[1]?.toLowerCase();
+    if (domain && disposable.includes(domain)) {
+        throw new functions.https.HttpsError("permission-denied",
+            "Les adresses email temporaires ne sont pas autorisées.");
+    }
+
+    // --- IP-based rate limit: max 3 accounts per hour ---
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+    const rateLimitRef = db.collection("_rateLimits").doc(`signup_${ip.replace(/[./]/g, "_")}`);
+
+    try {
+        const doc = await rateLimitRef.get();
+        if (doc.exists) {
+            const docData = doc.data();
+            const timestamps: number[] = (docData?.timestamps || [])
+                .filter((t: number) => t > oneHourAgo);
+
+            if (timestamps.length >= 3) {
+                console.warn(`Rate limit hit for IP ${ip} — ${timestamps.length} signups in last hour`);
+                throw new functions.https.HttpsError("resource-exhausted",
+                    "Trop de comptes créés depuis cette adresse. Réessayez dans une heure.");
+            }
+        }
+    } catch (e: unknown) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error("Rate limit check error:", e);
+    }
+
+    // --- Global daily limit: max 50 accounts per day ---
+    const today = new Date().toISOString().split("T")[0];
+    const dailyRef = db.collection("_rateLimits").doc(`daily_${today}`);
+
+    try {
+        const doc = await dailyRef.get();
+        const count = doc.exists ? (doc.data()?.count || 0) : 0;
+
+        if (count >= 50) {
+            console.warn(`Daily signup limit reached: ${count}`);
+            throw new functions.https.HttpsError("resource-exhausted",
+                "Limite quotidienne atteinte. Réessayez demain.");
+        }
+    } catch (e: unknown) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error("Daily limit check error:", e);
+    }
+
+    console.log(`✅ Signup check passed for ${email} from IP ${ip}`);
+    return { allowed: true };
+});
+
+// ── Record successful signup (called after createUser succeeds) ──
+export const recordSignup = functions.https.onCall(async (_data, context) => {
+    const ip: string = context.rawRequest.ip || "unknown";
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+
+    // Update IP rate limit
+    const rateLimitRef = db.collection("_rateLimits").doc(`signup_${ip.replace(/[./]/g, "_")}`);
+    try {
+        const doc = await rateLimitRef.get();
+        const timestamps: number[] = doc.exists
+            ? (doc.data()?.timestamps || []).filter((t: number) => t > oneHourAgo)
+            : [];
+        timestamps.push(now);
+        await rateLimitRef.set({
+            timestamps,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    } catch (e) {
+        console.error("Record signup IP error:", e);
+    }
+
+    // Increment daily counter
+    const today = new Date().toISOString().split("T")[0];
+    const dailyRef = db.collection("_rateLimits").doc(`daily_${today}`);
+    try {
+        await dailyRef.set({
+            count: admin.firestore.FieldValue.increment(1),
+            date: today,
+        }, { merge: true });
+    } catch (e) {
+        console.error("Record signup daily error:", e);
+    }
+
+    return { ok: true };
+});
+
+// ============================================================
+// 14. NOTIFY OWNER: When a client submits a Google review reward request
+// ============================================================
+export const onNewReviewReward = functions.firestore
+    .document("reviewRewards/{rewardId}")
+    .onCreate(async (snap) => {
+        const reward = snap.data();
+        const salonId: string = reward.salonId;
+        const clientName: string = reward.clientName || "Un client";
+
+        try {
+            const salonDoc = await db.collection("salons").doc(salonId).get();
+            if (!salonDoc.exists) return;
+            const ownerId: string = salonDoc.data()?.ownerId;
+            if (!ownerId) return;
+
+            const ownerDoc = await db.collection("users").doc(ownerId).get();
+            const fcmToken: string | undefined = ownerDoc.data()?.fcmToken;
+            const oLang: string = ownerDoc.data()?.lang || "fr";
+            const oIsEn = oLang === "en";
+
+            const nTitle = oIsEn ? "New Google review to validate ⭐" : "Nouvel avis Google à valider ⭐";
+            const nBody = oIsEn
+                ? `${clientName} claims to have left a Google review. Verify and validate to send their discount.`
+                : `${clientName} déclare avoir laissé un avis Google. Vérifiez et validez pour lui envoyer sa réduction.`;
+
+            if (fcmToken) {
+                await messaging.send({
+                    token: fcmToken,
+                    notification: { title: nTitle, body: nBody },
+                    data: {
+                        type: "review_reward_pending",
+                        salonId,
+                        rewardId: snap.id,
+                    },
+                    android: { priority: "high", notification: { channelId: "mon_salon_channel", sound: "default" } },
+                    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+                });
+            }
+
+            // Save in-app notification for owner
+            await db.collection("notifications").add({
+                userId: ownerId,
+                title: oIsEn ? "Google review to validate ⭐" : "Avis Google à valider ⭐",
+                body: oIsEn
+                    ? `${clientName} left a Google review. Validate to send their discount.`
+                    : `${clientName} a laissé un avis Google. Validez pour lui envoyer sa réduction.`,
+                type: "review_reward_pending",
+                salonId,
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            console.log(`✅ Owner ${ownerId} notified for review reward ${snap.id}`);
+        } catch (error) {
+            console.error("Error in onNewReviewReward:", error);
+        }
+    });
+
+// ============================================================
+// 15. NOTIFY CLIENT: When owner validates a Google review reward
+// ============================================================
+export const onReviewRewardValidated = functions.firestore
+    .document("reviewRewards/{rewardId}")
+    .onUpdate(async (change) => {
+        const before = change.before.data();
+        const after = change.after.data();
+
+        // Only trigger on pending → validated transition
+        if (before.status !== "pending" || after.status !== "validated") return;
+
+        const clientId: string = after.clientId;
+        const promoCode: string = after.promoCode || "";
+        const discountPercent: number = after.discountPercent || 10;
+        const salonId: string = after.salonId;
+
+        try {
+            const salonDoc = await db.collection("salons").doc(salonId).get();
+            const salonName: string = salonDoc.data()?.name || "Salon";
+
+            const clientDoc = await db.collection("users").doc(clientId).get();
+            const fcmToken: string | undefined = clientDoc.data()?.fcmToken;
+            const cLang: string = clientDoc.data()?.lang || "fr";
+            const cIsEn = cLang === "en";
+
+            const rTitle = cIsEn ? "Your discount is ready! 🎉" : "Votre réduction est disponible ! 🎉";
+            const rBody = cIsEn
+                ? `Thank you for your review on ${salonName}! Your promo code: ${promoCode} (-${discountPercent}%)`
+                : `Merci pour votre avis sur ${salonName} ! Votre code promo : ${promoCode} (-${discountPercent}%)`;
+
+            if (fcmToken) {
+                await messaging.send({
+                    token: fcmToken,
+                    notification: { title: rTitle, body: rBody },
+                    data: {
+                        type: "review_reward_validated",
+                        salonId,
+                        promoCode,
+                    },
+                    android: { priority: "high", notification: { channelId: "mon_salon_channel", sound: "default" } },
+                    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+                });
+            }
+
+            // Save in-app notification for client
+            await db.collection("notifications").add({
+                userId: clientId,
+                title: rTitle,
+                body: cIsEn
+                    ? `Promo code: ${promoCode} — ${discountPercent}% off at ${salonName}`
+                    : `Code promo : ${promoCode} — ${discountPercent}% de réduction chez ${salonName}`,
+                type: "review_reward_validated",
+                salonId,
+                promoCode,
+                read: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+
+            console.log(`✅ Client ${clientId} notified for validated reward, code: ${promoCode}`);
+        } catch (error) {
+            console.error("Error in onReviewRewardValidated:", error);
+        }
     });
