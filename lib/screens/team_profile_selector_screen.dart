@@ -559,63 +559,76 @@ class _PinDialogState extends State<_PinDialog>
           ),
         ],
       ),
-      content: AnimatedBuilder(
-        animation: _shakeAnim,
-        builder: (ctx, child) => Transform.translate(
-          offset: Offset(
-              _shakeAnim.value * (_shakeCtrl.value < 0.5 ? 1 : -1), 0),
-          child: child,
-        ),
-        child: TextField(
-          controller: _pinCtrl,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: 6,
-          autofocus: true,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(6),
-          ],
-          onSubmitted: (_) => _verify(),
-          decoration: InputDecoration(
-            counterText: '',
-            hintText: '••••••',
-            hintStyle: const TextStyle(
-                color: AppColors.secondary300, letterSpacing: 8),
-            errorText: _wrong ? (l?.tr('selector_pin_incorrect') ?? 'PIN incorrect') : null,
-            filled: true,
-            fillColor: AppColors.secondary50,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.secondary200),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _shakeAnim,
+            builder: (ctx, child) => Transform.translate(
+              offset: Offset(
+                  _shakeAnim.value * (_shakeCtrl.value < 0.5 ? 1 : -1), 0),
+              child: child,
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: _wrong
-                    ? const Color(0xFFDC2626)
-                    : AppColors.secondary200,
+            child: TextField(
+              controller: _pinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              autofocus: true,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              onSubmitted: (_) => _verify(),
+              decoration: InputDecoration(
+                counterText: '',
+                hintText: '••••••',
+                hintStyle: const TextStyle(
+                    color: AppColors.secondary300, letterSpacing: 8),
+                errorText: _wrong ? (l?.tr('selector_pin_incorrect') ?? 'PIN incorrect') : null,
+                filled: true,
+                fillColor: AppColors.secondary50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.secondary200),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: _wrong
+                        ? const Color(0xFFDC2626)
+                        : AppColors.secondary200,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppColors.brand500, width: 1.5),
+                ),
               ),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide:
-                  const BorderSide(color: AppColors.brand500, width: 1.5),
-            ),
           ),
-        ),
+          if (widget.isOwner) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: _showForgotPin,
+                child: Text(
+                  l?.tr('selector_forgot_pin') ?? 'PIN oublié ?',
+                  style: const TextStyle(
+                    color: AppColors.brand500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
       actions: [
-        if (widget.isOwner)
-          TextButton(
-            onPressed: _showForgotPin,
-            child: Text(
-              l?.tr('selector_forgot_pin') ?? 'PIN oublié ?',
-              style: const TextStyle(color: AppColors.brand500, fontSize: 12),
-            ),
-          ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(l?.tr('selector_cancel') ?? 'Annuler',
