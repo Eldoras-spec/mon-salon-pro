@@ -435,7 +435,7 @@ class _PinDialogState extends State<_PinDialog>
                   controller: emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: l?.tr('login_email') ?? 'Email',
+                    labelText: l?.tr('login_email_label') ?? 'Email',
                     filled: true,
                     fillColor: AppColors.secondary50,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.secondary200)),
@@ -447,7 +447,7 @@ class _PinDialogState extends State<_PinDialog>
                   controller: passwordCtrl,
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: l?.tr('login_password') ?? 'Mot de passe',
+                    labelText: l?.tr('login_password_label') ?? 'Mot de passe',
                     filled: true,
                     fillColor: AppColors.secondary50,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.secondary200)),
