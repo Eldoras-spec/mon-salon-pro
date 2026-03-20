@@ -781,15 +781,28 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   final _clientNameCtrl = TextEditingController();
   final _clientPhoneCtrl = TextEditingController();
   Map<String, dynamic>? _selectedService;
+  Map<String, dynamic>? _selectedPack;
   TeamMemberModel? _selectedMember;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
+  List<AppointmentModel> _existingAppointments = [];
 
   @override
   void initState() {
     super.initState();
     _snapTimeToOpenHours();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    try {
+      final appts = await DatabaseService()
+          .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
+      if (mounted) setState(() => _existingAppointments = appts);
+    } catch (e) {
+      debugPrint('Error loading appointments: $e');
+    }
   }
 
   @override
@@ -836,6 +849,17 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       initialDate: _selectedDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
+      selectableDayPredicate: (date) {
+        // Check if salon is open
+        final wh = _getHoursForDate(date);
+        if (wh == null || wh['isOpen'] != true) return false;
+        // Check if selected member is unavailable the whole day
+        if (_selectedMember != null) {
+          final iso = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+          if (_selectedMember!.unavailableDates.contains(iso)) return false;
+        }
+        return true;
+      },
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
@@ -852,6 +876,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         _selectedDate = picked;
         _snapTimeToOpenHours();
       });
+      _loadAppointments();
     }
   }
 
@@ -878,6 +903,226 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     return slots;
   }
 
+  /// Total duration of selected pack (null if no pack selected)
+  int? get _packDuration {
+    if (_selectedPack == null) return null;
+    final packServices = List<String>.from(_selectedPack!['services'] ?? []);
+    final services = widget.salon.services;
+    int total = 0;
+    for (final sName in packServices) {
+      final svc = services.cast<Map<String, dynamic>>().firstWhere(
+        (s) => (s['name'] ?? s['title']) == sName,
+        orElse: () => <String, dynamic>{},
+      );
+      total += ((svc['duration'] ?? 30) as int);
+    }
+    return total;
+  }
+
+  /// Check if the pack can be chained starting at [timeStr].
+  bool _canChainPackAt(String timeStr) {
+    if (_selectedPack == null) return true;
+    final parts = timeStr.split(':');
+    var cursor = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day,
+        int.parse(parts[0]), int.parse(parts[1]));
+    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    final packServices = List<String>.from(_selectedPack!['services'] ?? []);
+    final services = widget.salon.services.cast<Map<String, dynamic>>();
+    final simulatedBusy = <String, List<List<DateTime>>>{};
+
+    for (final sName in packServices) {
+      final svc = services.firstWhere(
+        (s) => (s['name'] ?? s['title']) == sName,
+        orElse: () => <String, dynamic>{'duration': 30},
+      );
+      final dur = (svc['duration'] as int?) ?? 30;
+      final svcEnd = cursor.add(Duration(minutes: dur));
+
+      final candidates = widget.teamMembers
+          .where((m) => m.isActive && m.assignedServiceNames.contains(sName) && !m.unavailableDates.contains(iso))
+          .toList();
+
+      if (candidates.isEmpty) {
+        cursor = svcEnd;
+        continue;
+      }
+
+      bool found = false;
+      for (final m in candidates) {
+        final busy = _existingAppointments.any((a) {
+          if (a.assignedMemberId != m.id) return false;
+          final aStart = a.dateTime.toUtc();
+          final aEnd = aStart.add(Duration(minutes: a.durationMinutes));
+          return cursor.toUtc().isBefore(aEnd) && svcEnd.toUtc().isAfter(aStart);
+        });
+        final simBusy = (simulatedBusy[m.id] ?? []).any((r) =>
+            cursor.isBefore(r[1]) && svcEnd.isAfter(r[0]));
+        if (!busy && !simBusy) {
+          simulatedBusy.putIfAbsent(m.id, () => []).add([cursor, svcEnd]);
+          found = true;
+          break;
+        }
+      }
+      if (!found) return false;
+      cursor = svcEnd;
+    }
+    return true;
+  }
+
+  /// Check if a time slot is blocked for the selected member (or pack chain).
+  bool _isSlotBlocked(String timeStr) {
+    if (_selectedService == null) return false;
+
+    // Pack mode: check if the entire chain can be auto-assigned
+    if (_selectedPack != null) {
+      return !_canChainPackAt(timeStr);
+    }
+
+    if (_selectedMember == null) return false;
+    final parts = timeStr.split(':');
+    final h = int.parse(parts[0]);
+    final m = int.parse(parts[1]);
+    final duration = _packDuration ?? ((_selectedService!['duration'] as int?) ?? 30);
+    final slotStart = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
+    final slotEnd = slotStart.add(Duration(minutes: duration));
+
+    // Check member full-day unavailability
+    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    if (_selectedMember!.unavailableDates.contains(iso)) return true;
+
+    // Check member hourly unavailability
+    final unavailSlots = _selectedMember!.unavailableSlots[iso] ?? [];
+    for (final slot in unavailSlots) {
+      final sp = slot.split('-');
+      if (sp.length != 2) continue;
+      final sParts = sp[0].split(':');
+      final eParts = sp[1].split(':');
+      final sMin = int.parse(sParts[0]) * 60 + int.parse(sParts[1]);
+      final eMin = int.parse(eParts[0]) * 60 + int.parse(eParts[1]);
+      final startMin = h * 60 + m;
+      final endMin = startMin + duration;
+      if (startMin < eMin && endMin > sMin) return true;
+    }
+
+    // Check existing appointments for this member
+    for (final appt in _existingAppointments) {
+      if (appt.assignedMemberId != _selectedMember!.id) continue;
+      final apptStart = appt.dateTime.toUtc();
+      final apptEnd = apptStart.add(Duration(minutes: appt.durationMinutes));
+      final sUtc = slotStart.toUtc();
+      final eUtc = slotEnd.toUtc();
+      if (sUtc.isBefore(apptEnd) && eUtc.isAfter(apptStart)) return true;
+    }
+
+    return false;
+  }
+
+  Future<void> _submitPack(String clientName, AppLocalizations? l) async {
+    final packServices = List<String>.from(_selectedPack!['services'] ?? []);
+    final services = widget.salon.services.cast<Map<String, dynamic>>();
+    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+
+    setState(() => _loading = true);
+    try {
+      final existing = await DatabaseService()
+          .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
+
+      var cursor = DateTime(
+        _selectedDate.year, _selectedDate.month, _selectedDate.day,
+        _selectedTime.hour, _selectedTime.minute,
+      );
+
+      final bookings = <Map<String, dynamic>>[];
+
+      for (final sName in packServices) {
+        final svc = services.firstWhere(
+          (s) => (s['name'] ?? s['title']) == sName,
+          orElse: () => <String, dynamic>{'name': sName, 'duration': 30, 'price': 0},
+        );
+        final dur = (svc['duration'] as int?) ?? 30;
+        final svcEnd = cursor.add(Duration(minutes: dur));
+
+        // Find available member for this service
+        final candidates = widget.teamMembers
+            .where((m) =>
+                m.isActive &&
+                m.assignedServiceNames.contains(sName) &&
+                !m.unavailableDates.contains(iso))
+            .toList();
+
+        TeamMemberModel? assigned;
+        for (final m in candidates) {
+          // Check existing appointments
+          final busy = existing.any((a) {
+            if (a.assignedMemberId != m.id) return false;
+            final aStart = a.dateTime.toUtc();
+            final aEnd = aStart.add(Duration(minutes: a.durationMinutes));
+            return cursor.toUtc().isBefore(aEnd) && svcEnd.toUtc().isAfter(aStart);
+          });
+          // Check already planned bookings in this chain
+          final chainBusy = bookings.any((b) {
+            if (b['memberId'] != m.id) return false;
+            final bStart = b['start'] as DateTime;
+            final bEnd = b['end'] as DateTime;
+            return cursor.isBefore(bEnd) && svcEnd.isAfter(bStart);
+          });
+          if (!busy && !chainBusy) {
+            assigned = m;
+            break;
+          }
+        }
+
+        if (assigned == null && candidates.isNotEmpty) {
+          if (mounted) {
+            _showError('Aucun employé disponible pour "$sName" à ${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}');
+            setState(() => _loading = false);
+          }
+          return;
+        }
+
+        bookings.add({
+          'service': svc,
+          'member': assigned,
+          'memberId': assigned?.id,
+          'start': cursor,
+          'end': svcEnd,
+          'duration': dur,
+        });
+        cursor = svcEnd;
+      }
+
+      // Create all appointments
+      final clientPhone = _clientPhoneCtrl.text.trim();
+      for (final b in bookings) {
+        final svc = b['service'] as Map<String, dynamic>;
+        final member = b['member'] as TeamMemberModel?;
+        final appointment = AppointmentModel(
+          id: const Uuid().v4(),
+          clientId: 'walk-in',
+          salonId: widget.salon.id,
+          salonName: widget.salon.name,
+          serviceName: svc['name'] as String? ?? 'Service',
+          price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+          dateTime: b['start'] as DateTime,
+          status: 'upcoming',
+          createdAt: DateTime.now(),
+          durationMinutes: b['duration'] as int,
+          clientName: clientName,
+          clientPhone: clientPhone.isNotEmpty ? clientPhone : null,
+          assignedMemberId: member?.id,
+          assignedMemberName: member?.name,
+        );
+        await DatabaseService().createAppointment(appointment);
+      }
+
+      widget.onCreated();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) _showError('Erreur: $e');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
   Future<void> _submit() async {
     final clientName = _clientNameCtrl.text.trim();
     final l = AppLocalizations.of(context);
@@ -889,8 +1134,14 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       _showError(l?.tr('appointments_error_service') ?? 'Veuillez sélectionner un service');
       return;
     }
-    if (_selectedMember == null) {
+    if (_selectedPack == null && _selectedMember == null) {
       _showError(l?.tr('appointments_error_employee') ?? 'Veuillez sélectionner un employé');
+      return;
+    }
+
+    // Pack mode → auto-assign and create chained appointments
+    if (_selectedPack != null) {
+      await _submitPack(clientName, l);
       return;
     }
     if (!_isDayOpen(_selectedDate)) {
@@ -906,7 +1157,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     }
 
     // Check if the selected time falls within an unavailable slot
-    final duration = _selectedService!['duration'] as int? ?? 30;
+    final duration = _packDuration ?? (_selectedService!['duration'] as int? ?? 30);
     final slots = _selectedMember!.unavailableSlots[isoDate] ?? [];
     if (slots.isNotEmpty) {
       final startMin = _selectedTime.hour * 60 + _selectedTime.minute;
@@ -935,8 +1186,12 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         _selectedTime.minute,
       );
 
-      final serviceName = _selectedService!['name'] as String? ?? 'Service';
-      final price = (_selectedService!['price'] as num?)?.toDouble() ?? 0.0;
+      final serviceName = _selectedPack != null
+          ? 'Pack: ${_selectedPack!['name'] ?? 'Pack'}'
+          : (_selectedService!['name'] as String? ?? 'Service');
+      final price = _selectedPack != null
+          ? (_selectedPack!['price'] as num?)?.toDouble() ?? 0.0
+          : (_selectedService!['price'] as num?)?.toDouble() ?? 0.0;
 
       // Double-booking check
       final existing = await DatabaseService()
@@ -1079,7 +1334,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Service selection
+            // Service / Pack selection
             _label(l?.tr('appointments_service_label') ?? 'Service *'),
             const SizedBox(height: 6),
             Container(
@@ -1090,36 +1345,77 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                 color: AppColors.secondary50,
               ),
               child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
+                child: DropdownButton<String>(
                   isExpanded: true,
-                  value: _selectedService != null
-                      ? services.indexOf(_selectedService!)
-                      : null,
+                  value: _selectedPack != null
+                      ? 'pack_${widget.salon.servicePacks.indexOf(_selectedPack!)}'
+                      : _selectedService != null
+                          ? 'svc_${services.indexOf(_selectedService!)}'
+                          : null,
                   hint: Text(l?.tr('appointments_select_service') ?? 'Sélectionner un service',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.secondary400)),
-                  items: List.generate(services.length, (i) {
-                    final s = services[i];
-                    final name = s['name'] as String? ?? '';
-                    final price =
-                        (s['price'] as num?)?.toStringAsFixed(0) ?? '0';
-                    final dur = s['duration'] as int? ?? 30;
-                    return DropdownMenuItem(
-                      value: i,
-                      child: Text(
-                        '$name · $price MAD · ${dur}min',
-                        style: const TextStyle(
-                            fontSize: 13, color: AppColors.brand950),
-                      ),
-                    );
-                  }),
-                  onChanged: (i) {
-                    if (i != null) {
-                      setState(() {
-                        _selectedService = services[i];
-                        _selectedMember = null;
-                      });
-                    }
+                  items: [
+                    // Packs
+                    ...widget.salon.servicePacks.asMap().entries.map((e) {
+                      final pack = e.value;
+                      final name = pack['name'] as String? ?? 'Pack';
+                      final price = (pack['price'] as num?)?.toStringAsFixed(0) ?? '0';
+                      final packServices = List<String>.from(pack['services'] ?? []);
+                      int totalDur = 0;
+                      for (final sName in packServices) {
+                        final svc = services.cast<Map<String, dynamic>>().firstWhere(
+                          (s) => (s['name'] ?? s['title']) == sName,
+                          orElse: () => <String, dynamic>{},
+                        );
+                        totalDur += ((svc['duration'] ?? 30) as int);
+                      }
+                      return DropdownMenuItem(
+                        value: 'pack_${e.key}',
+                        child: Text(
+                          '📦 $name · $price MAD · ${totalDur}min',
+                          style: const TextStyle(
+                              fontSize: 13, color: AppColors.brand950),
+                        ),
+                      );
+                    }),
+                    // Individual services
+                    ...List.generate(services.length, (i) {
+                      final s = services[i];
+                      final name = s['name'] as String? ?? '';
+                      final price = (s['price'] as num?)?.toStringAsFixed(0) ?? '0';
+                      final dur = s['duration'] as int? ?? 30;
+                      return DropdownMenuItem(
+                        value: 'svc_$i',
+                        child: Text(
+                          '$name · $price MAD · ${dur}min',
+                          style: const TextStyle(
+                              fontSize: 13, color: AppColors.brand950),
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (val) {
+                    if (val == null) return;
+                    setState(() {
+                      if (val.startsWith('pack_')) {
+                        final idx = int.parse(val.substring(5));
+                        _selectedPack = widget.salon.servicePacks[idx];
+                        // Use first service of pack for member filtering
+                        final packServices = List<String>.from(_selectedPack!['services'] ?? []);
+                        if (packServices.isNotEmpty) {
+                          _selectedService = services.cast<Map<String, dynamic>>().firstWhere(
+                            (s) => (s['name'] ?? s['title']) == packServices.first,
+                            orElse: () => services.first,
+                          );
+                        }
+                      } else {
+                        final idx = int.parse(val.substring(4));
+                        _selectedService = services[idx];
+                        _selectedPack = null;
+                      }
+                      _selectedMember = null;
+                    });
                   },
                 ),
               ),
@@ -1130,6 +1426,36 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             _label(l?.tr('appointments_employee_label') ?? 'Employé *'),
             const SizedBox(height: 6),
             Builder(builder: (_) {
+              if (_selectedService == null) {
+                return Text(
+                  l?.tr('appointments_select_service_first') ?? 'Sélectionnez d\'abord un service',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.secondary400),
+                );
+              }
+              // Pack mode → auto-assign
+              if (_selectedPack != null) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.brand50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.brand100),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 16, color: AppColors.brand600),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          l?.tr('appointments_auto_assign') ?? 'Attribution automatique des employés pour chaque service du pack',
+                          style: const TextStyle(fontSize: 12, color: AppColors.brand700),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
               final serviceName =
                   _selectedService?['name'] as String? ?? '';
               final filteredMembers = serviceName.isEmpty
@@ -1139,13 +1465,6 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                           m.isActive &&
                           m.assignedServiceNames.contains(serviceName))
                       .toList();
-              if (_selectedService == null) {
-                return Text(
-                  l?.tr('appointments_select_service_first') ?? 'Sélectionnez d\'abord un service',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.secondary400),
-                );
-              }
               if (filteredMembers.isEmpty) {
                 return Text(
                   l?.tr('appointments_no_employee_for_service') ?? 'Aucun employé assigné à ce service',
@@ -1327,7 +1646,9 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                             color: AppColors.brand700)),
                     const SizedBox(height: 6),
                     Text(
-                      '${_selectedService!['name']} · ${(_selectedService!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_selectedService!['duration'] ?? 30} min',
+                      _selectedPack != null
+                          ? 'Pack: ${_selectedPack!['name']} · ${(_selectedPack!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_packDuration ?? 0} min'
+                          : '${_selectedService!['name']} · ${(_selectedService!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_selectedService!['duration'] ?? 30} min',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.brand950),
                     ),
@@ -1434,8 +1755,9 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             itemBuilder: (context, index) {
               final time = slots[index];
               final isSelected = selectedStr == time;
+              final isBlocked = _isSlotBlocked(time);
               return GestureDetector(
-                onTap: () {
+                onTap: isBlocked ? null : () {
                   final parts = time.split(':');
                   setState(() => _selectedTime = TimeOfDay(
                         hour: int.parse(parts[0]),
@@ -1447,15 +1769,19 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.brand600 : Colors.white,
+                    color: isBlocked
+                        ? AppColors.secondary100
+                        : isSelected ? AppColors.brand600 : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected
-                          ? AppColors.brand600
-                          : AppColors.secondary200,
-                      width: isSelected ? 1.5 : 1,
+                      color: isBlocked
+                          ? AppColors.secondary200
+                          : isSelected
+                              ? AppColors.brand600
+                              : AppColors.secondary200,
+                      width: isSelected && !isBlocked ? 1.5 : 1,
                     ),
-                    boxShadow: isSelected
+                    boxShadow: isSelected && !isBlocked
                         ? [
                             BoxShadow(
                               color: AppColors.brand600
@@ -1471,9 +1797,11 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
-                      color: isSelected
-                          ? Colors.white
-                          : AppColors.secondary700,
+                      color: isBlocked
+                          ? AppColors.secondary300
+                          : isSelected
+                              ? Colors.white
+                              : AppColors.secondary700,
                       letterSpacing: 0.5,
                     ),
                   ),

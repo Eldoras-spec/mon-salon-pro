@@ -792,5 +792,7 @@
   "team_pin_confirm_edit": "Confirmer le nouveau PIN",
   "team_pin_confirm_new": "Confirmer le PIN *",
   "team_pin_error_length": "Le PIN doit contenir exactement 6 chiffres",
-  "team_pin_error_mismatch": "Les PINs ne correspondent pas"
+  "team_pin_error_mismatch": "Les PINs ne correspondent pas",
+
+  "appointments_auto_assign": "Attribution automatique des employés pour chaque service du pack"
 }

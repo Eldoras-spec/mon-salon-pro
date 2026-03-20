@@ -1277,9 +1277,11 @@ class _MemberAddAppointmentSheetState
 
   final _clientNameCtrl = TextEditingController();
   Map<String, dynamic>? _selectedService;
+  Map<String, dynamic>? _selectedPack;
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
+  List<AppointmentModel> _existingAppointments = [];
 
   /// Services assigned to this member only.
   List<Map<String, dynamic>> get _memberServices {
@@ -1289,10 +1291,69 @@ class _MemberAddAppointmentSheetState
         .toList();
   }
 
+  /// Packs where ALL services are assigned to this member.
+  List<Map<String, dynamic>> get _memberPacks {
+    final assigned = widget.member.assignedServiceNames;
+    return widget.salon.servicePacks.where((pack) {
+      final packServices = List<String>.from(pack['services'] ?? []);
+      return packServices.isNotEmpty && packServices.every((s) => assigned.contains(s));
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
     _snapTimeToOpenHours();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    try {
+      final appts = await DatabaseService()
+          .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
+      if (mounted) setState(() => _existingAppointments = appts);
+    } catch (_) {}
+  }
+
+  int get _effectiveDuration {
+    if (_selectedPack != null) {
+      final packSvcNames = List<String>.from(_selectedPack!['services'] ?? []);
+      int total = 0;
+      for (final sName in packSvcNames) {
+        final svc = widget.salon.services.cast<Map<String, dynamic>>().firstWhere(
+          (s) => (s['name'] ?? s['title']) == sName,
+          orElse: () => <String, dynamic>{},
+        );
+        total += ((svc['duration'] ?? 30) as int);
+      }
+      return total;
+    }
+    return (_selectedService?['duration'] as int?) ?? 30;
+  }
+
+  bool _isSlotBlocked(String timeStr) {
+    if (_selectedService == null) return false;
+    final parts = timeStr.split(':');
+    final h = int.parse(parts[0]);
+    final m = int.parse(parts[1]);
+    final duration = _effectiveDuration;
+    final slotStart = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
+    final slotEnd = slotStart.add(Duration(minutes: duration));
+
+    // Member unavailable (full day)
+    if (_isMemberUnavailable(_selectedDate)) return true;
+
+    // Member unavailable (time slot)
+    if (_isMemberUnavailableAtTime(_selectedDate, TimeOfDay(hour: h, minute: m), duration)) return true;
+
+    // Existing appointments
+    for (final appt in _existingAppointments) {
+      if (appt.assignedMemberId != widget.member.id) continue;
+      final apptStart = appt.dateTime.toUtc();
+      final apptEnd = apptStart.add(Duration(minutes: appt.durationMinutes));
+      if (slotStart.toUtc().isBefore(apptEnd) && slotEnd.toUtc().isAfter(apptStart)) return true;
+    }
+    return false;
   }
 
   @override
@@ -1387,6 +1448,11 @@ class _MemberAddAppointmentSheetState
       initialDate: _selectedDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
+      selectableDayPredicate: (date) {
+        if (!_isDayOpen(date)) return false;
+        if (_isMemberUnavailable(date)) return false;
+        return true;
+      },
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
@@ -1403,6 +1469,7 @@ class _MemberAddAppointmentSheetState
         _selectedDate = picked;
         _snapTimeToOpenHours();
       });
+      _loadAppointments();
     }
   }
 
@@ -1427,7 +1494,7 @@ class _MemberAddAppointmentSheetState
     }
 
     // Check if the selected time falls within an unavailable slot
-    final duration = _selectedService!['duration'] as int? ?? 30;
+    final duration = _effectiveDuration;
     if (_isMemberUnavailableAtTime(_selectedDate, _selectedTime, duration)) {
       _showError(l?.tr('member_add_unavailable_slot') ?? 'Vous êtes indisponible sur ce créneau horaire');
       return;
@@ -1442,9 +1509,6 @@ class _MemberAddAppointmentSheetState
         _selectedTime.hour,
         _selectedTime.minute,
       );
-      final serviceName = _selectedService!['name'] as String? ?? 'Service';
-      final price = (_selectedService!['price'] as num?)?.toDouble() ?? 0.0;
-
       // Double-booking check
       final existing = await DatabaseService()
           .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
@@ -1465,23 +1529,52 @@ class _MemberAddAppointmentSheetState
         return;
       }
 
-      final appointment = AppointmentModel(
-        id: const Uuid().v4(),
-        clientId: 'walk-in',
-        salonId: widget.salon.id,
-        salonName: widget.salon.name,
-        serviceName: serviceName,
-        price: price,
-        dateTime: dateTime,
-        status: 'upcoming',
-        createdAt: DateTime.now(),
-        durationMinutes: duration,
-        clientName: clientName,
-        assignedMemberId: widget.member.id,
-        assignedMemberName: widget.member.name,
-      );
-
-      await DatabaseService().createAppointment(appointment);
+      // Pack mode: create one appointment per service, chained
+      if (_selectedPack != null) {
+        final packSvcNames = List<String>.from(_selectedPack!['services'] ?? []);
+        var cursor = dateTime;
+        for (final sName in packSvcNames) {
+          final svc = widget.salon.services.cast<Map<String, dynamic>>().firstWhere(
+            (s) => (s['name'] ?? s['title']) == sName,
+            orElse: () => <String, dynamic>{'name': sName, 'duration': 30, 'price': 0},
+          );
+          final svcDur = (svc['duration'] as int?) ?? 30;
+          await DatabaseService().createAppointment(AppointmentModel(
+            id: const Uuid().v4(),
+            clientId: 'walk-in',
+            salonId: widget.salon.id,
+            salonName: widget.salon.name,
+            serviceName: svc['name'] as String? ?? sName,
+            price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+            dateTime: cursor,
+            status: 'upcoming',
+            createdAt: DateTime.now(),
+            durationMinutes: svcDur,
+            clientName: clientName,
+            assignedMemberId: widget.member.id,
+            assignedMemberName: widget.member.name,
+          ));
+          cursor = cursor.add(Duration(minutes: svcDur));
+        }
+      } else {
+        final serviceName = _selectedService!['name'] as String? ?? 'Service';
+        final price = (_selectedService!['price'] as num?)?.toDouble() ?? 0.0;
+        await DatabaseService().createAppointment(AppointmentModel(
+          id: const Uuid().v4(),
+          clientId: 'walk-in',
+          salonId: widget.salon.id,
+          salonName: widget.salon.name,
+          serviceName: serviceName,
+          price: price,
+          dateTime: dateTime,
+          status: 'upcoming',
+          createdAt: DateTime.now(),
+          durationMinutes: duration,
+          clientName: clientName,
+          assignedMemberId: widget.member.id,
+          assignedMemberName: widget.member.name,
+        ));
+      }
       widget.onCreated();
       if (mounted) {
         Navigator.pop(context);
@@ -1581,34 +1674,74 @@ class _MemberAddAppointmentSheetState
                   color: AppColors.secondary50,
                 ),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
+                  child: DropdownButton<String>(
                     isExpanded: true,
-                    value: _selectedService != null
-                        ? services.indexOf(_selectedService!)
-                        : null,
+                    value: _selectedPack != null
+                        ? 'pack_${_memberPacks.indexOf(_selectedPack!)}'
+                        : _selectedService != null
+                            ? 'svc_${services.indexOf(_selectedService!)}'
+                            : null,
                     hint: Text(l?.tr('appointments_select_service') ?? 'Sélectionner un service',
                         style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.secondary400)),
-                    items: List.generate(services.length, (i) {
-                      final s = services[i];
-                      final name = s['name'] as String? ?? '';
-                      final price =
-                          (s['price'] as num?)?.toStringAsFixed(0) ?? '0';
-                      final dur = s['duration'] as int? ?? 30;
-                      return DropdownMenuItem(
-                        value: i,
-                        child: Text(
-                          '$name · $price MAD · ${dur}min',
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.brand950),
-                        ),
-                      );
-                    }),
-                    onChanged: (i) {
-                      if (i != null) {
-                        setState(() => _selectedService = services[i]);
-                      }
+                    items: [
+                      // Packs
+                      ..._memberPacks.asMap().entries.map((e) {
+                        final pack = e.value;
+                        final name = pack['name'] as String? ?? 'Pack';
+                        final price = (pack['price'] as num?)?.toStringAsFixed(0) ?? '0';
+                        final packSvcNames = List<String>.from(pack['services'] ?? []);
+                        int totalDur = 0;
+                        for (final sName in packSvcNames) {
+                          final svc = widget.salon.services.cast<Map<String, dynamic>>().firstWhere(
+                            (s) => (s['name'] ?? s['title']) == sName,
+                            orElse: () => <String, dynamic>{},
+                          );
+                          totalDur += ((svc['duration'] ?? 30) as int);
+                        }
+                        return DropdownMenuItem(
+                          value: 'pack_${e.key}',
+                          child: Text(
+                            '📦 $name · $price MAD · ${totalDur}min',
+                            style: const TextStyle(fontSize: 13, color: AppColors.brand950),
+                          ),
+                        );
+                      }),
+                      // Individual services
+                      ...List.generate(services.length, (i) {
+                        final s = services[i];
+                        final name = s['name'] as String? ?? '';
+                        final price = (s['price'] as num?)?.toStringAsFixed(0) ?? '0';
+                        final dur = s['duration'] as int? ?? 30;
+                        return DropdownMenuItem(
+                          value: 'svc_$i',
+                          child: Text(
+                            '$name · $price MAD · ${dur}min',
+                            style: const TextStyle(fontSize: 13, color: AppColors.brand950),
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (val) {
+                      if (val == null) return;
+                      setState(() {
+                        if (val.startsWith('pack_')) {
+                          final idx = int.parse(val.substring(5));
+                          _selectedPack = _memberPacks[idx];
+                          final packSvcNames = List<String>.from(_selectedPack!['services'] ?? []);
+                          if (packSvcNames.isNotEmpty) {
+                            _selectedService = services.firstWhere(
+                              (s) => (s['name'] ?? s['title']) == packSvcNames.first,
+                              orElse: () => services.first,
+                            );
+                          }
+                        } else {
+                          final idx = int.parse(val.substring(4));
+                          _selectedService = services[idx];
+                          _selectedPack = null;
+                        }
+                      });
                     },
                   ),
                 ),
@@ -1863,8 +1996,9 @@ class _MemberAddAppointmentSheetState
             itemBuilder: (context, index) {
               final time = slots[index];
               final isSelected = selectedStr == time;
+              final isBlocked = _isSlotBlocked(time);
               return GestureDetector(
-                onTap: () {
+                onTap: isBlocked ? null : () {
                   final parts = time.split(':');
                   setState(() => _selectedTime = TimeOfDay(
                         hour: int.parse(parts[0]),
@@ -1876,16 +2010,19 @@ class _MemberAddAppointmentSheetState
                   padding: const EdgeInsets.symmetric(
                       horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected ? AppColors.brand600 : Colors.white,
+                    color: isBlocked
+                        ? AppColors.secondary100
+                        : isSelected ? AppColors.brand600 : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected
-                          ? AppColors.brand600
-                          : AppColors.secondary200,
-                      width: isSelected ? 1.5 : 1,
+                      color: isBlocked
+                          ? AppColors.secondary200
+                          : isSelected
+                              ? AppColors.brand600
+                              : AppColors.secondary200,
+                      width: isSelected && !isBlocked ? 1.5 : 1,
                     ),
-                    boxShadow: isSelected
+                    boxShadow: isSelected && !isBlocked
                         ? [
                             BoxShadow(
                               color: AppColors.brand600
@@ -1901,9 +2038,11 @@ class _MemberAddAppointmentSheetState
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
-                      color: isSelected
-                          ? Colors.white
-                          : AppColors.secondary700,
+                      color: isBlocked
+                          ? AppColors.secondary300
+                          : isSelected
+                              ? Colors.white
+                              : AppColors.secondary700,
                       letterSpacing: 0.5,
                     ),
                   ),

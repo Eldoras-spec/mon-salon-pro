@@ -908,6 +908,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         workingHours: widget.salon.workingHours,
         services: widget.salon.services,
         serviceCategories: widget.salon.serviceCategories,
+        servicePacks: widget.salon.servicePacks,
         latitude: lat,
         longitude: lng,
         createdAt: widget.salon.createdAt,
@@ -1143,6 +1144,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         workingHours: Map<String, dynamic>.from(_hours),
         services: widget.salon.services,
         serviceCategories: widget.salon.serviceCategories,
+        servicePacks: widget.salon.servicePacks,
         latitude: widget.salon.latitude,
         longitude: widget.salon.longitude,
         createdAt: widget.salon.createdAt,
@@ -1361,6 +1363,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
         workingHours: widget.salon.workingHours,
         services: _services,
         serviceCategories: categories,
+        servicePacks: widget.salon.servicePacks,
         latitude: widget.salon.latitude,
         longitude: widget.salon.longitude,
         createdAt: widget.salon.createdAt,
@@ -1368,20 +1371,25 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
       await DatabaseService().saveSalon(updated);
 
       // Update each team member's assignedServiceNames
-      final teamMembers = ref.read(ownerTeamProvider).value ?? [];
-      for (final member in teamMembers) {
-        final assignedServices = _services
-            .where((s) {
-              final members = List<String>.from(s['assignedMembers'] ?? []);
-              return members.contains(member.name);
-            })
-            .map((s) => s['name'] as String)
-            .toList();
-        await DatabaseService().updateTeamMember(
-          widget.salon.id,
-          member.id,
-          {'assignedServiceNames': assignedServices},
-        );
+      // Only update if assignedMembers field is present in any service
+      final hasAssignments = _services.any((s) =>
+          (s['assignedMembers'] as List?)?.isNotEmpty == true);
+      if (hasAssignments) {
+        final teamMembers = ref.read(ownerTeamProvider).value ?? [];
+        for (final member in teamMembers) {
+          final assignedServices = _services
+              .where((s) {
+                final members = List<String>.from(s['assignedMembers'] ?? []);
+                return members.contains(member.name);
+              })
+              .map((s) => s['name'] as String)
+              .toList();
+          await DatabaseService().updateTeamMember(
+            widget.salon.id,
+            member.id,
+            {'assignedServiceNames': assignedServices},
+          );
+        }
       }
 
       widget.onSaved();
@@ -2530,6 +2538,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
                       children: [
                         Container(
                           width: 200,
+                          clipBehavior: Clip.hardEdge,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppColors.secondary200),
