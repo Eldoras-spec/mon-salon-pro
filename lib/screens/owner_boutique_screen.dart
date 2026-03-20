@@ -751,16 +751,16 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 14),
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                           value: 'pickup',
-                          child: Text('Retrait en magasin uniquement')),
+                          child: Text(AppLocalizations.of(context)?.tr('boutique_delivery_pickup') ?? 'Retrait en magasin uniquement')),
                       DropdownMenuItem(
                           value: 'national',
-                          child: Text('Livraison dans tout le pays')),
+                          child: Text(AppLocalizations.of(context)?.tr('boutique_delivery_national') ?? 'Livraison dans tout le pays')),
                       DropdownMenuItem(
                           value: 'cities',
-                          child: Text('Livraison par ville')),
+                          child: Text(AppLocalizations.of(context)?.tr('boutique_delivery_cities') ?? 'Livraison par ville')),
                     ],
                     onChanged: (v) => setState(() => _deliveryType = v ?? 'pickup'),
                   ),

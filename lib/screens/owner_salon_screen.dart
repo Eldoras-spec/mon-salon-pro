@@ -1406,6 +1406,34 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
   }
 
   void _delete(int index) {
+    final serviceName = _services[index]['name'] as String? ?? '';
+    // Check if this service belongs to any pack
+    final packUsingService = widget.salon.servicePacks.where((pack) {
+      final packServices = List<String>.from(pack['services'] ?? []);
+      return packServices.contains(serviceName);
+    }).toList();
+
+    if (packUsingService.isNotEmpty) {
+      final packName = packUsingService.first['name'] ?? 'Pack';
+      final l = AppLocalizations.of(context);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l?.tr('common_error_short') ?? 'Erreur'),
+          content: Text(
+            (l?.tr('salon_service_delete_pack_error') ?? 'Ce service fait partie du pack "{pack}". Supprimez d\'abord le pack.')
+                .replaceAll('{pack}', packName),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l?.tr('common_ok') ?? 'OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     setState(() => _services.removeAt(index));
   }
 

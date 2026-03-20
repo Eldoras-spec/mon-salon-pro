@@ -1776,9 +1776,9 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Offrir une réduction pour un avis Google',
-                          style: TextStyle(
+                        Text(
+                          AppLocalizations.of(context)?.tr('promo_google_title') ?? 'Offrir une réduction pour un avis Google',
+                          style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                             color: AppColors.brand950,
@@ -1786,8 +1786,8 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                         ),
                         Text(
                           widget.enabled
-                              ? '${widget.config['discountPercent'] ?? 10}% de réduction à la validation'
-                              : 'Activez pour récompenser vos clients',
+                              ? '${widget.config['discountPercent'] ?? 10}% ${AppLocalizations.of(context)?.tr('promo_google_active') ?? 'de réduction à la validation'}'
+                              : (AppLocalizations.of(context)?.tr('promo_google_inactive') ?? 'Activez pour récompenser vos clients'),
                           style: const TextStyle(
                               fontSize: 11, color: AppColors.secondary400),
                         ),
@@ -2113,9 +2113,9 @@ class _RewardToggleState extends State<_RewardToggle> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Points de fidélité',
-                  style: TextStyle(
+                Text(
+                  AppLocalizations.of(context)?.tr('promo_loyalty_title') ?? 'Points de fidélité',
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: AppColors.brand950,
@@ -2123,8 +2123,8 @@ class _RewardToggleState extends State<_RewardToggle> {
                 ),
                 Text(
                   _enabled
-                      ? 'Les clients cumulent des points'
-                      : 'Système désactivé',
+                      ? (AppLocalizations.of(context)?.tr('promo_loyalty_active') ?? 'Les clients cumulent des points')
+                      : (AppLocalizations.of(context)?.tr('promo_loyalty_inactive') ?? 'Système désactivé'),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary400,
@@ -2192,20 +2192,21 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                     size: 20, color: AppColors.brand600),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child:
-                    Text('Promotions IA', style: TextStyle(fontSize: 17)),
+                    Text(AppLocalizations.of(context)?.tr('promo_ai_title') ?? 'Promotions IA', style: const TextStyle(fontSize: 17)),
               ),
             ],
           ),
-          content: const Text(
+          content: Text(
+            AppLocalizations.of(context)?.tr('promo_ai_dialog_body') ??
             'L\'IA analysera vos clients chaque jour et créera des promotions ciblées :\n\n'
             '• Meilleur client du mois\n'
             '• Client absent depuis longtemps\n'
             '• Client fidèle\n\n'
             'Les promotions sont envoyées par notification push. '
             'Vous pouvez personnaliser les pourcentages depuis les paramètres.',
-            style: TextStyle(
+            style: const TextStyle(
                 fontSize: 13.5, height: 1.5, color: AppColors.secondary600),
           ),
           actions: [
@@ -2294,7 +2295,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _configRow(
-                    'Meilleur client',
+                    AppLocalizations.of(context)?.tr('promo_ai_best_client') ?? 'Meilleur client',
                     'Réduction pour le top client du mois',
                     '$topPercent%',
                     topPercent,
@@ -2304,7 +2305,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                   ),
                   const Divider(height: 24),
                   _configRow(
-                    'Client absent',
+                    AppLocalizations.of(context)?.tr('promo_ai_absent_client') ?? 'Client absent',
                     'Réduction pour récupérer un client',
                     '$winBackPercent%',
                     winBackPercent,
@@ -2324,7 +2325,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                   ),
                   const Divider(height: 24),
                   _configRow(
-                    'Client fidèle',
+                    AppLocalizations.of(context)?.tr('promo_ai_loyal_client') ?? 'Client fidèle',
                     'Réduction de remerciement',
                     '$loyalPercent%',
                     loyalPercent,

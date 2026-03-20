@@ -1305,7 +1305,9 @@ class _CancellationRate extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isLow ? 'Excellent !' : 'À surveiller',
+                  isLow
+                      ? (AppLocalizations.of(context)?.tr('statistics_excellent') ?? 'Excellent !')
+                      : (AppLocalizations.of(context)?.tr('statistics_watch') ?? 'À surveiller'),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -1316,7 +1318,9 @@ class _CancellationRate extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$cancelled annulation${cancelled > 1 ? 's' : ''} sur $total rendez-vous',
+                  (AppLocalizations.of(context)?.tr('statistics_cancellation_detail') ?? '{cancelled} annulation(s) sur {total} rendez-vous')
+                      .replaceAll('{cancelled}', '$cancelled')
+                      .replaceAll('{total}', '$total'),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary500,

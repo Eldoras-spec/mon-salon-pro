@@ -797,5 +797,27 @@
   "team_pin_confirm_edit": "Confirm new PIN",
   "team_pin_confirm_new": "Confirm PIN *",
   "team_pin_error_length": "PIN must be exactly 6 digits",
-  "team_pin_error_mismatch": "PINs do not match"
+  "team_pin_error_mismatch": "PINs do not match",
+
+  "statistics_excellent": "Excellent!",
+  "statistics_watch": "Needs attention",
+  "statistics_cancellation_detail": "{cancelled} cancellation(s) out of {total} appointments",
+
+  "promo_loyalty_title": "Loyalty points",
+  "promo_loyalty_active": "Clients earn points",
+  "promo_loyalty_inactive": "System disabled",
+  "promo_google_title": "Offer a discount for a Google review",
+  "promo_google_active": "discount on validation",
+  "promo_google_inactive": "Enable to reward your clients",
+  "promo_ai_title": "AI Promotions",
+  "promo_ai_dialog_body": "AI will analyze your clients daily and create targeted promotions:\n\n• Best client of the month\n• Client absent for a long time\n• Loyal client\n\nPromotions are sent via push notification. You can customize percentages in settings.",
+  "promo_ai_best_client": "Best client",
+  "promo_ai_absent_client": "Absent client",
+  "promo_ai_loyal_client": "Loyal client",
+
+  "boutique_delivery_pickup": "In-store pickup only",
+  "boutique_delivery_national": "Delivery nationwide",
+  "boutique_delivery_cities": "Delivery by city",
+
+  "salon_service_delete_pack_error": "This service is part of the pack \"{pack}\". Delete the pack first."
 }

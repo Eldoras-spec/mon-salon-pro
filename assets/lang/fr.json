@@ -794,5 +794,27 @@
   "team_pin_error_length": "Le PIN doit contenir exactement 6 chiffres",
   "team_pin_error_mismatch": "Les PINs ne correspondent pas",
 
-  "appointments_auto_assign": "Attribution automatique des employés pour chaque service du pack"
+  "appointments_auto_assign": "Attribution automatique des employés pour chaque service du pack",
+
+  "statistics_excellent": "Excellent !",
+  "statistics_watch": "À surveiller",
+  "statistics_cancellation_detail": "{cancelled} annulation(s) sur {total} rendez-vous",
+
+  "promo_loyalty_title": "Points de fidélité",
+  "promo_loyalty_active": "Les clients cumulent des points",
+  "promo_loyalty_inactive": "Système désactivé",
+  "promo_google_title": "Offrir une réduction pour un avis Google",
+  "promo_google_active": "de réduction à la validation",
+  "promo_google_inactive": "Activez pour récompenser vos clients",
+  "promo_ai_title": "Promotions IA",
+  "promo_ai_dialog_body": "L'IA analysera vos clients chaque jour et créera des promotions ciblées :\n\n• Meilleur client du mois\n• Client absent depuis longtemps\n• Client fidèle\n\nLes promotions sont envoyées par notification push. Vous pouvez personnaliser les pourcentages depuis les paramètres.",
+  "promo_ai_best_client": "Meilleur client",
+  "promo_ai_absent_client": "Client absent",
+  "promo_ai_loyal_client": "Client fidèle",
+
+  "boutique_delivery_pickup": "Retrait en magasin uniquement",
+  "boutique_delivery_national": "Livraison dans tout le pays",
+  "boutique_delivery_cities": "Livraison par ville",
+
+  "salon_service_delete_pack_error": "Ce service fait partie du pack \"{pack}\". Supprimez d'abord le pack."
 }
