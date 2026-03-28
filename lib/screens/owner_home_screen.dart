@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -186,38 +187,62 @@ class OwnerHomeScreen extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 // Security & Account
+                                // Messages shortcut with unread badge
                                 GestureDetector(
                                   onTap: () {
-                                    final email = userAsync.value?.email ?? '';
-                                    showModalBottomSheet(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      backgroundColor: Colors.white,
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.vertical(
-                                            top: Radius.circular(20)),
+                                    final uid = ref.read(authStateProvider).value?.uid ?? '';
+                                    Navigator.push(context, MaterialPageRoute(
+                                      builder: (_) => ConversationsScreen(
+                                        currentUserId: uid,
+                                        isClient: false,
+                                        salonId: salon?.id,
                                       ),
-                                      builder: (_) => _OwnerSecuritySheet(
-                                        userEmail: email,
-                                        onAccountDeleted: () {
-                                          ref.read(authServiceProvider).signOut();
-                                          ref.invalidate(authStateProvider);
-                                          ref.invalidate(userModelProvider);
-                                        },
-                                      ),
-                                    );
+                                    ));
                                   },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                        Icons.settings_outlined,
-                                        size: 18,
-                                        color: Colors.white),
+                                  child: StreamBuilder<QuerySnapshot>(
+                                    stream: salon != null
+                                        ? FirebaseFirestore.instance
+                                            .collection('conversations')
+                                            .where('salonId', isEqualTo: salon.id)
+                                            .where('unreadByOwner', isGreaterThan: 0)
+                                            .snapshots()
+                                        : const Stream.empty(),
+                                    builder: (context, snap) {
+                                      final unreadCount = snap.data?.docs.length ?? 0;
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.15),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                                CupertinoIcons.chat_bubble_text_fill,
+                                                size: 18,
+                                                color: Colors.white),
+                                          ),
+                                          if (unreadCount > 0)
+                                            Positioned(
+                                              top: -4, right: -4,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.red,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                                                child: Text(
+                                                  '$unreadCount',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -506,6 +531,7 @@ class _SalonLinkCard extends StatefulWidget {
 
 class _SalonLinkCardState extends State<_SalonLinkCard> {
   String? _generatedSlug;
+  bool _showBookingLink = false;
 
   SalonModel get salon => widget.salon;
 
@@ -516,6 +542,16 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
     }
     return 'https://monsalon.web.app/salon.html?id=${salon.id}';
   }
+
+  String get _bookingUrl {
+    final slug = _generatedSlug ?? salon.slug;
+    if (slug != null && slug.isNotEmpty) {
+      return 'https://monsalon.web.app/booking.html?slug=$slug';
+    }
+    return 'https://monsalon.web.app/booking.html?id=${salon.id}';
+  }
+
+  String get _currentUrl => _showBookingLink ? _bookingUrl : _salonUrl;
 
   @override
   void initState() {
@@ -570,7 +606,9 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  l?.tr('home_salon_link') ?? 'Lien de votre salon',
+                  _showBookingLink
+                      ? (l?.tr('home_booking_link') ?? 'Lien de réservation')
+                      : (l?.tr('home_salon_link') ?? 'Lien de votre salon'),
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -579,7 +617,7 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _salonUrl,
+                  _currentUrl,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.secondary400,
@@ -591,12 +629,30 @@ class _SalonLinkCardState extends State<_SalonLinkCard> {
             ),
           ),
           const SizedBox(width: 8),
+          // Swap button
+          GestureDetector(
+            onTap: () => setState(() => _showBookingLink = !_showBookingLink),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.secondary50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.swap_horiz_rounded,
+                color: AppColors.brand600,
+                size: 18,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Copy button
           GestureDetector(
             onTap: () {
-              Clipboard.setData(ClipboardData(text: _salonUrl));
+              Clipboard.setData(ClipboardData(text: _currentUrl));
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(l?.tr('home_link_copied') ?? 'Lien copié ! Collez-le dans votre bio Instagram.'),
+                  content: Text(l?.tr('home_link_copied') ?? 'Lien copié !'),
                   backgroundColor: AppColors.brand600,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

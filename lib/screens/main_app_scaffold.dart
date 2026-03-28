@@ -20,6 +20,7 @@ import 'owner_agenda_screen.dart';
 import 'owner_clients_screen.dart';
 import 'owner_statistics_screen.dart';
 import 'owner_team_screen.dart';
+import 'owner_services_screen.dart';
 
 class MainAppScaffold extends ConsumerStatefulWidget {
   final UserModel userModel;
@@ -165,7 +166,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                 sub: l?.tr('menu_manage_services_desc') ?? 'Ajouter ou modifier vos services',
                 onTap: () {
                   Navigator.pop(context);
-                  setState(() => _currentIndex = 2);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerServicesScreen()));
                 },
               ),
 

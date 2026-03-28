@@ -45,24 +45,36 @@ class MessageService {
     required String senderId,
     required String text,
     required bool senderIsClient,
+    String langCode = 'fr',
+    String? imageUrl,
+    String type = 'text',
+    Map<String, dynamic>? extraData,
   }) async {
     final batch = _db.batch();
 
     // Add message to subcollection
     final msgRef =
         _db.collection('conversations').doc(convId).collection('messages').doc();
-    batch.set(msgRef, {
+    final msgData = <String, dynamic>{
       'senderId': senderId,
       'text': text.trim(),
       'sentAt': FieldValue.serverTimestamp(),
-    });
+      'type': type,
+    };
+    if (imageUrl != null) msgData['imageUrl'] = imageUrl;
+    if (extraData != null) msgData.addAll(extraData);
+    batch.set(msgRef, msgData);
 
     // Update conversation metadata
+    final lastPreview = type == 'custom_request'
+        ? '📷 Demande personnalisée'
+        : type == 'image'
+            ? '📷 Photo'
+            : text.trim();
     final convRef = _db.collection('conversations').doc(convId);
     batch.update(convRef, {
-      'lastMessage': text.trim(),
+      'lastMessage': lastPreview,
       'lastMessageAt': FieldValue.serverTimestamp(),
-      // Increment unread counter for the OTHER party
       if (senderIsClient) 'unreadByOwner': FieldValue.increment(1),
       if (!senderIsClient) 'unreadByClient': FieldValue.increment(1),
     });
@@ -80,39 +92,47 @@ class MessageService {
           .get();
       // Only 1 message means this is the first → send auto-reply
       if (msgs.docs.length <= 1) {
-        await _sendAutoReply(convId: convId, salonId: _salonIdFromConv(convId));
+        await _sendAutoReply(convId: convId, salonId: _salonIdFromConv(convId), langCode: langCode);
       }
     }
   }
 
   // ── Auto-reply helper ───────────────────────────────────────────────────
 
-  static const String _autoReplyText =
-      'Merci pour votre message ! ✨\n'
-      'Un conseiller vous répondra dans les plus brefs délais.\n'
-      'En attendant, n\'hésitez pas à consulter nos services et réserver directement en ligne.';
+  static String _autoReplyText(String langCode) {
+    if (langCode == 'en') {
+      return 'Thank you for your message! ✨\n'
+          'An advisor will get back to you shortly.\n'
+          'In the meantime, feel free to browse our services and book directly online.';
+    }
+    return 'Merci pour votre message ! ✨\n'
+        'Un conseiller vous répondra dans les plus brefs délais.\n'
+        'En attendant, n\'hésitez pas à consulter nos services et réserver directement en ligne.';
+  }
 
   Future<void> _sendAutoReply({
     required String convId,
     required String salonId,
+    String langCode = 'fr',
   }) async {
     // Small delay so the auto-reply appears after the client message
     await Future.delayed(const Duration(seconds: 1));
 
+    final text = _autoReplyText(langCode);
     final batch = _db.batch();
 
     final msgRef =
         _db.collection('conversations').doc(convId).collection('messages').doc();
     batch.set(msgRef, {
       'senderId': 'bot_$salonId',
-      'text': _autoReplyText,
+      'text': text,
       'sentAt': FieldValue.serverTimestamp(),
       'isAutoReply': true,
     });
 
     final convRef = _db.collection('conversations').doc(convId);
     batch.update(convRef, {
-      'lastMessage': _autoReplyText,
+      'lastMessage': text,
       'lastMessageAt': FieldValue.serverTimestamp(),
       'unreadByClient': FieldValue.increment(1),
     });
@@ -128,30 +148,37 @@ class MessageService {
 
   // ── Send auto-reply for outside working hours ──────────────────────────
 
-  static const String _outsideHoursText =
-      'Nous sommes actuellement fermés. 🕐\n'
-      'Votre message a bien été reçu, nous vous répondrons dès l\'ouverture du salon.';
+  static String _outsideHoursText(String langCode) {
+    if (langCode == 'en') {
+      return 'We are currently closed. 🕐\n'
+          'Your message has been received, we will reply when the salon opens.';
+    }
+    return 'Nous sommes actuellement fermés. 🕐\n'
+        'Votre message a bien été reçu, nous vous répondrons dès l\'ouverture du salon.';
+  }
 
   Future<void> sendOutsideHoursReply({
     required String convId,
     required String salonId,
+    String langCode = 'fr',
   }) async {
     await Future.delayed(const Duration(seconds: 1));
 
+    final text = _outsideHoursText(langCode);
     final batch = _db.batch();
 
     final msgRef =
         _db.collection('conversations').doc(convId).collection('messages').doc();
     batch.set(msgRef, {
       'senderId': 'bot_$salonId',
-      'text': _outsideHoursText,
+      'text': text,
       'sentAt': FieldValue.serverTimestamp(),
       'isAutoReply': true,
     });
 
     final convRef = _db.collection('conversations').doc(convId);
     batch.update(convRef, {
-      'lastMessage': _outsideHoursText,
+      'lastMessage': text,
       'lastMessageAt': FieldValue.serverTimestamp(),
       'unreadByClient': FieldValue.increment(1),
     });
@@ -237,5 +264,30 @@ class MessageService {
         .collection('conversations')
         .doc(convId)
         .update({'unreadByClient': 0});
+  }
+
+  // ── Update custom request status ──────────────────────────────────────────
+
+  Future<void> updateCustomRequest({
+    required String convId,
+    required String messageId,
+    required String status, // 'approved' or 'rejected'
+    double? proposedPrice,
+    int? proposedDuration,
+    String? ownerResponse,
+  }) async {
+    final data = <String, dynamic>{
+      'customRequestStatus': status,
+    };
+    if (proposedPrice != null) data['proposedPrice'] = proposedPrice;
+    if (proposedDuration != null) data['proposedDuration'] = proposedDuration;
+    if (ownerResponse != null) data['ownerResponse'] = ownerResponse;
+
+    await _db
+        .collection('conversations')
+        .doc(convId)
+        .collection('messages')
+        .doc(messageId)
+        .update(data);
   }
 }

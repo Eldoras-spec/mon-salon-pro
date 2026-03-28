@@ -926,6 +926,36 @@ class DatabaseService {
     await _firestore.collection('salons').doc(salonId).update({field: value});
   }
 
+  // ─── Blacklist Management ────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getBlacklist(String salonId) async {
+    final doc = await _firestore.collection('salons').doc(salonId).get();
+    final data = doc.data();
+    if (data == null || data['blacklist'] == null) return [];
+    return List<Map<String, dynamic>>.from(data['blacklist']);
+  }
+
+  Future<void> addToBlacklist(String salonId, Map<String, dynamic> entry) async {
+    await _firestore.collection('salons').doc(salonId).update({
+      'blacklist': FieldValue.arrayUnion([entry]),
+    });
+  }
+
+  Future<void> removeFromBlacklist(String salonId, Map<String, dynamic> entry) async {
+    await _firestore.collection('salons').doc(salonId).update({
+      'blacklist': FieldValue.arrayRemove([entry]),
+    });
+  }
+
+  Future<bool> isBlacklisted(String salonId, {String? phone, String? userId}) async {
+    final blacklist = await getBlacklist(salonId);
+    for (final entry in blacklist) {
+      if (phone != null && entry['phone'] == phone) return true;
+      if (userId != null && entry['userId'] == userId) return true;
+    }
+    return false;
+  }
+
   // ─── Gallery Management ──────────────────────────────────────────────────
 
   Future<void> updateSalonImages(String salonId, List<String> images) async {

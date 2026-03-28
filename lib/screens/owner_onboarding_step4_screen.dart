@@ -9,6 +9,7 @@ import '../widgets/custom_button.dart';
 import 'registration_success_screen.dart';
 import '../theme/app_constants.dart';
 import '../services/app_localizations.dart';
+import '../widgets/service_form_dialog.dart';
 
 class ServiceEntry {
   String name;
@@ -17,6 +18,8 @@ class ServiceEntry {
   double price;
   int durationMins;
   Set<String> assignedMemberNames;
+  bool isComplex;
+  List<Map<String, dynamic>> options;
 
   ServiceEntry({
     required this.name,
@@ -25,7 +28,10 @@ class ServiceEntry {
     required this.price,
     required this.durationMins,
     Set<String>? assignedMemberNames,
-  }) : assignedMemberNames = assignedMemberNames ?? {};
+    this.isComplex = false,
+    List<Map<String, dynamic>>? options,
+  }) : assignedMemberNames = assignedMemberNames ?? {},
+       options = options ?? [];
 }
 
 class OwnerOnboardingStep4Screen extends StatefulWidget {
@@ -85,6 +91,8 @@ class _OwnerOnboardingStep4ScreenState
               'description': s.description,
               'price': s.price,
               'duration': s.durationMins,
+              'isComplex': s.isComplex,
+              if (s.isComplex && s.options.isNotEmpty) 'options': s.options,
             },
           )
           .toList();
@@ -165,12 +173,41 @@ class _OwnerOnboardingStep4ScreenState
   // ── Show service dialog ───────────────────────────────────────────────────
 
   void _showServiceModal({ServiceEntry? existing, int? index}) {
+    // Convert ServiceEntry to Map for the shared dialog
+    Map<String, dynamic>? existingMap;
+    Set<String> assignedMembers = {};
+    if (existing != null) {
+      existingMap = {
+        'name': existing.name,
+        'category': existing.category,
+        'description': existing.description,
+        'price': existing.price,
+        'duration': existing.durationMins,
+        'isComplex': existing.isComplex,
+        if (existing.options.isNotEmpty) 'options': existing.options,
+      };
+      assignedMembers = existing.assignedMemberNames;
+    }
+
     showDialog(
       context: context,
-      builder: (_) => _ServiceFormDialog(
-        existing: existing,
+      builder: (_) => ServiceFormDialog(
+        existing: existingMap,
+        assignedMembers: assignedMembers,
         teamMembers: widget.teamMembers,
-        onSave: (entry) {
+        onSave: (map) {
+          final entry = ServiceEntry(
+            name: map['name'] as String,
+            category: map['category'] as String,
+            description: map['description'] as String? ?? '',
+            price: (map['price'] as num?)?.toDouble() ?? 0.0,
+            durationMins: map['duration'] as int? ?? 30,
+            assignedMemberNames: Set<String>.from(map['assignedMembers'] ?? []),
+            isComplex: map['isComplex'] == true,
+            options: map['options'] != null
+                ? List<Map<String, dynamic>>.from(map['options'] as List)
+                : [],
+          );
           setState(() {
             if (index != null) {
               _services[index] = entry;
@@ -493,359 +530,4 @@ class _OwnerOnboardingStep4ScreenState
       ),
     );
   }
-}
-
-// ─── Separate StatefulWidget for the service form dialog ─────────────────────
-
-class _ServiceFormDialog extends StatefulWidget {
-  const _ServiceFormDialog({
-    this.existing,
-    required this.teamMembers,
-    required this.onSave,
-  });
-
-  final ServiceEntry? existing;
-  final List<TeamMemberModel> teamMembers;
-  final void Function(ServiceEntry entry) onSave;
-
-  @override
-  State<_ServiceFormDialog> createState() => _ServiceFormDialogState();
-}
-
-class _ServiceFormDialogState extends State<_ServiceFormDialog> {
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _priceCtrl;
-  late final TextEditingController _descCtrl;
-  late String _category;
-  late int _duration;
-  late Set<String> _selectedMembers;
-  String? _memberError;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameCtrl = TextEditingController(text: widget.existing?.name ?? '');
-    _priceCtrl = TextEditingController(
-      text: widget.existing != null && widget.existing!.price > 0
-          ? widget.existing!.price.toStringAsFixed(2)
-          : '',
-    );
-    _descCtrl =
-        TextEditingController(text: widget.existing?.description ?? '');
-    _category =
-        widget.existing?.category ?? AppConstants.categoryNames.first;
-    _duration = widget.existing?.durationMins ?? 30;
-    _selectedMembers =
-        Set<String>.from(widget.existing?.assignedMemberNames ?? {});
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _priceCtrl.dispose();
-    _descCtrl.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (_nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Le nom du service est requis')),
-      );
-      return;
-    }
-    if (_selectedMembers.isEmpty) {
-      setState(() => _memberError = 'Assignez au moins un employé');
-      return;
-    }
-    final entry = ServiceEntry(
-      name: _nameCtrl.text.trim(),
-      category: _category,
-      description: _descCtrl.text.trim(),
-      price: double.tryParse(_priceCtrl.text) ?? 0.0,
-      durationMins: _duration,
-      assignedMemberNames: _selectedMembers,
-    );
-    Navigator.pop(context);
-    widget.onSave(entry);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return AlertDialog(
-      title: Text(
-        widget.existing != null
-            ? (l?.tr('onboarding_step4_edit_service') ?? 'Modifier le service')
-            : (l?.tr('onboarding_step4_add') ?? 'Ajouter un service'),
-        style: GoogleFonts.dmSans(
-          fontWeight: FontWeight.bold,
-          color: AppColors.brand950,
-        ),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Name
-            _fieldLabel('Nom du service *'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _nameCtrl,
-              decoration: _fieldDeco('ex. Coupe femme & Brushing'),
-            ),
-            const SizedBox(height: 16),
-
-            // Category
-            _fieldLabel('Catégorie *'),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.secondary300),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: _category,
-                  items: AppConstants.categoryNames
-                      .map((e) =>
-                          DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _category = val);
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Duration + Price
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _fieldLabel('Durée *'),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          border:
-                              Border.all(color: AppColors.secondary300),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: '$_duration mins',
-                            items: const [
-                              '15 mins',
-                              '30 mins',
-                              '45 mins',
-                              '60 mins',
-                              '90 mins',
-                              '120 mins',
-                            ]
-                                .map((e) => DropdownMenuItem(
-                                    value: e, child: Text(e)))
-                                .toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _duration =
-                                    int.parse(val.split(' ')[0]));
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _fieldLabel('Prix (MAD)'),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _priceCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: _fieldDeco('0'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Description
-            _fieldLabel('Description (optionnel)'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _descCtrl,
-              maxLines: 2,
-              decoration:
-                  _fieldDeco('Décrivez brièvement ce qui est inclus…'),
-            ),
-            const SizedBox(height: 16),
-
-            // Member assignment
-            _fieldLabel('Réalisé par *'),
-            const SizedBox(height: 2),
-            const Text(
-              'Sélectionnez tous les employés capables de réaliser ce service',
-              style: TextStyle(fontSize: 11, color: AppColors.secondary400),
-            ),
-            const SizedBox(height: 8),
-            if (widget.teamMembers.isEmpty)
-              const Text(
-                'Aucun membre disponible',
-                style: TextStyle(
-                    fontSize: 12, color: AppColors.secondary400),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: widget.teamMembers.map((m) {
-                  final isSelected =
-                      _selectedMembers.contains(m.name);
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selectedMembers.remove(m.name);
-                        } else {
-                          _selectedMembers.add(m.name);
-                        }
-                        _memberError = null;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.brand100
-                            : Colors.white,
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.brand400
-                              : AppColors.secondary200,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            radius: 10,
-                            backgroundColor: isSelected
-                                ? AppColors.brand500
-                                : AppColors.secondary200,
-                            child: isSelected
-                                ? const Icon(Icons.check,
-                                    size: 10, color: Colors.white)
-                                : Text(
-                                    m.name.isNotEmpty
-                                        ? m.name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                        fontSize: 8,
-                                        color:
-                                            AppColors.secondary500),
-                                  ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            m.name,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: isSelected
-                                  ? AppColors.brand700
-                                  : AppColors.secondary600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            if (_memberError != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                _memberError!,
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFFDC2626)),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actionsPadding: const EdgeInsets.all(16),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            l?.tr('common_cancel') ?? 'Annuler',
-            style: const TextStyle(color: AppColors.secondary600),
-          ),
-        ),
-        ElevatedButton(
-          onPressed: _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brand600,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 12,
-            ),
-          ),
-          child: Text(
-              widget.existing != null ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter')),
-        ),
-      ],
-    );
-  }
-
-  Widget _fieldLabel(String text) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: AppColors.secondary700,
-        ),
-      );
-
-  InputDecoration _fieldDeco(String hint) => InputDecoration(
-        hintText: hint,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.secondary300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.secondary300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.brand500),
-        ),
-      );
 }

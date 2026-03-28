@@ -1287,7 +1287,7 @@ class _MemberAddAppointmentSheetState
   List<Map<String, dynamic>> get _memberServices {
     final assigned = widget.member.assignedServiceNames;
     return widget.salon.services
-        .where((s) => assigned.contains(s['name'] as String? ?? ''))
+        .where((s) => s['visibleTo'] == null && assigned.contains(s['name'] as String? ?? ''))
         .toList();
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
@@ -517,6 +518,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 _updateStatus('cancelled');
               },
             ),
+            _BlacklistTile(appointment: a),
             const SizedBox(height: 8),
           ],
         ),
@@ -1042,13 +1044,22 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         final dur = (svc['duration'] as int?) ?? 30;
         final svcEnd = cursor.add(Duration(minutes: dur));
 
-        // Find available member for this service
+        // Find available member for this service, sorted by priority
+        final priority = List<String>.from(svc['memberPriority'] ?? []);
         final candidates = widget.teamMembers
             .where((m) =>
                 m.isActive &&
                 m.assignedServiceNames.contains(sName) &&
                 !m.unavailableDates.contains(iso))
             .toList();
+        // Sort by priority ranking
+        if (priority.isNotEmpty) {
+          candidates.sort((a, b) {
+            final aIdx = priority.indexOf(a.name);
+            final bIdx = priority.indexOf(b.name);
+            return (aIdx == -1 ? 999 : aIdx).compareTo(bIdx == -1 ? 999 : bIdx);
+          });
+        }
 
         TeamMemberModel? assigned;
         for (final m in candidates) {
@@ -1273,7 +1284,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
-    final services = widget.salon.services;
+    final services = widget.salon.services.where((s) => s['visibleTo'] == null).toList();
     final dateStr = DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
     final timeStr =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
@@ -1843,4 +1854,150 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
           borderSide: const BorderSide(color: AppColors.brand400, width: 1.5),
         ),
       );
+}
+
+// ─── Blacklist Tile (used in appointment bottom sheet) ────────────────────────
+
+class _BlacklistTile extends StatefulWidget {
+  const _BlacklistTile({required this.appointment});
+  final AppointmentModel appointment;
+
+  @override
+  State<_BlacklistTile> createState() => _BlacklistTileState();
+}
+
+class _BlacklistTileState extends State<_BlacklistTile> {
+  bool? _isBlocked;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBlacklist();
+  }
+
+  Future<void> _checkBlacklist() async {
+    final a = widget.appointment;
+    final blocked = await DatabaseService().isBlacklisted(
+      a.salonId,
+      phone: a.clientPhone,
+      userId: a.clientId != 'walk-in' ? a.clientId : null,
+    );
+    if (mounted) setState(() => _isBlocked = blocked);
+  }
+
+  Future<void> _toggleBlacklist() async {
+    final l = AppLocalizations.of(context);
+    final a = widget.appointment;
+
+    if (_isBlocked == true) {
+      // Remove from blacklist
+      final blacklist = await DatabaseService().getBlacklist(a.salonId);
+      final entry = blacklist.firstWhere(
+        (e) =>
+            (a.clientPhone != null && e['phone'] == a.clientPhone) ||
+            (a.clientId != 'walk-in' && e['userId'] == a.clientId),
+        orElse: () => {},
+      );
+      if (entry.isNotEmpty) {
+        await DatabaseService().removeFromBlacklist(a.salonId, entry);
+        if (mounted) {
+          setState(() => _isBlocked = false);
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l?.tr('clients_bl_unblock') ?? 'Client débloqué'),
+              backgroundColor: AppColors.brand600,
+            ),
+          );
+        }
+      }
+    } else {
+      // Add to blacklist
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l?.tr('clients_block_title') ?? 'Bloquer ce client ?'),
+          content: Text(
+            (l?.tr('clients_block_msg') ?? '{name} ne pourra plus réserver dans votre salon.')
+                .replaceAll('{name}', a.clientName ?? a.clientPhone ?? ''),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                l?.tr('clients_block') ?? 'Bloquer',
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        final entry = <String, dynamic>{
+          'name': a.clientName ?? a.clientPhone ?? '—',
+          'blockedAt': Timestamp.now(),
+        };
+        if (a.clientPhone != null && a.clientPhone!.isNotEmpty) {
+          entry['phone'] = a.clientPhone!;
+        }
+        if (a.clientId != 'walk-in') {
+          entry['userId'] = a.clientId;
+        }
+        await DatabaseService().addToBlacklist(a.salonId, entry);
+        if (mounted) {
+          setState(() => _isBlocked = true);
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                (l?.tr('clients_blocked_success') ?? '{name} a été bloqué')
+                    .replaceAll('{name}', a.clientName ?? ''),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    if (_isBlocked == null) {
+      return const SizedBox(height: 48, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.secondary300))));
+    }
+
+    final isBlocked = _isBlocked!;
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: isBlocked ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          isBlocked ? Icons.lock_open_rounded : Icons.block,
+          color: isBlocked ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+          size: 20,
+        ),
+      ),
+      title: Text(
+        isBlocked
+            ? (l?.tr('clients_bl_unblock') ?? 'Débloquer')
+            : (l?.tr('clients_block') ?? 'Bloquer'),
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: isBlocked ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+        ),
+      ),
+      onTap: _toggleBlacklist,
+    );
+  }
 }

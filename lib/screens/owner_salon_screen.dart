@@ -15,6 +15,7 @@ import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../widgets/service_form_dialog.dart';
 import 'owner_onboarding_step1_screen.dart';
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -1457,7 +1458,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
 
     showDialog(
       context: context,
-      builder: (_) => _SalonServiceFormDialog(
+      builder: (_) => ServiceFormDialog(
         existing: existing,
         assignedMembers: currentAssigned,
         teamMembers: teamMembers,
@@ -1693,352 +1694,9 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
   }
 }
 
-// ── Service form dialog (separate StatefulWidget to avoid _dependents error) ──
 
-class _SalonServiceFormDialog extends StatefulWidget {
-  const _SalonServiceFormDialog({
-    this.existing,
-    required this.assignedMembers,
-    required this.teamMembers,
-    required this.onSave,
-  });
+// Service form dialog moved to widgets/service_form_dialog.dart (ServiceFormDialog)
 
-  final Map<String, dynamic>? existing;
-  final Set<String> assignedMembers;
-  final List<TeamMemberModel> teamMembers;
-  final void Function(Map<String, dynamic> entry) onSave;
-
-  @override
-  State<_SalonServiceFormDialog> createState() =>
-      _SalonServiceFormDialogState();
-}
-
-class _SalonServiceFormDialogState extends State<_SalonServiceFormDialog> {
-  late final TextEditingController _nameCtrl;
-  late final TextEditingController _priceCtrl;
-  late final TextEditingController _descCtrl;
-  late String _category;
-  late int _duration;
-  late Set<String> _selectedMembers;
-  String? _memberError;
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.existing;
-    _nameCtrl = TextEditingController(text: e?['name'] as String? ?? '');
-    _priceCtrl = TextEditingController(
-      text: e != null && (e['price'] as num?) != null
-          ? (e['price'] as num).toStringAsFixed(0)
-          : '',
-    );
-    _descCtrl =
-        TextEditingController(text: e?['description'] as String? ?? '');
-    _category = e?['category'] as String? ?? AppConstants.categoryNames.first;
-    // Ensure category is valid
-    if (!AppConstants.categoryNames.contains(_category)) {
-      _category = AppConstants.categoryNames.first;
-    }
-    _duration = e?['duration'] as int? ?? 30;
-    _selectedMembers = Set<String>.from(widget.assignedMembers);
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _priceCtrl.dispose();
-    _descCtrl.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final l = AppLocalizations.of(context);
-    if (_nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l?.tr('salon_service_form_name_required') ?? 'Le nom du service est requis')),
-      );
-      return;
-    }
-    if (_selectedMembers.isEmpty && widget.teamMembers.isNotEmpty) {
-      setState(() => _memberError = l?.tr('salon_service_form_assigned_error') ?? 'Assignez au moins un employé');
-      return;
-    }
-    final entry = <String, dynamic>{
-      'name': _nameCtrl.text.trim(),
-      'category': _category,
-      'description': _descCtrl.text.trim(),
-      'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
-      'duration': _duration,
-      'assignedMembers': _selectedMembers.toList(),
-    };
-    Navigator.pop(context);
-    widget.onSave(entry);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final isEdit = widget.existing != null;
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      title: Text(
-        isEdit
-            ? (l?.tr('salon_service_form_edit') ?? 'Modifier le service')
-            : (l?.tr('salon_service_form_new') ?? 'Nouveau service'),
-        style: GoogleFonts.dmSans(
-          fontWeight: FontWeight.bold,
-          color: AppColors.brand950,
-          fontSize: 16,
-        ),
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Name
-              _label(l?.tr('salon_service_form_name') ?? 'Nom du service *'),
-              const SizedBox(height: 6),
-              _field(_nameCtrl, l?.tr('salon_service_form_name_hint') ?? 'ex. Coupe femme & Brushing'),
-              const SizedBox(height: 14),
-
-              // Category
-              _label(l?.tr('salon_service_form_category') ?? 'Catégorie *'),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.secondary300),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    value: _category,
-                    items: AppConstants.categoryNames
-                        .map((e) =>
-                            DropdownMenuItem(value: e, child: Text(e)))
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _category = val);
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Duration + Price row
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _label(l?.tr('salon_service_form_duration') ?? 'Durée *'),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                                color: AppColors.secondary300),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              isExpanded: true,
-                              value: _duration,
-                              items: const [15, 30, 45, 60, 90, 120]
-                                  .map((d) => DropdownMenuItem(
-                                      value: d,
-                                      child: Text('$d min')))
-                                  .toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _duration = val);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _label(l?.tr('salon_service_form_price') ?? 'Prix (MAD)'),
-                        const SizedBox(height: 6),
-                        _field(_priceCtrl, '0',
-                            keyboardType: TextInputType.number),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Description
-              _label(l?.tr('salon_service_form_description') ?? 'Description'),
-              const SizedBox(height: 6),
-              _field(_descCtrl, l?.tr('salon_service_form_description_hint') ?? 'Description optionnelle…', maxLines: 2),
-              const SizedBox(height: 14),
-
-              // Member assignment
-              if (widget.teamMembers.isNotEmpty) ...[
-                _label(l?.tr('salon_service_form_assigned') ?? 'Réalisé par *'),
-                const SizedBox(height: 2),
-                Text(
-                  l?.tr('salon_service_form_assigned_hint') ?? 'Sélectionnez tous les employés capables de réaliser ce service',
-                  style: const TextStyle(fontSize: 11, color: AppColors.secondary400),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: widget.teamMembers.map((m) {
-                    final isSelected = _selectedMembers.contains(m.name);
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedMembers.remove(m.name);
-                          } else {
-                            _selectedMembers.add(m.name);
-                          }
-                          _memberError = null;
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.brand100
-                              : Colors.white,
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.brand400
-                                : AppColors.secondary200,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircleAvatar(
-                              radius: 10,
-                              backgroundColor: isSelected
-                                  ? AppColors.brand500
-                                  : AppColors.secondary200,
-                              child: isSelected
-                                  ? const Icon(Icons.check,
-                                      size: 10, color: Colors.white)
-                                  : Text(
-                                      m.name.isNotEmpty
-                                          ? m.name[0].toUpperCase()
-                                          : '?',
-                                      style: const TextStyle(
-                                          fontSize: 8,
-                                          color:
-                                              AppColors.secondary500),
-                                    ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              m.name,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: isSelected
-                                    ? AppColors.brand700
-                                    : AppColors.secondary600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                if (_memberError != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    _memberError!,
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFFDC2626)),
-                  ),
-                ],
-              ],
-            ],
-          ),
-        ),
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l?.tr('common_cancel') ?? 'Annuler',
-              style: const TextStyle(color: AppColors.secondary400)),
-        ),
-        ElevatedButton(
-          onPressed: _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brand600,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            padding: const EdgeInsets.symmetric(
-                horizontal: 24, vertical: 12),
-          ),
-          child: Text(isEdit ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter')),
-        ),
-      ],
-    );
-  }
-
-  Widget _label(String text) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.secondary700,
-        ),
-      );
-
-  Widget _field(TextEditingController ctrl, String hint,
-      {int maxLines = 1, TextInputType? keyboardType}) {
-    return TextField(
-      controller: ctrl,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: const TextStyle(fontSize: 14, color: AppColors.brand950),
-      decoration: InputDecoration(
-        hintText: hint,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.secondary300),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.secondary300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.brand500),
-        ),
-      ),
-    );
-  }
-}
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -2115,6 +1773,10 @@ class _GallerySection extends StatefulWidget {
 class _GallerySectionState extends State<_GallerySection> {
   late List<String> _images;
   bool _uploading = false;
+  double _uploadProgress = 0;
+  static const _maxStorageBytes = 10 * 1024 * 1024 * 1024; // 10 GB
+
+  bool get _isPremium => widget.salon.isPremium;
 
   @override
   void initState() {
@@ -2130,34 +1792,99 @@ class _GallerySectionState extends State<_GallerySection> {
     }
   }
 
-  Future<void> _addImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      imageQuality: 80,
-    );
-    if (picked == null) return;
+  bool _isVideo(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.avi') || lower.contains('.webm') || lower.contains('video%2F');
+  }
 
-    setState(() => _uploading = true);
+  Future<void> _addMedia({bool video = false}) async {
+    final l = AppLocalizations.of(context);
+
+    if (video && !_isPremium) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l?.tr('gallery_premium_required') ?? 'Les vidéos sont disponibles avec l\'offre Premium')),
+      );
+      return;
+    }
+
+    // Check storage limit
+    final currentUsage = widget.salon.galleryStorageUsed;
+    if (currentUsage >= _maxStorageBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l?.tr('gallery_storage_limit') ?? 'Limite de stockage atteinte (10 GB)')),
+        );
+      }
+      return;
+    }
+
+    File? file;
+    String ext;
+
+    if (video) {
+      final picker = ImagePicker();
+      final picked = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 60),
+      );
+      if (picked == null) return;
+      file = File(picked.path);
+      ext = picked.path.split('.').last;
+
+      // Check file size (max 100MB per video)
+      final size = await file.length();
+      if (size > 100 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l?.tr('gallery_video_too_large') ?? 'Vidéo trop volumineuse (max 100 MB)')),
+          );
+        }
+        return;
+      }
+    } else {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 80,
+      );
+      if (picked == null) return;
+      file = File(picked.path);
+      ext = 'jpg';
+    }
+
+    setState(() { _uploading = true; _uploadProgress = 0; });
     try {
-      final file = File(picked.path);
-      final ref = FirebaseStorage.instance
+      final fileSize = await file.length();
+      final storageRef = FirebaseStorage.instance
           .ref()
-          .child('salons/${widget.salon.id}/gallery_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(file);
-      final url = await ref.getDownloadURL();
+          .child('salons/${widget.salon.id}/gallery_${DateTime.now().millisecondsSinceEpoch}.$ext');
+
+      final uploadTask = storageRef.putFile(file);
+      uploadTask.snapshotEvents.listen((snap) {
+        if (mounted) {
+          setState(() => _uploadProgress = snap.bytesTransferred / snap.totalBytes);
+        }
+      });
+
+      await uploadTask;
+      final url = await storageRef.getDownloadURL();
       _images.add(url);
       await DatabaseService().updateSalonImages(widget.salon.id, _images);
+
+      // Update storage usage
+      final newUsage = currentUsage + fileSize;
+      await DatabaseService().updateSalonField(widget.salon.id, 'galleryStorageUsed', newUsage);
+
       setState(() {});
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
+          SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      if (mounted) setState(() { _uploading = false; _uploadProgress = 0; });
     }
   }
 
@@ -2226,25 +1953,61 @@ class _GallerySectionState extends State<_GallerySection> {
                 ),
               ),
               if (_uploading)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.brand600,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_uploadProgress > 0)
+                      Text('${(_uploadProgress * 100).toInt()}%',
+                          style: const TextStyle(fontSize: 11, color: AppColors.brand600, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 6),
+                    const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand600),
+                    ),
+                  ],
                 )
               else
-                GestureDetector(
-                  onTap: _addImage,
-                  child: Text(
-                    l?.tr('salon_gallery_add') ?? '+ Ajouter',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.brand600,
-                      fontWeight: FontWeight.w600,
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'image') _addMedia(video: false);
+                    if (value == 'video') _addMedia(video: true);
+                  },
+                  icon: const Icon(Icons.add_circle_outline, color: AppColors.brand600, size: 22),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'image',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.photo_outlined, size: 18, color: AppColors.brand600),
+                          const SizedBox(width: 10),
+                          Text(l?.tr('gallery_add_photo') ?? 'Photo'),
+                        ],
+                      ),
                     ),
-                  ),
+                    PopupMenuItem(
+                      value: 'video',
+                      enabled: _isPremium,
+                      child: Row(
+                        children: [
+                          Icon(Icons.videocam_outlined, size: 18,
+                              color: _isPremium ? AppColors.brand600 : AppColors.secondary300),
+                          const SizedBox(width: 10),
+                          Text(
+                            l?.tr('gallery_add_video') ?? 'Vidéo',
+                            style: TextStyle(color: _isPremium ? null : AppColors.secondary300),
+                          ),
+                          if (!_isPremium) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
+                              child: const Text('Premium', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFD97706))),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -2283,42 +2046,54 @@ class _GallerySectionState extends State<_GallerySection> {
                 scrollDirection: Axis.horizontal,
                 itemCount: _images.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        _images[i],
-                        width: 100,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 100,
-                          height: 100,
-                          color: AppColors.secondary100,
-                          child: const Icon(Icons.broken_image_outlined,
-                              color: AppColors.secondary300),
-                        ),
+                itemBuilder: (_, i) {
+                  final isVid = _isVideo(_images[i]);
+                  return Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: isVid
+                            ? Container(
+                                width: 100, height: 100,
+                                color: AppColors.brand950,
+                                child: const Center(
+                                  child: Icon(Icons.play_circle_outline, size: 36, color: Colors.white70),
+                                ),
+                              )
+                            : Image.network(
+                                _images[i],
+                                width: 100, height: 100,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  width: 100, height: 100,
+                                  color: AppColors.secondary100,
+                                  child: const Icon(Icons.broken_image_outlined, color: AppColors.secondary300),
+                                ),
+                              ),
                       ),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: GestureDetector(
-                        onTap: () => _deleteImage(i),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
+                      if (isVid)
+                        Positioned(
+                          bottom: 4, left: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                            child: const Text('VIDEO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white)),
                           ),
-                          child: const Icon(Icons.close,
-                              size: 14, color: Colors.white),
+                        ),
+                      Positioned(
+                        top: 4, right: 4,
+                        child: GestureDetector(
+                          onTap: () => _deleteImage(i),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            child: const Icon(Icons.close, size: 14, color: Colors.white),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  );
+                },
               ),
             ),
         ],

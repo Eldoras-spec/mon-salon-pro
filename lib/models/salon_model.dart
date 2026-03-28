@@ -29,6 +29,8 @@ class SalonModel {
   // Service packs — bundled services at a reduced price
   // Each pack: { name, services: [service names], price, description? }
   final List<Map<String, dynamic>> servicePacks;
+  final bool isPremium;
+  final int galleryStorageUsed;
 
   SalonModel({
     required this.id,
@@ -66,6 +68,8 @@ class SalonModel {
       'googleMapsUrl': '',
     },
     this.slug,
+    this.isPremium = false,
+    this.galleryStorageUsed = 0,
   });
 
   factory SalonModel.fromFirestore(DocumentSnapshot doc) {
@@ -112,6 +116,8 @@ class SalonModel {
       }),
       servicePacks: List<Map<String, dynamic>>.from(data['servicePacks'] ?? []),
       slug: data['slug'],
+      isPremium: data['isPremium'] ?? false,
+      galleryStorageUsed: (data['galleryStorageUsed'] as num?)?.toInt() ?? 0,
     );
   }
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../theme/app_colors.dart';
 import '../models/message_model.dart';
 import '../models/salon_model.dart';
@@ -252,6 +254,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         _MessageBubble(
                           message: msg,
                           isMine: isMine,
+                          conversationId: widget.conversationId,
+                          isClient: widget.isClient,
                         ),
                       ],
                     );
@@ -325,20 +329,36 @@ class _DateDivider extends StatelessWidget {
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.isMine});
+class _MessageBubble extends StatefulWidget {
+  const _MessageBubble({
+    required this.message,
+    required this.isMine,
+    required this.conversationId,
+    required this.isClient,
+  });
   final MessageModel message;
   final bool isMine;
+  final String conversationId;
+  final bool isClient;
 
+  @override
+  State<_MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<_MessageBubble> {
+  MessageModel get message => widget.message;
+  bool get isMine => widget.isMine;
   bool get _isBot => message.senderId.startsWith('bot_');
+  String? _localStatus;
+
+  String get _status => _localStatus ?? message.customRequestStatus ?? 'pending';
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final timeStr = DateFormat('HH:mm').format(message.sentAt);
 
-    // Bot auto-reply → special centered style
     if (_isBot) {
-      final l = AppLocalizations.of(context);
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 24),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -352,37 +372,17 @@ class _MessageBubble extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.smart_toy_outlined,
-                    size: 14, color: AppColors.brand600),
+                Icon(Icons.smart_toy_outlined, size: 14, color: AppColors.brand600),
                 const SizedBox(width: 6),
-                Text(
-                  l?.tr('chat_auto_reply') ?? 'Réponse automatique',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.brand600,
-                  ),
-                ),
+                Text(l?.tr('chat_auto_reply') ?? 'Réponse automatique',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.brand600)),
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              message.text,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.brand950,
-                height: 1.5,
-              ),
-            ),
+            Text(message.text, textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppColors.brand950, height: 1.5)),
             const SizedBox(height: 6),
-            Text(
-              timeStr,
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppColors.secondary400,
-              ),
-            ),
+            Text(timeStr, style: const TextStyle(fontSize: 10, color: AppColors.secondary400)),
           ],
         ),
       );
@@ -391,62 +391,246 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72,
-        ),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         child: Container(
-          margin: EdgeInsets.only(
-            top: 3,
-            bottom: 3,
-            left: isMine ? 48 : 0,
-            right: isMine ? 0 : 48,
-          ),
+          margin: EdgeInsets.only(top: 3, bottom: 3, left: isMine ? 48 : 0, right: isMine ? 0 : 48),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: isMine ? AppColors.brand700 : Colors.white,
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft:
-                  isMine ? const Radius.circular(16) : const Radius.circular(4),
-              bottomRight:
-                  isMine ? const Radius.circular(4) : const Radius.circular(16),
+              topLeft: const Radius.circular(16), topRight: const Radius.circular(16),
+              bottomLeft: isMine ? const Radius.circular(16) : const Radius.circular(4),
+              bottomRight: isMine ? const Radius.circular(4) : const Radius.circular(16),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
           ),
           child: Column(
-            crossAxisAlignment:
-                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              Text(
-                message.text,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isMine ? Colors.white : AppColors.brand950,
-                  height: 1.4,
+              // Image
+              if (message.imageUrl != null && message.imageUrl!.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.network(message.imageUrl!, width: 200, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(width: 200, height: 100, color: AppColors.secondary100,
+                      child: const Icon(Icons.broken_image_outlined, color: AppColors.secondary300))),
                 ),
-              ),
+                const SizedBox(height: 6),
+              ],
+              // Custom request badge
+              if (message.type == 'custom_request') ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isMine ? Colors.white.withValues(alpha: 0.15) : AppColors.brand50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.brush_outlined, size: 12, color: isMine ? Colors.white70 : AppColors.brand600),
+                      const SizedBox(width: 4),
+                      Text(l?.tr('chat_custom_request') ?? 'Demande personnalisée',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                          color: isMine ? Colors.white70 : AppColors.brand600)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              // Custom request status (if already responded)
+              if (message.type == 'custom_request' && _status != 'pending') ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: _status == 'approved' ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_status == 'approved' ? Icons.check_circle : Icons.cancel, size: 14,
+                          color: _status == 'approved' ? const Color(0xFF16A34A) : const Color(0xFFDC2626)),
+                        const SizedBox(width: 4),
+                        Text(_status == 'approved' ? (l?.tr('chat_request_approved') ?? 'Accepté') : (l?.tr('chat_request_rejected') ?? 'Refusé'),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                            color: _status == 'approved' ? const Color(0xFF16A34A) : const Color(0xFFDC2626))),
+                      ]),
+                      if (message.proposedPrice != null) ...[
+                        const SizedBox(height: 4),
+                        Text('${message.proposedPrice!.toStringAsFixed(0)} MAD · ${message.proposedDuration ?? 30} min',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand950)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              // Text
+              if (message.text.isNotEmpty)
+                Text(message.text, style: TextStyle(fontSize: 14, color: isMine ? Colors.white : AppColors.brand950, height: 1.4)),
               const SizedBox(height: 4),
-              Text(
-                timeStr,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isMine
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : AppColors.secondary400,
+              Text(timeStr, style: TextStyle(fontSize: 10, color: isMine ? Colors.white.withValues(alpha: 0.7) : AppColors.secondary400)),
+
+              // Accept/Reject buttons for owner on pending custom requests
+              if (message.type == 'custom_request' && _status == 'pending' && !widget.isClient) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 32,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showApproveDialog(l),
+                        icon: const Icon(Icons.check, size: 14),
+                        label: Text(l?.tr('chat_accept') ?? 'Accepter', style: const TextStyle(fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A), foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      height: 32,
+                      child: OutlinedButton(
+                        onPressed: () => _rejectRequest(l),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFDC2626),
+                          side: const BorderSide(color: Color(0xFFDC2626)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text(l?.tr('chat_reject') ?? 'Refuser', style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _showApproveDialog(AppLocalizations? l) {
+    final nameCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final durationCtrl = TextEditingController(text: '30');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l?.tr('chat_approve_title') ?? 'Créer la prestation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: InputDecoration(
+                labelText: l?.tr('chat_approve_name') ?? 'Nom de la prestation',
+                hintText: l?.tr('chat_approve_name_hint') ?? 'Ex: Coupe dégradé personnalisée',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: l?.tr('chat_approve_price') ?? 'Prix (MAD)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: durationCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: l?.tr('chat_approve_duration') ?? 'Durée (min)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final price = double.tryParse(priceCtrl.text.trim());
+              final duration = int.tryParse(durationCtrl.text.trim()) ?? 30;
+              if (price == null || price <= 0) return;
+
+              Navigator.pop(ctx);
+              await _approveRequest(name.isEmpty ? null : name, price, duration);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
+            child: Text(l?.tr('chat_approve_confirm') ?? 'Confirmer', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approveRequest(String? customName, double price, int duration) async {
+    await MessageService().updateCustomRequest(
+      convId: widget.conversationId,
+      messageId: message.id,
+      status: 'approved',
+      proposedPrice: price,
+      proposedDuration: duration,
+    );
+
+    final parts = widget.conversationId.split('_');
+    if (parts.length >= 2) {
+      final clientId = parts[0];
+      final salonId = parts.sublist(1).join('_');
+
+      final salonDoc = await FirebaseFirestore.instance.collection('salons').doc(salonId).get();
+      if (salonDoc.exists) {
+        final salonName = salonDoc.data()?['name'] ?? 'Salon';
+        final serviceName = customName ?? (message.text.isNotEmpty ? message.text : 'Prestation personnalisée');
+
+        // Create personalized service visible only to this client
+        final services = List<Map<String, dynamic>>.from(salonDoc.data()?['services'] ?? []);
+        services.add({
+          'name': serviceName,
+          'category': 'Personnalisé',
+          'price': price,
+          'duration': duration,
+          'description': '',
+          'visibleTo': [clientId],
+          if (message.imageUrl != null) 'imageUrl': message.imageUrl,
+        });
+        await FirebaseFirestore.instance.collection('salons').doc(salonId).update({'services': services});
+
+        // Send in-app notification to the client
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': clientId,
+          'title': 'Demande acceptée ✅',
+          'body': '$salonName a accepté votre demande "$serviceName" — ${price.toStringAsFixed(0)} MAD, $duration min. Vous pouvez maintenant réserver !',
+          'type': 'custom_request_approved',
+          'salonId': salonId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+        });
+      }
+    }
+
+    if (mounted) setState(() => _localStatus = 'approved');
+  }
+
+  Future<void> _rejectRequest(AppLocalizations? l) async {
+    await MessageService().updateCustomRequest(
+      convId: widget.conversationId,
+      messageId: message.id,
+      status: 'rejected',
+    );
+    if (mounted) setState(() => _localStatus = 'rejected');
   }
 }
 
