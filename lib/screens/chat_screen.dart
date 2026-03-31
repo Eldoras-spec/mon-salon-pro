@@ -436,6 +436,16 @@ class _MessageBubbleState extends State<_MessageBubble> {
                     ],
                   ),
                 ),
+                if (message.clientPhone != null && message.clientPhone!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.phone_outlined, size: 12, color: isMine ? Colors.white70 : AppColors.brand600),
+                    const SizedBox(width: 4),
+                    Text('📞 ${message.clientPhone!}',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                        color: isMine ? Colors.white70 : AppColors.brand600)),
+                  ]),
+                ],
                 const SizedBox(height: 6),
               ],
               // Custom request status (if already responded)

@@ -146,10 +146,16 @@ class _OwnerOnboardingStep2ScreenState
     }
 
     final updatedData = Map<String, dynamic>.from(widget.salonData);
-    updatedData['images'] = _galleryItems
+    final galleryUrls = _galleryItems
         .where((g) => g['url'] != null)
         .map((g) => g['url'] as String)
         .toList();
+    // Cover photo goes first in images array
+    final allImages = <String>[
+      if (_coverPhotoUrl != null) _coverPhotoUrl!,
+      ...galleryUrls,
+    ];
+    updatedData['images'] = allImages;
     updatedData['logoUrl'] = _coverPhotoUrl;
 
     Navigator.push(

@@ -284,6 +284,24 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                       ),
                       const SizedBox(height: 8),
                       ..._buildOptionSteps(l),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          final newId = 'step_${DateTime.now().millisecondsSinceEpoch}';
+                          _optionSteps.add({'id': newId, 'label': '', 'choices': []});
+                        }),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.add, size: 16, color: AppColors.brand600),
+                            const SizedBox(width: 6),
+                            Text(
+                              l?.tr('salon_service_add_step') ?? 'Ajouter une étape',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand600),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 14),
 
@@ -430,37 +448,19 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     return null;
   }
 
-  int _getStepDepth(String stepId, [Set<String>? visited]) {
-    visited ??= {};
-    if (visited.contains(stepId)) return 0;
-    visited.add(stepId);
-    final step = _findStep(stepId);
-    if (step == null) return 0;
-    int maxChild = 0;
-    for (final c in (step['choices'] as List? ?? [])) {
-      final next = c['nextOptionId'];
-      if (next != null) {
-        final d = _getStepDepth(next as String, visited);
-        if (d > maxChild) maxChild = d;
-      }
-    }
-    return 1 + maxChild;
-  }
-
-  int get _totalDepth {
-    final root = _rootStepId;
-    if (root == null) return 0;
-    return _getStepDepth(root);
-  }
-
   List<Widget> _buildOptionSteps(AppLocalizations? l) {
     // Only render root steps (not sub-steps referenced by choices)
-    final root = _rootStepId;
-    if (root == null) return [];
-    return [_buildStepWidget(l, root, 0)];
+    final linkedIds = <String>{};
+    for (final step in _optionSteps) {
+      for (final c in (step['choices'] as List? ?? [])) {
+        if (c is Map && c['nextOptionId'] != null) linkedIds.add(c['nextOptionId'] as String);
+      }
+    }
+    final rootSteps = _optionSteps.where((s) => !linkedIds.contains(s['id'])).toList();
+    return rootSteps.asMap().entries.map((e) => _buildStepWidget(l, e.value['id'] as String, 0, rootIndex: e.key)).toList();
   }
 
-  Widget _buildStepWidget(AppLocalizations? l, String stepId, int depth) {
+  Widget _buildStepWidget(AppLocalizations? l, String stepId, int depth, {int rootIndex = 0}) {
     final stepIdx = _optionSteps.indexWhere((s) => s['id'] == stepId);
     if (stepIdx < 0) return const SizedBox.shrink();
     final step = _optionSteps[stepIdx];
@@ -488,7 +488,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                 ),
                 child: Center(
                   child: depth == 0
-                      ? Text('${depth + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
+                      ? Text('${rootIndex + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
                       : const Icon(Icons.subdirectory_arrow_right, size: 14, color: Colors.white),
                 ),
               ),
@@ -524,8 +524,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           ...choices.asMap().entries.map((cEntry) {
             final cIdx = cEntry.key;
             final choice = cEntry.value;
-            final hasSubOptions = choice['nextOptionId'] != null;
-            final canAddSub = _totalDepth < 3;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,32 +538,53 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                   ),
                   child: Column(
                     children: [
+                      // Custom badge
+                      if (choice['isCustom'] == true)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.whatshot, size: 12, color: Color(0xFF25D366)),
+                            const SizedBox(width: 4),
+                            Text(l?.tr('salon_service_custom_choice') ?? 'Choix personnalisé → WhatsApp',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF25D366))),
+                          ]),
+                        ),
                       // Label + delete
                       Row(
                         children: [
                           Expanded(
-                            child: TextField(
-                              controller: TextEditingController(text: choice['label'] ?? ''),
-                              onChanged: (v) {
-                                final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
-                                ch[cIdx]['label'] = v;
-                                _optionSteps[stepIdx]['choices'] = ch;
-                              },
-                              style: const TextStyle(fontSize: 13),
-                              decoration: InputDecoration(
-                                hintText: l?.tr('salon_service_choice_label') ?? 'Nom du choix',
-                                hintStyle: const TextStyle(fontSize: 12, color: AppColors.secondary400),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.secondary200)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.secondary200)),
+                            child: GestureDetector(
+                              onLongPress: () => _showChoiceOptions(stepIdx, cIdx, l),
+                              child: TextField(
+                                controller: TextEditingController(text: choice['label'] ?? ''),
+                                onChanged: (v) {
+                                  final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
+                                  ch[cIdx]['label'] = v;
+                                  _optionSteps[stepIdx]['choices'] = ch;
+                                },
+                                style: TextStyle(fontSize: 13, color: choice['isCustom'] == true ? const Color(0xFF25D366) : null),
+                                decoration: InputDecoration(
+                                  hintText: choice['isCustom'] == true
+                                      ? (l?.tr('salon_service_custom_hint') ?? 'Ex: Design personnalisé')
+                                      : (l?.tr('salon_service_choice_label') ?? 'Nom du choix'),
+                                  hintStyle: const TextStyle(fontSize: 12, color: AppColors.secondary400),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : AppColors.secondary200)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : AppColors.secondary200)),
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 6),
                           GestureDetector(
                             onTap: () => setState(() {
-                              // Remove linked sub-step if exists
                               if (choice['nextOptionId'] != null) {
                                 _removeStepAndChildren(choice['nextOptionId'] as String);
                               }
@@ -577,54 +596,20 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      // Price + Duration
-                      Row(
-                        children: [
-                          Expanded(child: _modifierField(stepIdx, cIdx, 'priceModifier', '+/- MAD', Icons.payments_outlined)),
-                          const SizedBox(width: 6),
-                          Expanded(child: _modifierField(stepIdx, cIdx, 'durationModifier', '+/- min', Icons.schedule)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Sub-options button
-                      if (!hasSubOptions && canAddSub)
-                        GestureDetector(
-                          onTap: () => _addSubOptions(stepIdx, cIdx),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.add, size: 14, color: AppColors.brand600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  l?.tr('salon_service_add_suboptions') ?? 'Sous-options',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.brand600),
-                                ),
-                              ],
-                            ),
-                          ),
+                      // Price + Duration (hidden for custom choices)
+                      if (choice['isCustom'] != true) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(child: _modifierField(stepIdx, cIdx, 'priceModifier', '+/- MAD', Icons.payments_outlined)),
+                            const SizedBox(width: 6),
+                            Expanded(child: _modifierField(stepIdx, cIdx, 'durationModifier', '+/- min', Icons.schedule)),
+                          ],
                         ),
-                      if (hasSubOptions)
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.subdirectory_arrow_right, size: 14, color: AppColors.brand500),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${l?.tr('salon_service_has_suboptions') ?? 'A des sous-options'} ↓',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.brand500),
-                              ),
-                            ],
-                          ),
-                        ),
+                      ],
                     ],
                   ),
                 ),
-                // Render linked sub-step inline
-                if (hasSubOptions)
-                  _buildStepWidget(l, choice['nextOptionId'] as String, depth + 1),
               ],
             );
           }),
@@ -691,18 +676,50 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     );
   }
 
-  void _addSubOptions(int stepIdx, int choiceIdx) {
-    setState(() {
-      final newStepId = 'step${DateTime.now().millisecondsSinceEpoch}';
-      _optionSteps.add({
-        'id': newStepId,
-        'label': '',
-        'choices': <Map<String, dynamic>>[],
-      });
-      final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
-      ch[choiceIdx]['nextOptionId'] = newStepId;
-      _optionSteps[stepIdx]['choices'] = ch;
-    });
+  void _showChoiceOptions(int stepIdx, int choiceIdx, AppLocalizations? l) {
+    final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
+    final isCustom = ch[choiceIdx]['isCustom'] == true;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(color: AppColors.secondary200, borderRadius: BorderRadius.circular(2))),
+              Text(l?.tr('salon_service_choice_options') ?? 'Options du choix',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(
+                  isCustom ? Icons.check_circle : Icons.circle_outlined,
+                  color: isCustom ? const Color(0xFF25D366) : AppColors.secondary300,
+                ),
+                title: Text(l?.tr('salon_service_make_custom') ?? 'Choix personnalisé (→ WhatsApp)',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text(l?.tr('salon_service_make_custom_desc') ?? 'Le client sera redirigé vers WhatsApp avec un récapitulatif',
+                  style: const TextStyle(fontSize: 12, color: AppColors.secondary400)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    ch[choiceIdx]['isCustom'] = !isCustom;
+                    if (!isCustom) {
+                      ch[choiceIdx]['priceModifier'] = 0;
+                      ch[choiceIdx]['durationModifier'] = 0;
+                    }
+                    _optionSteps[stepIdx]['choices'] = ch;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _removeStepAndChildren(String stepId) {

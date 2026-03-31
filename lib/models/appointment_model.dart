@@ -16,6 +16,7 @@ class AppointmentModel {
   final String? assignedMemberId;
   final String? assignedMemberName;
   final String? groupId; // links multi-service bookings together
+  final List<String>? selectedOptions; // complex service choices
 
   AppointmentModel({
     required this.id,
@@ -33,6 +34,7 @@ class AppointmentModel {
     this.assignedMemberId,
     this.assignedMemberName,
     this.groupId,
+    this.selectedOptions,
   });
 
   factory AppointmentModel.fromFirestore(DocumentSnapshot doc) {
@@ -53,6 +55,7 @@ class AppointmentModel {
       assignedMemberId: data['assignedMemberId'],
       assignedMemberName: data['assignedMemberName'],
       groupId: data['groupId'],
+      selectedOptions: data['selectedOptions'] != null ? List<String>.from(data['selectedOptions']) : null,
     );
   }
 
@@ -72,6 +75,7 @@ class AppointmentModel {
       if (assignedMemberId != null) 'assignedMemberId': assignedMemberId,
       if (assignedMemberName != null) 'assignedMemberName': assignedMemberName,
       if (groupId != null) 'groupId': groupId,
+      if (selectedOptions != null && selectedOptions!.isNotEmpty) 'selectedOptions': selectedOptions,
     };
   }
 }

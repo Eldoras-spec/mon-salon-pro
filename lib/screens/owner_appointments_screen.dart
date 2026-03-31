@@ -454,13 +454,34 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                a.serviceName,
-                style: GoogleFonts.dmSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brand950,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    a.serviceName,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                  if (a.selectedOptions != null && a.selectedOptions!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6, runSpacing: 4,
+                      alignment: WrapAlignment.center,
+                      children: a.selectedOptions!.map((opt) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.brand50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.brand200),
+                        ),
+                        child: Text(opt, style: const TextStyle(fontSize: 11, color: AppColors.brand700, fontWeight: FontWeight.w500)),
+                      )).toList(),
+                    ),
+                  ],
+                ],
               ),
             ),
             const Divider(height: 1),

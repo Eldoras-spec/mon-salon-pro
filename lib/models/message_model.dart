@@ -13,6 +13,7 @@ class MessageModel {
   final double? proposedPrice;
   final int? proposedDuration;
   final String? ownerResponse;
+  final String? clientPhone;
 
   MessageModel({
     required this.id,
@@ -26,6 +27,7 @@ class MessageModel {
     this.proposedPrice,
     this.proposedDuration,
     this.ownerResponse,
+    this.clientPhone,
   });
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
@@ -44,6 +46,7 @@ class MessageModel {
       proposedPrice: (d['proposedPrice'] as num?)?.toDouble(),
       proposedDuration: d['proposedDuration'] as int?,
       ownerResponse: d['ownerResponse'],
+      clientPhone: d['clientPhone'],
     );
   }
 }

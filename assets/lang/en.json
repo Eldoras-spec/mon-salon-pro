@@ -685,6 +685,12 @@
   "chat_approve_duration": "Duration (min)",
   "chat_approve_confirm": "Confirm",
   "services_personalized": "Personalized",
+  "onboarding_whatsapp_required": "WhatsApp number is required",
+  "salon_service_custom_choice": "Custom choice → WhatsApp",
+  "salon_service_custom_hint": "E.g. Custom design",
+  "salon_service_choice_options": "Choice options",
+  "salon_service_make_custom": "Custom choice (→ WhatsApp)",
+  "salon_service_make_custom_desc": "Client will be redirected to WhatsApp with a summary",
   "chat_input_hint": "Write a message…",
   "chat_today": "Today",
 

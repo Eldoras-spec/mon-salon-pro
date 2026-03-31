@@ -145,6 +145,16 @@ class _OwnerOnboardingStep1ScreenState
       return;
     }
 
+    if (_whatsappController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l?.tr('onboarding_whatsapp_required') ?? 'Le numéro WhatsApp est obligatoire'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     // Build full address string
     final addressParts = [
       if (_streetController.text.trim().isNotEmpty) _streetController.text.trim(),
