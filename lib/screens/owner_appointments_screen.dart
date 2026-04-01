@@ -481,6 +481,21 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                       )).toList(),
                     ),
                   ],
+                  // Selected design image
+                  if (a.selectedDesignUrl != null) ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(a.selectedDesignUrl!, height: 100, width: double.infinity, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    ),
+                    if (a.selectedDesignLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('🎨 ${a.selectedDesignLabel!}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.purple)),
+                      ),
+                  ],
                 ],
               ),
             ),

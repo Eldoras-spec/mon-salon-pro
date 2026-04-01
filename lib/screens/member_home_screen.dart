@@ -532,6 +532,21 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (a.selectedOptions != null && a.selectedOptions!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(a.selectedOptions!.join(' · '),
+                      style: const TextStyle(fontSize: 10, color: Colors.purple), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                if (a.selectedDesignUrl != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(a.selectedDesignUrl!, height: 40, width: 60, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    ),
+                  ),
                 const SizedBox(height: 2),
                 Text(
                   _clientName,

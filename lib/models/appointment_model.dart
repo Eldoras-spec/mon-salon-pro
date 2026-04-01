@@ -17,6 +17,8 @@ class AppointmentModel {
   final String? assignedMemberName;
   final String? groupId; // links multi-service bookings together
   final List<String>? selectedOptions; // complex service choices
+  final String? selectedDesignUrl; // gallery design image URL
+  final String? selectedDesignLabel; // gallery design label
 
   AppointmentModel({
     required this.id,
@@ -35,6 +37,8 @@ class AppointmentModel {
     this.assignedMemberName,
     this.groupId,
     this.selectedOptions,
+    this.selectedDesignUrl,
+    this.selectedDesignLabel,
   });
 
   factory AppointmentModel.fromFirestore(DocumentSnapshot doc) {
@@ -56,6 +60,8 @@ class AppointmentModel {
       assignedMemberName: data['assignedMemberName'],
       groupId: data['groupId'],
       selectedOptions: data['selectedOptions'] != null ? List<String>.from(data['selectedOptions']) : null,
+      selectedDesignUrl: data['selectedDesignUrl'],
+      selectedDesignLabel: data['selectedDesignLabel'],
     );
   }
 
@@ -76,6 +82,8 @@ class AppointmentModel {
       if (assignedMemberName != null) 'assignedMemberName': assignedMemberName,
       if (groupId != null) 'groupId': groupId,
       if (selectedOptions != null && selectedOptions!.isNotEmpty) 'selectedOptions': selectedOptions,
+      if (selectedDesignUrl != null) 'selectedDesignUrl': selectedDesignUrl,
+      if (selectedDesignLabel != null) 'selectedDesignLabel': selectedDesignLabel,
     };
   }
 }

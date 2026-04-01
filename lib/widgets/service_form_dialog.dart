@@ -1,10 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_constants.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
+import '../services/auth_service.dart';
 
 /// Shared service creation/editing dialog.
 ///
@@ -41,10 +46,13 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   String? _memberError;
   bool _isComplex = false;
   List<Map<String, dynamic>> _optionSteps = [];
+  bool _showLongPressHint = false;
+  static const _hintKey = 'hasSeenLongPressHint';
 
   @override
   void initState() {
     super.initState();
+    _checkLongPressHint();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['name'] as String? ?? '');
     _priceCtrl = TextEditingController(
@@ -65,6 +73,20 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         (e!['options'] as List).map((o) => Map<String, dynamic>.from(o as Map)),
       );
     }
+  }
+
+  @override
+  Future<void> _checkLongPressHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_hintKey) != true) {
+      setState(() => _showLongPressHint = true);
+    }
+  }
+
+  Future<void> _dismissLongPressHint() async {
+    setState(() => _showLongPressHint = false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_hintKey, true);
   }
 
   @override
@@ -283,6 +305,40 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                         style: const TextStyle(fontSize: 11, color: AppColors.secondary400),
                       ),
                       const SizedBox(height: 8),
+                      // Long press hint tooltip
+                      if (_showLongPressHint && _optionSteps.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.brand950,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.touch_app, size: 18, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  l?.tr('salon_service_longpress_hint') ?? 'Maintenez un choix appuyé pour plus d\'options (WhatsApp, galerie, sous-options)',
+                                  style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.4),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: _dismissLongPressHint,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text('OK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ..._buildOptionSteps(l),
                       const SizedBox(height: 8),
                       GestureDetector(
@@ -555,6 +611,23 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF25D366))),
                           ]),
                         ),
+                      // Gallery badge
+                      if (choice['isGallery'] == true)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.photo_library_outlined, size: 12, color: Colors.purple),
+                            const SizedBox(width: 4),
+                            Text('${l?.tr('salon_service_gallery_badge') ?? 'Galerie de designs'} (${(choice['galleryItems'] as List?)?.length ?? 0})',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.purple)),
+                          ]),
+                        ),
                       // Label + delete
                       Row(
                         children: [
@@ -607,9 +680,48 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                           ],
                         ),
                       ],
+                      // Gallery manage button
+                      if (choice['isGallery'] == true)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: GestureDetector(
+                            onTap: () => _showGalleryManager(stepIdx, cIdx, l),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.photo_library, size: 16, color: Colors.purple),
+                                  const SizedBox(width: 6),
+                                  Text(l?.tr('salon_service_manage_gallery') ?? 'Gérer la galerie',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purple)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Sub-options indicator
+                      if (choice['nextOptionId'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(children: [
+                            const Icon(Icons.subdirectory_arrow_right, size: 14, color: AppColors.brand500),
+                            const SizedBox(width: 4),
+                            Text(l?.tr('salon_service_has_suboptions') ?? 'A des sous-options ↓',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.brand500)),
+                          ]),
+                        ),
                     ],
                   ),
                 ),
+                // Render linked sub-step inline
+                if (choice['nextOptionId'] != null)
+                  _buildStepWidget(l, choice['nextOptionId'] as String, depth + 1),
               ],
             );
           }),
@@ -678,7 +790,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
   void _showChoiceOptions(int stepIdx, int choiceIdx, AppLocalizations? l) {
     final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
-    final isCustom = ch[choiceIdx]['isCustom'] == true;
+    final choice = ch[choiceIdx];
+    final isCustom = choice['isCustom'] == true;
+    final isGallery = choice['isGallery'] == true;
+    final hasSubOptions = choice['nextOptionId'] != null;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -694,6 +809,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
               Text(l?.tr('salon_service_choice_options') ?? 'Options du choix',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
+              // Option 1: Custom WhatsApp
               ListTile(
                 leading: Icon(
                   isCustom ? Icons.check_circle : Icons.circle_outlined,
@@ -710,12 +826,292 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     if (!isCustom) {
                       ch[choiceIdx]['priceModifier'] = 0;
                       ch[choiceIdx]['durationModifier'] = 0;
+                      // Remove sub-options if making custom
+                      if (ch[choiceIdx]['nextOptionId'] != null) {
+                        _removeStepAndChildren(ch[choiceIdx]['nextOptionId'] as String);
+                        ch[choiceIdx]['nextOptionId'] = null;
+                      }
                     }
                     _optionSteps[stepIdx]['choices'] = ch;
                   });
                 },
               ),
+              // Option 2: Sub-options
+              if (!isCustom)
+                ListTile(
+                  leading: Icon(
+                    hasSubOptions ? Icons.check_circle : Icons.circle_outlined,
+                    color: hasSubOptions ? AppColors.brand600 : AppColors.secondary300,
+                  ),
+                  title: Text(l?.tr('salon_service_add_suboptions') ?? 'Sous-options',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(
+                    hasSubOptions
+                        ? (l?.tr('salon_service_remove_suboptions') ?? 'Appuyez pour retirer les sous-options')
+                        : (l?.tr('salon_service_suboptions_desc') ?? 'Ajouter des choix supplémentaires liés à cette option'),
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary400)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      if (hasSubOptions) {
+                        // Remove sub-options
+                        _removeStepAndChildren(choice['nextOptionId'] as String);
+                        ch[choiceIdx]['nextOptionId'] = null;
+                      } else {
+                        // Add sub-options
+                        final newId = 'step_${DateTime.now().millisecondsSinceEpoch}';
+                        _optionSteps.add({'id': newId, 'label': '', 'choices': []});
+                        ch[choiceIdx]['nextOptionId'] = newId;
+                      }
+                      _optionSteps[stepIdx]['choices'] = ch;
+                    });
+                  },
+                ),
+              // Option 3: Gallery of designs
+              if (!isCustom)
+                ListTile(
+                  leading: Icon(
+                    isGallery ? Icons.check_circle : Icons.circle_outlined,
+                    color: isGallery ? Colors.purple : AppColors.secondary300,
+                  ),
+                  title: Text(l?.tr('salon_service_make_gallery') ?? 'Galerie de designs',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: Text(l?.tr('salon_service_gallery_desc') ?? 'Le client choisira un design depuis vos images/vidéos',
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary400)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    if (isGallery) {
+                      setState(() {
+                        ch[choiceIdx]['isGallery'] = false;
+                        ch[choiceIdx].remove('galleryItems');
+                        _optionSteps[stepIdx]['choices'] = ch;
+                      });
+                    } else {
+                      setState(() {
+                        ch[choiceIdx]['isGallery'] = true;
+                        ch[choiceIdx]['galleryItems'] = ch[choiceIdx]['galleryItems'] ?? [];
+                        ch[choiceIdx]['priceModifier'] = 0;
+                        ch[choiceIdx]['durationModifier'] = 0;
+                        _optionSteps[stepIdx]['choices'] = ch;
+                      });
+                    }
+                  },
+                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGalleryManager(int stepIdx, int choiceIdx, AppLocalizations? l) {
+    final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
+    final items = List<Map<String, dynamic>>.from(ch[choiceIdx]['galleryItems'] ?? []);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setModalState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(color: AppColors.secondary200, borderRadius: BorderRadius.circular(2)))),
+                Row(children: [
+                  const Icon(Icons.photo_library, size: 20, color: Colors.purple),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(l?.tr('salon_service_gallery_title') ?? 'Galerie de designs',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+                  Text('${items.length}', style: const TextStyle(fontSize: 14, color: AppColors.secondary400)),
+                ]),
+                const SizedBox(height: 12),
+                // Gallery grid
+                if (items.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.45),
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: 0.75,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (_, i) {
+                        final item = items[i];
+                        return Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.secondary200),
+                          ),
+                          clipBehavior: Clip.hardEdge,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.network(item['url'] ?? '', fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
+                                        child: const Icon(Icons.broken_image, color: AppColors.secondary300))),
+                                    Positioned(top: 4, right: 4,
+                                      child: GestureDetector(
+                                        onTap: () => setModalState(() {
+                                          items.removeAt(i);
+                                          ch[choiceIdx]['galleryItems'] = items;
+                                          _optionSteps[stepIdx]['choices'] = ch;
+                                        }),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                          child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['label'] ?? '', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    Text('+${item['priceModifier'] ?? 0} MAD · +${item['durationModifier'] ?? 0} min',
+                                      style: const TextStyle(fontSize: 10, color: AppColors.secondary400)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                if (items.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Column(children: [
+                      const Icon(Icons.photo_library_outlined, size: 40, color: AppColors.secondary300),
+                      const SizedBox(height: 8),
+                      Text(l?.tr('salon_service_gallery_empty') ?? 'Aucun design ajouté',
+                        style: const TextStyle(color: AppColors.secondary400, fontSize: 13)),
+                    ]),
+                  ),
+                const SizedBox(height: 12),
+                // Add button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final picker = ImagePicker();
+                      // Show choice: image or video
+                      final source = await showModalBottomSheet<String>(
+                        context: ctx,
+                        builder: (c) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          ListTile(leading: const Icon(Icons.photo), title: const Text('Photo'),
+                            onTap: () => Navigator.pop(c, 'photo')),
+                          ListTile(leading: const Icon(Icons.videocam), title: const Text('Vidéo'),
+                            onTap: () => Navigator.pop(c, 'video')),
+                        ])),
+                      );
+                      if (source == null) return;
+
+                      XFile? picked;
+                      if (source == 'photo') {
+                        picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 80);
+                        if (picked != null) {
+                          final size = await File(picked.path).length();
+                          if (size > 2 * 1024 * 1024) {
+                            if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Image trop volumineuse (max 2 MB)')));
+                            return;
+                          }
+                        }
+                      } else {
+                        picked = await picker.pickVideo(source: ImageSource.gallery);
+                        if (picked != null) {
+                          final size = await File(picked.path).length();
+                          if (size > 15 * 1024 * 1024) {
+                            if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Vidéo trop volumineuse (max 15 MB)')));
+                            return;
+                          }
+                        }
+                      }
+                      if (picked == null) return;
+
+                      // Upload
+                      final uid = AuthService().currentUserId ?? '';
+                      final ext = picked.path.split('.').last;
+                      final ref = FirebaseStorage.instance.ref()
+                          .child('salons/$uid/designs/${DateTime.now().millisecondsSinceEpoch}.$ext');
+                      await ref.putFile(File(picked.path));
+                      final url = await ref.getDownloadURL();
+
+                      // Show label/price dialog
+                      if (!ctx.mounted) return;
+                      final labelCtrl = TextEditingController();
+                      final priceCtrl = TextEditingController(text: '0');
+                      final durationCtrl = TextEditingController(text: '0');
+                      final confirmed = await showDialog<bool>(
+                        context: ctx,
+                        builder: (dc) => AlertDialog(
+                          title: Text(l?.tr('salon_service_gallery_item_title') ?? 'Détails du design'),
+                          content: Column(mainAxisSize: MainAxisSize.min, children: [
+                            ClipRRect(borderRadius: BorderRadius.circular(8),
+                              child: Image.network(url, height: 120, width: double.infinity, fit: BoxFit.cover)),
+                            const SizedBox(height: 12),
+                            TextField(controller: labelCtrl,
+                              decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Expanded(child: TextField(controller: priceCtrl, keyboardType: TextInputType.number,
+                                decoration: InputDecoration(labelText: '+MAD', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+                              const SizedBox(width: 8),
+                              Expanded(child: TextField(controller: durationCtrl, keyboardType: TextInputType.number,
+                                decoration: InputDecoration(labelText: '+min', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+                            ]),
+                          ]),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
+                            ElevatedButton(onPressed: () => Navigator.pop(dc, true),
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
+                              child: Text(l?.tr('common_add') ?? 'Ajouter', style: const TextStyle(color: Colors.white))),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true) {
+                        setModalState(() {
+                          items.add({
+                            'url': url,
+                            'label': labelCtrl.text.trim().isEmpty ? 'Design ${items.length + 1}' : labelCtrl.text.trim(),
+                            'priceModifier': int.tryParse(priceCtrl.text) ?? 0,
+                            'durationModifier': int.tryParse(durationCtrl.text) ?? 0,
+                          });
+                          ch[choiceIdx]['galleryItems'] = items;
+                          _optionSteps[stepIdx]['choices'] = ch;
+                        });
+                        // Also update parent state
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.add_photo_alternate, size: 18),
+                    label: Text(l?.tr('salon_service_gallery_add') ?? 'Ajouter un design'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple, foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
