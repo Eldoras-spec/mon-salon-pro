@@ -189,33 +189,35 @@ class _OwnerOnboardingStep4ScreenState
       assignedMembers = existing.assignedMemberNames;
     }
 
-    showDialog(
-      context: context,
-      builder: (_) => ServiceFormDialog(
-        existing: existingMap,
-        assignedMembers: assignedMembers,
-        teamMembers: widget.teamMembers,
-        onSave: (map) {
-          final entry = ServiceEntry(
-            name: map['name'] as String,
-            category: map['category'] as String,
-            description: map['description'] as String? ?? '',
-            price: (map['price'] as num?)?.toDouble() ?? 0.0,
-            durationMins: map['duration'] as int? ?? 30,
-            assignedMemberNames: Set<String>.from(map['assignedMembers'] ?? []),
-            isComplex: map['isComplex'] == true,
-            options: map['options'] != null
-                ? List<Map<String, dynamic>>.from(map['options'] as List)
-                : [],
-          );
-          setState(() {
-            if (index != null) {
-              _services[index] = entry;
-            } else {
-              _services.add(entry);
-            }
-          });
-        },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ServiceFormDialog(
+          existing: existingMap,
+          assignedMembers: assignedMembers,
+          teamMembers: widget.teamMembers,
+          onSave: (map) {
+            final entry = ServiceEntry(
+              name: map['name'] as String,
+              category: map['category'] as String,
+              description: map['description'] as String? ?? '',
+              price: (map['price'] as num?)?.toDouble() ?? 0.0,
+              durationMins: map['duration'] as int? ?? 30,
+              assignedMemberNames: Set<String>.from(map['assignedMembers'] ?? []),
+              isComplex: map['isComplex'] == true,
+              options: map['options'] != null
+                  ? List<Map<String, dynamic>>.from(map['options'] as List)
+                  : [],
+            );
+            setState(() {
+              if (index != null) {
+                _services[index] = entry;
+              } else {
+                _services.add(entry);
+              }
+            });
+          },
+        ),
       ),
     );
   }

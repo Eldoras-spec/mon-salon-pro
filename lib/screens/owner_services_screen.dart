@@ -390,22 +390,24 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
       }
     }
 
-    showDialog(
-      context: context,
-      builder: (_) => ServiceFormDialog(
-        existing: existing,
-        assignedMembers: currentAssigned,
-        teamMembers: teamMembers,
-        onSave: (entry) {
-          setState(() {
-            if (isNew) {
-              _services.add(entry);
-            } else {
-              _services[index] = entry;
-            }
-          });
-          _save(salon);
-        },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ServiceFormDialog(
+          existing: existing,
+          assignedMembers: currentAssigned,
+          teamMembers: teamMembers,
+          onSave: (entry) {
+            setState(() {
+              if (isNew) {
+                _services.add(entry);
+              } else {
+                _services[index] = entry;
+              }
+            });
+            _save(salon);
+          },
+        ),
       ),
     );
   }

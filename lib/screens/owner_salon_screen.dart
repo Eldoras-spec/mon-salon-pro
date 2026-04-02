@@ -1456,21 +1456,23 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
       }
     }
 
-    showDialog(
-      context: context,
-      builder: (_) => ServiceFormDialog(
-        existing: existing,
-        assignedMembers: currentAssigned,
-        teamMembers: teamMembers,
-        onSave: (entry) {
-          setState(() {
-            if (isNew) {
-              _services.add(entry);
-            } else {
-              _services[index] = entry;
-            }
-          });
-        },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ServiceFormDialog(
+          existing: existing,
+          assignedMembers: currentAssigned,
+          teamMembers: teamMembers,
+          onSave: (entry) {
+            setState(() {
+              if (isNew) {
+                _services.add(entry);
+              } else {
+                _services[index] = entry;
+              }
+            });
+          },
+        ),
       ),
     );
   }

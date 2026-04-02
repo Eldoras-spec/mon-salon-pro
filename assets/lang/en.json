@@ -703,7 +703,7 @@
   "salon_service_gallery_add": "Add a design",
   "salon_service_gallery_item_title": "Design details",
   "salon_service_gallery_item_label": "Design name",
-  "salon_service_longpress_hint": "Long press a choice for more options (WhatsApp, gallery, sub-options)",
+  "salon_service_longpress_hint": "Tap ⋮ next to a choice for more options (WhatsApp, gallery, sub-options)",
   "chat_input_hint": "Write a message…",
   "chat_today": "Today",
 
@@ -777,6 +777,7 @@
 
   "common_save": "Save",
   "common_all": "All",
+  "common_saved": "Saved",
   "common_cancel": "Cancel",
   "common_delete": "Delete",
   "common_close": "Close",

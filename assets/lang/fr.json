@@ -703,7 +703,7 @@
   "salon_service_gallery_add": "Ajouter un design",
   "salon_service_gallery_item_title": "Détails du design",
   "salon_service_gallery_item_label": "Nom du design",
-  "salon_service_longpress_hint": "Maintenez un choix appuyé pour plus d'options (WhatsApp, galerie, sous-options)",
+  "salon_service_longpress_hint": "Appuyez sur ⋮ à côté d'un choix pour plus d'options (WhatsApp, galerie, sous-options)",
   "chat_input_hint": "Écrivez un message…",
   "chat_today": "Aujourd'hui",
 
@@ -777,6 +777,7 @@
 
   "common_save": "Enregistrer",
   "common_all": "Tous",
+  "common_saved": "Enregistré",
   "common_cancel": "Annuler",
   "common_delete": "Supprimer",
   "common_close": "Fermer",

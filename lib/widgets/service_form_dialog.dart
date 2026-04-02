@@ -139,46 +139,32 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     final l = AppLocalizations.of(context);
     final isEdit = widget.existing != null;
 
-    return Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
-          maxWidth: 500,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      isEdit
-                          ? (l?.tr('salon_service_form_edit') ?? 'Modifier le service')
-                          : (l?.tr('salon_service_form_new') ?? 'Nouveau service'),
-                      style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brand950,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close, color: AppColors.secondary400, size: 22),
-                  ),
-                ],
-              ),
+    return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.brand950),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            isEdit
+                ? (l?.tr('salon_service_form_edit') ?? 'Modifier le service')
+                : (l?.tr('salon_service_form_new') ?? 'Nouveau service'),
+            style: GoogleFonts.dmSans(
+              fontWeight: FontWeight.bold,
+              color: AppColors.brand950,
+              fontSize: 18,
             ),
-            const Divider(height: 1),
-
+          ),
+          centerTitle: false,
+        ),
+        body: Column(
+          children: [
             // Content
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Column(
@@ -320,7 +306,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  l?.tr('salon_service_longpress_hint') ?? 'Maintenez un choix appuyé pour plus d\'options (WhatsApp, galerie, sous-options)',
+                                  l?.tr('salon_service_longpress_hint') ?? 'Appuyez sur ⋮ à côté d\'un choix pour plus d\'options (WhatsApp, galerie, sous-options)',
                                   style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.4),
                                 ),
                               ),
@@ -436,35 +422,30 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
               ),
             ),
 
-            // Actions
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(l?.tr('common_cancel') ?? 'Annuler',
-                        style: const TextStyle(color: AppColors.secondary400)),
+            // Bottom action bar
+            Container(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 12 + MediaQuery.of(context).padding.bottom),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.secondary200)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brand600,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: Text(isEdit ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter')),
-                  ),
-                ],
+                  child: Text(isEdit ? (l?.tr('common_save') ?? 'Enregistrer') : (l?.tr('common_add') ?? 'Ajouter'),
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
               ),
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -628,34 +609,40 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.purple)),
                           ]),
                         ),
-                      // Label + delete
+                      // Label + options + delete
                       Row(
                         children: [
                           Expanded(
-                            child: GestureDetector(
-                              onLongPress: () => _showChoiceOptions(stepIdx, cIdx, l),
-                              child: TextField(
-                                controller: TextEditingController(text: choice['label'] ?? ''),
-                                onChanged: (v) {
-                                  final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
-                                  ch[cIdx]['label'] = v;
-                                  _optionSteps[stepIdx]['choices'] = ch;
-                                },
-                                style: TextStyle(fontSize: 13, color: choice['isCustom'] == true ? const Color(0xFF25D366) : null),
-                                decoration: InputDecoration(
-                                  hintText: choice['isCustom'] == true
-                                      ? (l?.tr('salon_service_custom_hint') ?? 'Ex: Design personnalisé')
-                                      : (l?.tr('salon_service_choice_label') ?? 'Nom du choix'),
-                                  hintStyle: const TextStyle(fontSize: 12, color: AppColors.secondary400),
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : AppColors.secondary200)),
-                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : AppColors.secondary200)),
-                                ),
+                            child: TextField(
+                              controller: TextEditingController(text: choice['label'] ?? ''),
+                              onChanged: (v) {
+                                final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
+                                ch[cIdx]['label'] = v;
+                                _optionSteps[stepIdx]['choices'] = ch;
+                              },
+                              style: TextStyle(fontSize: 13, color: choice['isCustom'] == true ? const Color(0xFF25D366) : choice['isGallery'] == true ? Colors.purple : null),
+                              decoration: InputDecoration(
+                                hintText: choice['isCustom'] == true
+                                    ? (l?.tr('salon_service_custom_hint') ?? 'Ex: Design personnalisé')
+                                    : (l?.tr('salon_service_choice_label') ?? 'Nom du choix'),
+                                hintStyle: const TextStyle(fontSize: 12, color: AppColors.secondary400),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : choice['isGallery'] == true ? Colors.purple : AppColors.secondary200)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: choice['isCustom'] == true ? const Color(0xFF25D366) : choice['isGallery'] == true ? Colors.purple : AppColors.secondary200)),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
+                          // Options menu button
+                          GestureDetector(
+                            onTap: () => _showChoiceOptions(stepIdx, cIdx, l),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: const Icon(Icons.more_vert, size: 18, color: AppColors.secondary400),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
                           GestureDetector(
                             onTap: () => setState(() {
                               if (choice['nextOptionId'] != null) {
@@ -669,8 +656,8 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                           ),
                         ],
                       ),
-                      // Price + Duration (hidden for custom choices)
-                      if (choice['isCustom'] != true) ...[
+                      // Price + Duration (hidden for custom/gallery choices)
+                      if (choice['isCustom'] != true && choice['isGallery'] != true) ...[
                         const SizedBox(height: 6),
                         Row(
                           children: [
