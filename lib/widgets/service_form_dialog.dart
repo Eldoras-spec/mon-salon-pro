@@ -1089,9 +1089,11 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           title: Text(l?.tr('salon_service_gallery_item_title') ?? 'Détails du design'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             ClipRRect(borderRadius: BorderRadius.circular(8),
-              child: Image.network(url, height: 120, width: double.infinity, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(height: 120, color: AppColors.secondary100,
-                  child: const Icon(Icons.check_circle, color: Colors.green, size: 40)))),
+              child: SizedBox(
+                height: 120, width: 280,
+                child: Image.network(url, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
+                    child: const Icon(Icons.check_circle, color: Colors.green, size: 40))))),
             const SizedBox(height: 12),
             TextField(controller: labelCtrl,
               decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
