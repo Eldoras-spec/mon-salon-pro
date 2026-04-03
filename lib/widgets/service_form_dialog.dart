@@ -991,111 +991,36 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     ]),
                   ),
                 const SizedBox(height: 12),
-                // Add button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      final picker = ImagePicker();
-                      // Show choice: image or video
-                      final source = await showModalBottomSheet<String>(
-                        context: ctx,
-                        builder: (c) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          ListTile(leading: const Icon(Icons.photo), title: const Text('Photo'),
-                            onTap: () => Navigator.pop(c, 'photo')),
-                          ListTile(leading: const Icon(Icons.videocam), title: const Text('Vidéo'),
-                            onTap: () => Navigator.pop(c, 'video')),
-                        ])),
-                      );
-                      if (source == null) return;
-
-                      XFile? picked;
-                      if (source == 'photo') {
-                        picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 80);
-                        if (picked != null) {
-                          final size = await File(picked.path).length();
-                          if (size > 2 * 1024 * 1024) {
-                            if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Image trop volumineuse (max 2 MB)')));
-                            return;
-                          }
-                        }
-                      } else {
-                        picked = await picker.pickVideo(source: ImageSource.gallery);
-                        if (picked != null) {
-                          final size = await File(picked.path).length();
-                          if (size > 15 * 1024 * 1024) {
-                            if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Vidéo trop volumineuse (max 15 MB)')));
-                            return;
-                          }
-                        }
-                      }
-                      if (picked == null) return;
-
-                      // Upload
-                      final uid = AuthService().currentUserId ?? '';
-                      final ext = picked.path.split('.').last;
-                      final ref = FirebaseStorage.instance.ref()
-                          .child('salons/$uid/designs/${DateTime.now().millisecondsSinceEpoch}.$ext');
-                      await ref.putFile(File(picked.path));
-                      final url = await ref.getDownloadURL();
-
-                      // Show label/price dialog
-                      if (!ctx.mounted) return;
-                      final labelCtrl = TextEditingController();
-                      final priceCtrl = TextEditingController(text: '0');
-                      final durationCtrl = TextEditingController(text: '0');
-                      final confirmed = await showDialog<bool>(
-                        context: ctx,
-                        builder: (dc) => AlertDialog(
-                          title: Text(l?.tr('salon_service_gallery_item_title') ?? 'Détails du design'),
-                          content: Column(mainAxisSize: MainAxisSize.min, children: [
-                            ClipRRect(borderRadius: BorderRadius.circular(8),
-                              child: Image.network(url, height: 120, width: double.infinity, fit: BoxFit.cover)),
-                            const SizedBox(height: 12),
-                            TextField(controller: labelCtrl,
-                              decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
-                            const SizedBox(height: 8),
-                            Row(children: [
-                              Expanded(child: TextField(controller: priceCtrl, keyboardType: TextInputType.number,
-                                decoration: InputDecoration(labelText: '+MAD', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
-                              const SizedBox(width: 8),
-                              Expanded(child: TextField(controller: durationCtrl, keyboardType: TextInputType.number,
-                                decoration: InputDecoration(labelText: '+min', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
-                            ]),
-                          ]),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
-                            ElevatedButton(onPressed: () => Navigator.pop(dc, true),
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
-                              child: Text(l?.tr('common_add') ?? 'Ajouter', style: const TextStyle(color: Colors.white))),
-                          ],
+                // Add buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _pickGalleryItem(ctx, setModalState, stepIdx, choiceIdx, ch, items, l, false),
+                        icon: const Icon(Icons.add_photo_alternate, size: 16),
+                        label: const Text('Photo', style: TextStyle(fontSize: 13)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple, foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      );
-
-                      if (confirmed == true) {
-                        setModalState(() {
-                          items.add({
-                            'url': url,
-                            'label': labelCtrl.text.trim().isEmpty ? 'Design ${items.length + 1}' : labelCtrl.text.trim(),
-                            'priceModifier': int.tryParse(priceCtrl.text) ?? 0,
-                            'durationModifier': int.tryParse(durationCtrl.text) ?? 0,
-                          });
-                          ch[choiceIdx]['galleryItems'] = items;
-                          _optionSteps[stepIdx]['choices'] = ch;
-                        });
-                        // Also update parent state
-                        setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.add_photo_alternate, size: 18),
-                    label: Text(l?.tr('salon_service_gallery_add') ?? 'Ajouter un design'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple, foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pickGalleryItem(ctx, setModalState, stepIdx, choiceIdx, ch, items, l, true),
+                        icon: const Icon(Icons.videocam, size: 16),
+                        label: const Text('Vidéo', style: TextStyle(fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.purple,
+                          side: const BorderSide(color: Colors.purple),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1103,6 +1028,111 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickGalleryItem(
+    BuildContext ctx,
+    void Function(VoidCallback) setModalState,
+    int stepIdx, int choiceIdx,
+    List<Map<String, dynamic>> ch,
+    List<Map<String, dynamic>> items,
+    AppLocalizations? l,
+    bool isVideo,
+  ) async {
+    final picker = ImagePicker();
+    XFile? picked;
+
+    if (isVideo) {
+      picked = await picker.pickVideo(source: ImageSource.gallery);
+      if (picked != null) {
+        final size = await File(picked.path).length();
+        if (size > 30 * 1024 * 1024) {
+          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Vidéo trop volumineuse (max 30 MB)'), backgroundColor: Colors.red));
+          return;
+        }
+      }
+    } else {
+      picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 80);
+      if (picked != null) {
+        final size = await File(picked.path).length();
+        if (size > 10 * 1024 * 1024) {
+          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Image trop volumineuse (max 10 MB)'), backgroundColor: Colors.red));
+          return;
+        }
+      }
+    }
+    if (picked == null) return;
+
+    // Show loading
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Upload en cours...'), duration: Duration(seconds: 30)));
+    }
+
+    try {
+      final uid = AuthService().currentUserId ?? '';
+      final ext = picked.path.split('.').last;
+      final storageRef = FirebaseStorage.instance.ref()
+          .child('salons/$uid/designs/${DateTime.now().millisecondsSinceEpoch}.$ext');
+      await storageRef.putFile(File(picked.path));
+      final url = await storageRef.getDownloadURL();
+
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+
+      // Show label/price dialog
+      final labelCtrl = TextEditingController();
+      final priceCtrl = TextEditingController(text: '0');
+      final durationCtrl = TextEditingController(text: '0');
+      final confirmed = await showDialog<bool>(
+        context: ctx,
+        builder: (dc) => AlertDialog(
+          title: Text(l?.tr('salon_service_gallery_item_title') ?? 'Détails du design'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            ClipRRect(borderRadius: BorderRadius.circular(8),
+              child: Image.network(url, height: 120, width: double.infinity, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(height: 120, color: AppColors.secondary100,
+                  child: const Icon(Icons.check_circle, color: Colors.green, size: 40)))),
+            const SizedBox(height: 12),
+            TextField(controller: labelCtrl,
+              decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: priceCtrl, keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: '+MAD', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: durationCtrl, keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: '+min', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+            ]),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
+            ElevatedButton(onPressed: () => Navigator.pop(dc, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
+              child: Text(l?.tr('common_add') ?? 'Ajouter', style: const TextStyle(color: Colors.white))),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        setModalState(() {
+          items.add({
+            'url': url,
+            'label': labelCtrl.text.trim().isEmpty ? 'Design ${items.length + 1}' : labelCtrl.text.trim(),
+            'priceModifier': int.tryParse(priceCtrl.text) ?? 0,
+            'durationModifier': int.tryParse(durationCtrl.text) ?? 0,
+          });
+          ch[choiceIdx]['galleryItems'] = items;
+          _optionSteps[stepIdx]['choices'] = ch;
+        });
+        setState(() {});
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   void _removeStepAndChildren(String stepId) {

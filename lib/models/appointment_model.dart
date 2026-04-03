@@ -19,6 +19,7 @@ class AppointmentModel {
   final List<String>? selectedOptions; // complex service choices
   final String? selectedDesignUrl; // gallery design image URL
   final String? selectedDesignLabel; // gallery design label
+  final String? managementToken; // walk-in management token
 
   AppointmentModel({
     required this.id,
@@ -39,6 +40,7 @@ class AppointmentModel {
     this.selectedOptions,
     this.selectedDesignUrl,
     this.selectedDesignLabel,
+    this.managementToken,
   });
 
   factory AppointmentModel.fromFirestore(DocumentSnapshot doc) {
@@ -62,6 +64,7 @@ class AppointmentModel {
       selectedOptions: data['selectedOptions'] != null ? List<String>.from(data['selectedOptions']) : null,
       selectedDesignUrl: data['selectedDesignUrl'],
       selectedDesignLabel: data['selectedDesignLabel'],
+      managementToken: data['managementToken'],
     );
   }
 
@@ -84,6 +87,7 @@ class AppointmentModel {
       if (selectedOptions != null && selectedOptions!.isNotEmpty) 'selectedOptions': selectedOptions,
       if (selectedDesignUrl != null) 'selectedDesignUrl': selectedDesignUrl,
       if (selectedDesignLabel != null) 'selectedDesignLabel': selectedDesignLabel,
+      if (managementToken != null) 'managementToken': managementToken,
     };
   }
 }
