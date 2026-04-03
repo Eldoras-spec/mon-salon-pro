@@ -486,13 +486,23 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.network(a.selectedDesignUrl!, height: 100, width: double.infinity, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      child: Stack(
+                        children: [
+                          Image.network(
+                            a.selectedDesignThumbnail ?? a.selectedDesignUrl!,
+                            height: 100, width: double.infinity, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                          if (a.selectedDesignIsVideo == true)
+                            const Positioned.fill(
+                              child: Center(child: Icon(Icons.play_circle_filled, size: 36, color: Colors.white70)),
+                            ),
+                        ],
+                      ),
                     ),
                     if (a.selectedDesignLabel != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: Text('🎨 ${a.selectedDesignLabel!}',
+                        child: Text('${a.selectedDesignIsVideo == true ? '🎬' : '🎨'} ${a.selectedDesignLabel!}',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.purple)),
                       ),
                   ],

@@ -543,7 +543,7 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
                     padding: const EdgeInsets.only(top: 4),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.network(a.selectedDesignUrl!, height: 40, width: 60, fit: BoxFit.cover,
+                      child: Image.network(a.selectedDesignThumbnail ?? a.selectedDesignUrl!, height: 40, width: 60, fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                     ),
                   ),

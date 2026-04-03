@@ -17,8 +17,10 @@ class AppointmentModel {
   final String? assignedMemberName;
   final String? groupId; // links multi-service bookings together
   final List<String>? selectedOptions; // complex service choices
-  final String? selectedDesignUrl; // gallery design image URL
+  final String? selectedDesignUrl; // gallery design image/video URL
   final String? selectedDesignLabel; // gallery design label
+  final String? selectedDesignThumbnail; // video thumbnail URL
+  final bool? selectedDesignIsVideo;
   final String? managementToken; // walk-in management token
 
   AppointmentModel({
@@ -40,6 +42,8 @@ class AppointmentModel {
     this.selectedOptions,
     this.selectedDesignUrl,
     this.selectedDesignLabel,
+    this.selectedDesignThumbnail,
+    this.selectedDesignIsVideo,
     this.managementToken,
   });
 
@@ -64,6 +68,8 @@ class AppointmentModel {
       selectedOptions: data['selectedOptions'] != null ? List<String>.from(data['selectedOptions']) : null,
       selectedDesignUrl: data['selectedDesignUrl'],
       selectedDesignLabel: data['selectedDesignLabel'],
+      selectedDesignThumbnail: data['selectedDesignThumbnail'],
+      selectedDesignIsVideo: data['selectedDesignIsVideo'],
       managementToken: data['managementToken'],
     );
   }
@@ -87,6 +93,8 @@ class AppointmentModel {
       if (selectedOptions != null && selectedOptions!.isNotEmpty) 'selectedOptions': selectedOptions,
       if (selectedDesignUrl != null) 'selectedDesignUrl': selectedDesignUrl,
       if (selectedDesignLabel != null) 'selectedDesignLabel': selectedDesignLabel,
+      if (selectedDesignThumbnail != null) 'selectedDesignThumbnail': selectedDesignThumbnail,
+      if (selectedDesignIsVideo == true) 'selectedDesignIsVideo': true,
       if (managementToken != null) 'managementToken': managementToken,
     };
   }

@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import '../theme/app_colors.dart';
 import '../theme/app_constants.dart';
@@ -942,9 +944,11 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    Image.network(item['url'] ?? '', fit: BoxFit.cover,
+                                    Image.network(item['thumbnailUrl'] ?? item['url'] ?? '', fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
                                         child: const Icon(Icons.broken_image, color: AppColors.secondary300))),
+                                    if (item['isVideo'] == true)
+                                      const Center(child: Icon(Icons.play_circle_filled, size: 28, color: Colors.white70)),
                                     Positioned(top: 4, right: 4,
                                       child: GestureDetector(
                                         onTap: () => setModalState(() {
@@ -1063,26 +1067,78 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     }
     if (picked == null) return;
 
-    // Show loading
+    // Show progress overlay
+    final progressNotifier = ValueNotifier<double>(0);
+    OverlayEntry? progressOverlay;
     if (ctx.mounted) {
-      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Upload en cours...'), duration: Duration(seconds: 30)));
+      progressOverlay = OverlayEntry(
+        builder: (_) => ValueListenableBuilder<double>(
+          valueListenable: progressNotifier,
+          builder: (_, progress, __) => Container(
+            color: Colors.black54,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  CircularProgressIndicator(value: progress > 0 ? progress : null, color: AppColors.brand600),
+                  const SizedBox(height: 12),
+                  Text('Upload ${(progress * 100).toInt()}%', style: const TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      );
+      Overlay.of(ctx).insert(progressOverlay);
     }
 
     try {
       final uid = AuthService().currentUserId ?? '';
+      final ts = DateTime.now().millisecondsSinceEpoch;
       final ext = picked.path.split('.').last;
+
+      // Upload main file with progress
       final storageRef = FirebaseStorage.instance.ref()
-          .child('salons/$uid/designs/${DateTime.now().millisecondsSinceEpoch}.$ext');
-      await storageRef.putFile(File(picked.path));
+          .child('salons/$uid/designs/$ts.$ext');
+      final uploadTask = storageRef.putFile(File(picked.path));
+      uploadTask.snapshotEvents.listen((snap) {
+        if (snap.totalBytes > 0) {
+          progressNotifier.value = snap.bytesTransferred / snap.totalBytes;
+        }
+      });
+      await uploadTask;
       final url = await storageRef.getDownloadURL();
 
+      // Generate and upload thumbnail for videos
+      String? thumbnailUrl;
+      if (isVideo) {
+        try {
+          final Uint8List? thumbData = await vt.VideoThumbnail.thumbnailData(
+            video: picked.path,
+            imageFormat: vt.ImageFormat.JPEG,
+            maxWidth: 400,
+            quality: 75,
+          );
+          if (thumbData != null) {
+            final thumbRef = FirebaseStorage.instance.ref()
+                .child('salons/$uid/designs/${ts}_thumb.jpg');
+            await thumbRef.putData(thumbData, SettableMetadata(contentType: 'image/jpeg'));
+            thumbnailUrl = await thumbRef.getDownloadURL();
+          }
+        } catch (e) {
+          debugPrint('Thumbnail generation error: $e');
+        }
+      }
+
+      progressOverlay?.remove();
       if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
 
       // Show label/price dialog
       final labelCtrl = TextEditingController();
       final priceCtrl = TextEditingController(text: '0');
       final durationCtrl = TextEditingController(text: '0');
+      final previewUrl = thumbnailUrl ?? url;
       final confirmed = await showDialog<bool>(
         context: ctx,
         builder: (dc) => AlertDialog(
@@ -1091,9 +1147,16 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
             ClipRRect(borderRadius: BorderRadius.circular(8),
               child: SizedBox(
                 height: 120, width: 280,
-                child: Image.network(url, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
-                    child: const Icon(Icons.check_circle, color: Colors.green, size: 40))))),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(previewUrl, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
+                        child: const Icon(Icons.check_circle, color: Colors.green, size: 40))),
+                    if (isVideo)
+                      const Center(child: Icon(Icons.play_circle_filled, size: 40, color: Colors.white70)),
+                  ],
+                ))),
             const SizedBox(height: 12),
             TextField(controller: labelCtrl,
               decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
@@ -1120,6 +1183,8 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         setModalState(() {
           items.add({
             'url': url,
+            if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
+            'isVideo': isVideo,
             'label': labelCtrl.text.trim().isEmpty ? 'Design ${items.length + 1}' : labelCtrl.text.trim(),
             'priceModifier': int.tryParse(priceCtrl.text) ?? 0,
             'durationModifier': int.tryParse(durationCtrl.text) ?? 0,
@@ -1130,8 +1195,8 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         setState(() {});
       }
     } catch (e) {
+      progressOverlay?.remove();
       if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
       }
     }
