@@ -168,6 +168,9 @@ class MonSalonProApp extends ConsumerWidget {
                 );
               }
 
+              // Save FCM token for push notifications
+              NotificationService().saveTokenForUser(user.uid);
+
               // Owner flow: team profile selector → member or owner scaffold
               final profileSelected = ref.watch(profileSelectedProvider);
               final activeMemberRole = ref.watch(
