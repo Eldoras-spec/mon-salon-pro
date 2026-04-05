@@ -47,7 +47,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
 
   // Timeline config
   static const int _startHour = 8;
-  static const int _endHour = 20;
+  static const int _endHour = 22;
   static const double _pixelsPerMinute = 2.5;
   static const double _timeColumnWidth = 44.0;
   static const double _memberColumnWidth = 120.0;
