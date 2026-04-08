@@ -40,6 +40,13 @@ class NotificationService {
     // 2. Request permissions
     await _requestPermissions();
 
+    // 2b. Show notifications when app is in foreground (iOS)
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
     // 3. Create Android notification channel
     await _localNotifications
         .resolvePlatformSpecificImplementation<
