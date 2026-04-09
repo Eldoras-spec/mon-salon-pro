@@ -11,6 +11,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/media_compressor.dart';
 
 final _db = DatabaseService();
 
@@ -515,11 +516,24 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       return;
     }
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-        source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
-    if (picked != null) {
-      setState(() => _newImages.add(File(picked.path)));
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    // Compress
+    if (!mounted) return;
+    final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    compressOverlay.remove();
+    if (!mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
     }
+    if (result.compressedSize > MediaCompressor.maxImageSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+      return;
+    }
+    setState(() => _newImages.add(result.file));
   }
 
   Future<List<String>> _uploadImages() async {

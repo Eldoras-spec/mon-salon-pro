@@ -18,6 +18,7 @@ import '../services/auth_service.dart';
 import '../services/app_localizations.dart';
 import '../providers/locale_provider.dart';
 import '../services/locale_service.dart';
+import '../utils/media_compressor.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 String _hashPin(String pin) {
@@ -39,16 +40,28 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   bool _uploadingPhoto = false;
 
   Future<void> _pickPhoto(UserModel user) async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
-    );
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
+
+    // Compress image before upload
+    final overlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    overlay.remove();
+    if (!mounted) return;
+
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
+    }
+    if (result.compressedSize > MediaCompressor.maxImageSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+      return;
+    }
 
     setState(() => _uploadingPhoto = true);
     try {
       final url = await AuthService()
-          .uploadProfilePicture(user.id, File(picked.path));
+          .uploadProfilePicture(user.id, result.file);
       await AuthService().updateProfileImageUrl(user.id, url);
       // userStreamProvider auto-updates — no invalidation needed
     } catch (e) {
@@ -262,7 +275,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
 
                     const SizedBox(height: 16),
                     Text(
-                      l?.tr('profile_version') ?? 'Mon Salon Pro v1.4.3',
+                      l?.tr('profile_version') ?? 'Mon Salon Pro v1.4.5',
                       style: TextStyle(
                           fontSize: 11, color: AppColors.secondary300),
                     ),

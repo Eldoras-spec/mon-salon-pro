@@ -15,6 +15,7 @@ import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../utils/media_compressor.dart';
 import '../widgets/service_form_dialog.dart';
 import 'owner_onboarding_step1_screen.dart';
 
@@ -248,12 +249,23 @@ class _SalonBody extends StatelessWidget {
 
   Future<void> _pickCoverPhoto(BuildContext context) async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1400,
-      imageQuality: 85,
-    );
+    final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
+
+    // Compress image
+    if (!context.mounted) return;
+    final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    compressOverlay.remove();
+    if (!context.mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
+    }
+    if (result.compressedSize > MediaCompressor.maxImageSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+      return;
+    }
 
     // Show loading
     if (context.mounted) {
@@ -264,7 +276,7 @@ class _SalonBody extends StatelessWidget {
     }
 
     try {
-      final file = File(picked.path);
+      final file = result.file;
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('salons/${salon.id}/cover_${DateTime.now().millisecondsSinceEpoch}.jpg');
@@ -1823,37 +1835,38 @@ class _GallerySectionState extends State<_GallerySection> {
     File? file;
     String ext;
 
+    final picker = ImagePicker();
+    XFile? picked;
     if (video) {
-      final picker = ImagePicker();
-      final picked = await picker.pickVideo(
+      picked = await picker.pickVideo(
         source: ImageSource.gallery,
         maxDuration: const Duration(seconds: 60),
       );
-      if (picked == null) return;
-      file = File(picked.path);
-      ext = picked.path.split('.').last;
-
-      // Check file size (max 100MB per video)
-      final size = await file.length();
-      if (size > 100 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l?.tr('gallery_video_too_large') ?? 'Vidéo trop volumineuse (max 100 MB)')),
-          );
-        }
-        return;
-      }
     } else {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        imageQuality: 80,
-      );
-      if (picked == null) return;
-      file = File(picked.path);
-      ext = 'jpg';
+      picked = await picker.pickImage(source: ImageSource.gallery);
     }
+    if (picked == null) return;
+
+    // Compress media
+    if (!mounted) return;
+    final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: video);
+    final result = video
+        ? await MediaCompressor.compressVideo(File(picked.path))
+        : await MediaCompressor.compressImage(File(picked.path));
+    compressOverlay.remove();
+    if (!mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: video, afterCompression: false);
+      return;
+    }
+    final maxSize = video ? MediaCompressor.maxVideoSizeBytes : MediaCompressor.maxImageSizeBytes;
+    if (result.compressedSize > maxSize) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: video, afterCompression: true);
+      return;
+    }
+
+    file = result.file;
+    ext = video ? file.path.split('.').last : 'jpg';
 
     setState(() { _uploading = true; _uploadProgress = 0; });
     try {
@@ -2122,11 +2135,7 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       final picker = ImagePicker();
 
       // Pick "before" image
-      final beforePicked = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        imageQuality: 80,
-      );
+      final beforePicked = await picker.pickImage(source: ImageSource.gallery);
       if (beforePicked == null || !mounted) return;
 
       // Pick "after" image
@@ -2141,12 +2150,25 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       }
       await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
-      final afterPicked = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1200,
-        imageQuality: 80,
-      );
+      final afterPicked = await picker.pickImage(source: ImageSource.gallery);
       if (afterPicked == null || !mounted) return;
+
+      // Compress both images
+      if (!mounted) return;
+      final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+      final beforeResult = await MediaCompressor.compressImage(File(beforePicked.path));
+      final afterResult = await MediaCompressor.compressImage(File(afterPicked.path));
+      compressOverlay.remove();
+      if (!mounted) return;
+      if (beforeResult == null || afterResult == null) {
+        await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+        return;
+      }
+      if (beforeResult.compressedSize > MediaCompressor.maxImageSizeBytes ||
+          afterResult.compressedSize > MediaCompressor.maxImageSizeBytes) {
+        await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+        return;
+      }
 
       // Ask for a label
       final labelCtrl = TextEditingController();
@@ -2184,14 +2206,14 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       final beforeRef = FirebaseStorage.instance
           .ref()
           .child('$storageBase/before_$ts.jpg');
-      await beforeRef.putFile(File(beforePicked.path));
+      await beforeRef.putFile(beforeResult.file);
       final beforeUrl = await beforeRef.getDownloadURL();
 
       // Upload after
       final afterRef = FirebaseStorage.instance
           .ref()
           .child('$storageBase/after_$ts.jpg');
-      await afterRef.putFile(File(afterPicked.path));
+      await afterRef.putFile(afterResult.file);
       final afterUrl = await afterRef.getDownloadURL();
 
       await DatabaseService().addBeforeAfter(widget.salonId, {

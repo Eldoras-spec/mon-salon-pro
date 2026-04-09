@@ -12,6 +12,7 @@ import '../theme/app_constants.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../utils/media_compressor.dart';
 
 /// Shared service creation/editing dialog.
 ///
@@ -1048,54 +1049,50 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
     if (isVideo) {
       picked = await picker.pickVideo(source: ImageSource.gallery);
-      if (picked != null) {
-        final size = await File(picked.path).length();
-        if (size > 50 * 1024 * 1024) {
-          if (ctx.mounted) {
-            await showDialog(
-              context: ctx,
-              builder: (dialogCtx) => AlertDialog(
-                icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
-                title: const Text('Fichier trop volumineux'),
-                content: const Text('La vidéo dépasse la limite de 50 MB. Choisis un fichier plus petit.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
-            );
-          }
-          return;
-        }
-      }
     } else {
-      picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 80);
-      if (picked != null) {
-        final size = await File(picked.path).length();
-        if (size > 15 * 1024 * 1024) {
-          if (ctx.mounted) {
-            await showDialog(
-              context: ctx,
-              builder: (dialogCtx) => AlertDialog(
-                icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
-                title: const Text('Fichier trop volumineux'),
-                content: const Text('L\'image dépasse la limite de 15 MB. Choisis un fichier plus petit.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
-            );
-          }
-          return;
-        }
-      }
+      picked = await picker.pickImage(source: ImageSource.gallery);
     }
     if (picked == null) return;
+
+    // Compress media before upload
+    File fileToUpload = File(picked.path);
+    OverlayEntry? compressOverlay;
+    if (ctx.mounted) {
+      compressOverlay = MediaCompressor.showCompressionOverlay(ctx, isVideo: isVideo);
+    }
+    try {
+      final result = isVideo
+          ? await MediaCompressor.compressVideo(fileToUpload)
+          : await MediaCompressor.compressImage(fileToUpload);
+      compressOverlay?.remove();
+      compressOverlay = null;
+
+      if (result == null) {
+        if (ctx.mounted) {
+          await MediaCompressor.showSizeErrorDialog(ctx, isVideo: isVideo, afterCompression: false);
+        }
+        return;
+      }
+
+      final finalSize = result.compressedSize;
+      final maxSize = isVideo ? MediaCompressor.maxVideoSizeBytes : MediaCompressor.maxImageSizeBytes;
+      if (finalSize > maxSize) {
+        if (ctx.mounted) {
+          await MediaCompressor.showSizeErrorDialog(ctx, isVideo: isVideo, afterCompression: true);
+        }
+        return;
+      }
+
+      fileToUpload = result.file;
+      debugPrint('📦 Compressed ${isVideo ? "video" : "image"}: ${(result.originalSize / 1024 / 1024).toStringAsFixed(1)} MB → ${(finalSize / 1024 / 1024).toStringAsFixed(1)} MB (${result.savedPercent.toStringAsFixed(0)}% saved)');
+    } catch (e) {
+      compressOverlay?.remove();
+      debugPrint('Compression error: $e');
+      if (ctx.mounted) {
+        await MediaCompressor.showSizeErrorDialog(ctx, isVideo: isVideo, afterCompression: false);
+      }
+      return;
+    }
 
     // Show progress overlay
     final progressNotifier = ValueNotifier<double>(0);
@@ -1126,12 +1123,12 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     try {
       final uid = AuthService().currentUserId ?? '';
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final ext = picked.path.split('.').last;
+      final ext = fileToUpload.path.split('.').last;
 
       // Upload main file with progress
       final storageRef = FirebaseStorage.instance.ref()
           .child('salons/$uid/designs/$ts.$ext');
-      final uploadTask = storageRef.putFile(File(picked.path));
+      final uploadTask = storageRef.putFile(fileToUpload);
       uploadTask.snapshotEvents.listen((snap) {
         if (snap.totalBytes > 0) {
           progressNotifier.value = snap.bytesTransferred / snap.totalBytes;
@@ -1145,7 +1142,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       if (isVideo) {
         try {
           final Uint8List? thumbData = await vt.VideoThumbnail.thumbnailData(
-            video: picked.path,
+            video: fileToUpload.path,
             imageFormat: vt.ImageFormat.JPEG,
             maxWidth: 400,
             quality: 75,

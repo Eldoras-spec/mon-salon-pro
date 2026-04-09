@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
+import '../utils/media_compressor.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
 import 'owner_onboarding_step3_screen.dart';
@@ -49,13 +50,25 @@ class _OwnerOnboardingStep2ScreenState
   // ── Cover photo ──────────────────────────────────────────────────────────────
 
   Future<void> _pickCoverPhoto() async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
-    final file = File(picked.path);
+    // Compress
+    if (!mounted) return;
+    final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    compressOverlay.remove();
+    if (!mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
+    }
+    if (result.compressedSize > MediaCompressor.maxImageSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+      return;
+    }
+
+    final file = result.file;
     setState(() {
       _coverPhotoFile = file;
       _coverPhotoUrl = null;
@@ -97,13 +110,25 @@ class _OwnerOnboardingStep2ScreenState
   Future<void> _pickGalleryPhoto() async {
     if (_galleryItems.length >= 10) return;
 
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-    );
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
-    final file = File(picked.path);
+    // Compress
+    if (!mounted) return;
+    final compressOverlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    compressOverlay.remove();
+    if (!mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
+    }
+    if (result.compressedSize > MediaCompressor.maxImageSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: true);
+      return;
+    }
+
+    final file = result.file;
     final index = _galleryItems.length;
 
     setState(() {
