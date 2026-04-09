@@ -1050,8 +1050,23 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       picked = await picker.pickVideo(source: ImageSource.gallery);
       if (picked != null) {
         final size = await File(picked.path).length();
-        if (size > 30 * 1024 * 1024) {
-          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Vidéo trop volumineuse (max 30 MB)'), backgroundColor: Colors.red));
+        if (size > 50 * 1024 * 1024) {
+          if (ctx.mounted) {
+            await showDialog(
+              context: ctx,
+              builder: (dialogCtx) => AlertDialog(
+                icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+                title: const Text('Fichier trop volumineux'),
+                content: const Text('La vidéo dépasse la limite de 50 MB. Choisis un fichier plus petit.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
           return;
         }
       }
@@ -1059,8 +1074,23 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 80);
       if (picked != null) {
         final size = await File(picked.path).length();
-        if (size > 10 * 1024 * 1024) {
-          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Image trop volumineuse (max 10 MB)'), backgroundColor: Colors.red));
+        if (size > 15 * 1024 * 1024) {
+          if (ctx.mounted) {
+            await showDialog(
+              context: ctx,
+              builder: (dialogCtx) => AlertDialog(
+                icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+                title: const Text('Fichier trop volumineux'),
+                content: const Text('L\'image dépasse la limite de 15 MB. Choisis un fichier plus petit.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
           return;
         }
       }
