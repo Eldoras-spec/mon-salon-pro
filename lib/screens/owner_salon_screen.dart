@@ -1475,6 +1475,9 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
           existing: existing,
           assignedMembers: currentAssigned,
           teamMembers: teamMembers,
+          salonId: widget.salon.id,
+          isPremium: widget.salon.isPremium,
+          galleryStorageUsed: widget.salon.galleryStorageUsed,
           onSave: (entry) {
             setState(() {
               if (isNew) {
@@ -1788,7 +1791,9 @@ class _GallerySectionState extends State<_GallerySection> {
   late List<String> _images;
   bool _uploading = false;
   double _uploadProgress = 0;
-  static const _maxStorageBytes = 10 * 1024 * 1024 * 1024; // 10 GB
+  int get _maxStorageBytes => widget.salon.isPremium
+      ? 20 * 1024 * 1024 * 1024   // 20 GB premium
+      :  3 * 1024 * 1024 * 1024;  //  3 GB standard
 
   bool get _isPremium => widget.salon.isPremium;
 
@@ -1825,8 +1830,16 @@ class _GallerySectionState extends State<_GallerySection> {
     final currentUsage = widget.salon.galleryStorageUsed;
     if (currentUsage >= _maxStorageBytes) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l?.tr('gallery_storage_limit') ?? 'Limite de stockage atteinte (10 GB)')),
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 48),
+            title: const Text('Stockage plein'),
+            content: Text('Vous avez atteint la limite de ${widget.salon.isPremium ? "20" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            ],
+          ),
         );
       }
       return;

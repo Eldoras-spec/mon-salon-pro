@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
+import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_constants.dart';
 import '../models/team_member_model.dart';
@@ -28,12 +29,18 @@ class ServiceFormDialog extends StatefulWidget {
     this.assignedMembers = const {},
     required this.teamMembers,
     required this.onSave,
+    required this.salonId,
+    this.isPremium = false,
+    this.galleryStorageUsed = 0,
   });
 
   final Map<String, dynamic>? existing;
   final Set<String> assignedMembers;
   final List<TeamMemberModel> teamMembers;
   final void Function(Map<String, dynamic> entry) onSave;
+  final String salonId;
+  final bool isPremium;
+  final int galleryStorageUsed;
 
   @override
   State<ServiceFormDialog> createState() => _ServiceFormDialogState();
@@ -1094,6 +1101,26 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       return;
     }
 
+    // Check storage limit
+    final fileSize = await fileToUpload.length();
+    final maxStorage = widget.isPremium ? 20 * 1024 * 1024 * 1024 : 3 * 1024 * 1024 * 1024;
+    if (widget.galleryStorageUsed + fileSize > maxStorage) {
+      if (ctx.mounted) {
+        showDialog(
+          context: ctx,
+          builder: (dialogCtx) => AlertDialog(
+            icon: const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 48),
+            title: const Text('Stockage plein'),
+            content: Text('Vous avez atteint la limite de ${widget.isPremium ? "20" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     // Show progress overlay
     final progressNotifier = ValueNotifier<double>(0);
     OverlayEntry? progressOverlay;
@@ -1136,6 +1163,11 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       });
       await uploadTask;
       final url = await storageRef.getDownloadURL();
+
+      // Update storage counter
+      await DatabaseService().updateSalonField(
+        widget.salonId, 'galleryStorageUsed', widget.galleryStorageUsed + fileSize,
+      );
 
       // Generate and upload thumbnail for videos
       String? thumbnailUrl;

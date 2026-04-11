@@ -397,6 +397,9 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
           existing: existing,
           assignedMembers: currentAssigned,
           teamMembers: teamMembers,
+          salonId: salon.id,
+          isPremium: salon.isPremium,
+          galleryStorageUsed: salon.galleryStorageUsed,
           onSave: (entry) {
             setState(() {
               if (isNew) {

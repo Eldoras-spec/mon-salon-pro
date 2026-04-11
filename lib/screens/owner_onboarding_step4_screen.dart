@@ -196,6 +196,9 @@ class _OwnerOnboardingStep4ScreenState
           existing: existingMap,
           assignedMembers: assignedMembers,
           teamMembers: widget.teamMembers,
+          salonId: widget.salonData['ownerId'] as String? ?? '',
+          isPremium: false,
+          galleryStorageUsed: 0,
           onSave: (map) {
             final entry = ServiceEntry(
               name: map['name'] as String,
