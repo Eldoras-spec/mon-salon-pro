@@ -658,6 +658,9 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               if (choice['nextOptionId'] != null) {
                                 _removeStepAndChildren(choice['nextOptionId'] as String);
                               }
+                              if (choice['isGallery'] == true) {
+                                _deleteAllGalleryFilesFromChoice(choice);
+                              }
                               final ch = List<Map<String, dynamic>>.from(_optionSteps[stepIdx]['choices']);
                               ch.removeAt(cIdx);
                               _optionSteps[stepIdx]['choices'] = ch;
@@ -878,6 +881,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                   onTap: () {
                     Navigator.pop(ctx);
                     if (isGallery) {
+                      _deleteAllGalleryFilesFromChoice(ch[choiceIdx]);
                       setState(() {
                         ch[choiceIdx]['isGallery'] = false;
                         ch[choiceIdx].remove('galleryItems');
@@ -960,6 +964,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                     Positioned(top: 4, right: 4,
                                       child: GestureDetector(
                                         onTap: () => setModalState(() {
+                                          _deleteGalleryFileFromStorage(Map<String, dynamic>.from(items[i]));
                                           items.removeAt(i);
                                           ch[choiceIdx]['galleryItems'] = items;
                                           _optionSteps[stepIdx]['choices'] = ch;
@@ -1277,6 +1282,35 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       }
     }
     _optionSteps.removeWhere((s) => s['id'] == stepId);
+  }
+
+  /// Delete a gallery item's files (main + thumbnail) from Firebase Storage.
+  void _deleteGalleryFileFromStorage(Map<String, dynamic> item) {
+    final url = item['url'] as String?;
+    final thumbUrl = item['thumbnailUrl'] as String?;
+    if (url != null && url.isNotEmpty) {
+      try {
+        FirebaseStorage.instance.refFromURL(url).delete();
+      } catch (e) {
+        debugPrint('Error deleting gallery file: $e');
+      }
+    }
+    if (thumbUrl != null && thumbUrl.isNotEmpty) {
+      try {
+        FirebaseStorage.instance.refFromURL(thumbUrl).delete();
+      } catch (e) {
+        debugPrint('Error deleting gallery thumbnail: $e');
+      }
+    }
+  }
+
+  /// Delete all gallery items' files from a choice.
+  void _deleteAllGalleryFilesFromChoice(Map<String, dynamic> choice) {
+    final items = choice['galleryItems'] as List?;
+    if (items == null) return;
+    for (final item in items) {
+      _deleteGalleryFileFromStorage(Map<String, dynamic>.from(item));
+    }
   }
 
   Widget _label(String text) => Text(
