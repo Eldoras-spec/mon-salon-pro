@@ -421,7 +421,7 @@ class _ProductCard extends ConsumerWidget {
               TextButton(
                 onPressed: () {
                   // Delete product images from Storage
-                  for (final url in product.imageUrls) {
+                  for (final url in product.images) {
                     try { FirebaseStorage.instance.refFromURL(url).delete(); } catch (_) {}
                   }
                   _db.deleteProduct(product.id);
