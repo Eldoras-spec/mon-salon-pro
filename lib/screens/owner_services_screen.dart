@@ -7,6 +7,7 @@ import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../services/database_service.dart';
 import '../widgets/service_form_dialog.dart';
 
@@ -436,6 +437,26 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
         ),
       );
       return;
+    }
+    // Clean up gallery files from Storage
+    final service = _services[index];
+    if (service['isComplex'] == true && service['options'] != null) {
+      for (final step in (service['options'] as List)) {
+        for (final choice in (step['choices'] as List? ?? [])) {
+          if (choice['isGallery'] == true && choice['galleryItems'] != null) {
+            for (final item in (choice['galleryItems'] as List)) {
+              final url = item['url'] as String?;
+              final thumbUrl = item['thumbnailUrl'] as String?;
+              if (url != null && url.isNotEmpty) {
+                try { FirebaseStorage.instance.refFromURL(url).delete(); } catch (_) {}
+              }
+              if (thumbUrl != null && thumbUrl.isNotEmpty) {
+                try { FirebaseStorage.instance.refFromURL(thumbUrl).delete(); } catch (_) {}
+              }
+            }
+          }
+        }
+      }
     }
     setState(() => _services.removeAt(index));
     if (salon != null) _save(salon);

@@ -76,15 +76,15 @@ class MediaCompressor {
 
     if (originalSize > maxVideoInputBytes) return null;
 
-    // If already small enough, skip compression
-    if (originalSize < 5 * 1024 * 1024) {
+    // If already under the limit, skip compression
+    if (originalSize <= maxVideoSizeBytes) {
       return CompressionResult(file: file, originalSize: originalSize, compressedSize: originalSize);
     }
 
     try {
       final info = await VideoCompress.compressVideo(
         file.path,
-        quality: VideoQuality.MediumQuality,
+        quality: VideoQuality.Res1920x1080Quality,
         deleteOrigin: false,
         includeAudio: true,
       );
