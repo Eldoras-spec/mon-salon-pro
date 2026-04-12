@@ -84,7 +84,7 @@ class MediaCompressor {
     try {
       final info = await VideoCompress.compressVideo(
         file.path,
-        quality: VideoQuality.HighestQuality,
+        quality: VideoQuality.Res1920x1080Quality,
         deleteOrigin: false,
         includeAudio: true,
       );
