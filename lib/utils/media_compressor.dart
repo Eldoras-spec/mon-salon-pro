@@ -22,7 +22,7 @@ class MediaCompressor {
 
   /// Max file sizes BEFORE compression (reject if bigger — compression unlikely to work)
   static const int maxImageInputBytes = 100 * 1024 * 1024; // 100 MB
-  static const int maxVideoInputBytes = 500 * 1024 * 1024; // 500 MB
+  static const int maxVideoInputBytes = 200 * 1024 * 1024; // 200 MB
 
   /// Compress an image to JPEG with good quality. Targets < 15MB.
   static Future<CompressionResult?> compressImage(File file) async {
