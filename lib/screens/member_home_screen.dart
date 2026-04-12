@@ -12,6 +12,7 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../widgets/member_avatar.dart';
 import '../theme/app_colors.dart';
 
 class MemberHomeScreen extends ConsumerStatefulWidget {
@@ -206,30 +207,15 @@ class _MemberHeader extends StatelessWidget {
   const _MemberHeader({required this.member});
   final TeamMemberModel member;
 
-  String get _initials {
-    final parts = member.name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return member.name.isNotEmpty ? member.name[0].toUpperCase() : '?';
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Row(
       children: [
-        CircleAvatar(
+        MemberAvatar(
+          name: member.name,
+          photoUrl: member.photoUrl,
           radius: 18,
-          backgroundColor: AppColors.brand50,
-          child: Text(
-            _initials,
-            style: const TextStyle(
-              color: AppColors.brand600,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
         ),
         const SizedBox(width: 10),
         Column(

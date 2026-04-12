@@ -8,8 +8,13 @@ import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/media_compressor.dart';
+import '../widgets/member_avatar.dart';
 
 class OwnerTeamScreen extends ConsumerStatefulWidget {
   const OwnerTeamScreen({super.key});
@@ -260,6 +265,45 @@ class _MemberCard extends StatelessWidget {
     }
   }
 
+  Future<void> _pickMemberPhoto(BuildContext context) async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null || !context.mounted) return;
+
+    final overlay = MediaCompressor.showCompressionOverlay(context, isVideo: false);
+    final result = await MediaCompressor.compressImage(File(picked.path));
+    overlay.remove();
+    if (!context.mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context, isVideo: false, afterCompression: false);
+      return;
+    }
+
+    try {
+      final ref = FirebaseStorage.instance.ref()
+          .child('salons/$salonId/team/${member.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await ref.putFile(result.file);
+      final url = await ref.getDownloadURL();
+
+      // Delete old photo if exists
+      if (member.photoUrl != null && member.photoUrl!.isNotEmpty) {
+        try { await FirebaseStorage.instance.refFromURL(member.photoUrl!).delete(); } catch (_) {}
+      }
+
+      await DatabaseService().updateTeamMember(salonId, member.id, {'photoUrl': url});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Photo mise à jour'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   String _roleLabel(AppLocalizations? l) {
     switch (member.role) {
       case 'gerant':
@@ -296,23 +340,30 @@ class _MemberCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: _roleBg,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                _initials,
-                style: TextStyle(
-                  color: _roleColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+          // Avatar with photo support
+          GestureDetector(
+            onTap: () => _pickMemberPhoto(context),
+            child: Stack(
+              children: [
+                MemberAvatar(
+                  name: member.name,
+                  photoUrl: member.photoUrl,
+                  radius: 24,
+                  backgroundColor: _roleBg,
                 ),
-              ),
+                Positioned(
+                  bottom: 0, right: 0,
+                  child: Container(
+                    width: 18, height: 18,
+                    decoration: BoxDecoration(
+                      color: AppColors.brand600,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 14),

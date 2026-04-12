@@ -8,6 +8,7 @@ import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../widgets/member_avatar.dart';
 
 const _memberColors = [
   Color(0xFFFDE68A), // amber
@@ -112,12 +113,6 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
       _selectedDate = DateTime.now();
     });
     _loadData();
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
   // Total height of the timeline
@@ -318,18 +313,11 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircleAvatar(
+                          MemberAvatar(
+                            name: member.name,
+                            photoUrl: member.photoUrl,
                             radius: 18,
                             backgroundColor: color,
-                            child: Text(
-                              _initials(member.name),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: _memberTextColors[
-                                    idx % _memberTextColors.length],
-                              ),
-                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(

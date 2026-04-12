@@ -12,6 +12,7 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
+import '../widgets/member_avatar.dart';
 
 class TeamProfileSelectorScreen extends ConsumerWidget {
   const TeamProfileSelectorScreen({super.key, required this.userModel});
@@ -111,16 +112,6 @@ class _OwnerTile extends ConsumerWidget {
   final UserModel userModel;
   final VoidCallback onEnter;
 
-  String get _initials {
-    final parts = userModel.fullName.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return userModel.fullName.isNotEmpty
-        ? userModel.fullName[0].toUpperCase()
-        : 'P';
-  }
-
   void _onTap(BuildContext context) {
     if (userModel.pinHash != null) {
       showDialog(
@@ -157,27 +148,10 @@ class _OwnerTile extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.brand500, AppColors.brand700],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  _initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
+            MemberAvatar(
+              name: userModel.fullName,
+              photoUrl: userModel.profileImageUrl,
+              radius: 26,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -230,21 +204,6 @@ class _MemberTile extends ConsumerWidget {
   const _MemberTile({required this.member});
   final TeamMemberModel member;
 
-  String get _initials {
-    final parts = member.name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return member.name.isNotEmpty ? member.name[0].toUpperCase() : '?';
-  }
-
-  Color get _avatarColor =>
-      member.role == 'gerant' ? const Color(0xFFEA580C) : AppColors.brand600;
-
-  Color get _avatarBg => member.role == 'gerant'
-      ? const Color(0xFFFFF7ED).withValues(alpha: 0.15)
-      : AppColors.brand50.withValues(alpha: 0.15);
-
   String _roleLabel(BuildContext context) {
     final l = AppLocalizations.of(context);
     return member.role == 'gerant'
@@ -289,25 +248,10 @@ class _MemberTile extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: _avatarBg,
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: _avatarColor.withValues(alpha: 0.4), width: 1.5),
-              ),
-              child: Center(
-                child: Text(
-                  _initials,
-                  style: TextStyle(
-                    color: _avatarColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
+            MemberAvatar(
+              name: member.name,
+              photoUrl: member.photoUrl,
+              radius: 26,
             ),
             const SizedBox(width: 16),
             Expanded(

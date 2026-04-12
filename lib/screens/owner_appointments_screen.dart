@@ -12,6 +12,7 @@ import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../widgets/member_avatar.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -390,15 +391,10 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               )
             else
               ...members.map((m) => ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.brand50,
-                      child: Text(
-                        m.name.isNotEmpty ? m.name[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          color: AppColors.brand600,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    leading: MemberAvatar(
+                      name: m.name,
+                      photoUrl: m.photoUrl,
+                      radius: 20,
                     ),
                     title: Text(m.name,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1553,23 +1549,18 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundColor: selected
-                                ? AppColors.brand500
-                                : AppColors.secondary200,
-                            child: selected
-                                ? const Icon(Icons.check,
-                                    size: 12, color: Colors.white)
-                                : Text(
-                                    m.name.isNotEmpty
-                                        ? m.name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                        fontSize: 10,
-                                        color: AppColors.secondary500),
-                                  ),
-                          ),
+                          selected
+                              ? const CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: AppColors.brand500,
+                                  child: Icon(Icons.check,
+                                      size: 12, color: Colors.white),
+                                )
+                              : MemberAvatar(
+                                  name: m.name,
+                                  photoUrl: m.photoUrl,
+                                  radius: 12,
+                                ),
                           const SizedBox(width: 6),
                           Text(
                             m.name,

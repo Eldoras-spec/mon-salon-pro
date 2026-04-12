@@ -7,6 +7,7 @@ import '../providers/team_providers.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import '../services/app_localizations.dart';
+import '../widgets/member_avatar.dart';
 import 'owner_onboarding_step4_screen.dart';
 
 class OwnerOnboardingStep5Screen extends StatefulWidget {
@@ -204,18 +205,10 @@ class _OwnerOnboardingStep5ScreenState
                             ),
                             child: Row(
                               children: [
-                                CircleAvatar(
+                                MemberAvatar(
+                                  name: m.name,
+                                  photoUrl: m.photoUrl,
                                   radius: 20,
-                                  backgroundColor: AppColors.brand50,
-                                  child: Text(
-                                    m.name.isNotEmpty
-                                        ? m.name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      color: AppColors.brand600,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

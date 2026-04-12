@@ -12,6 +12,7 @@ class TeamMemberModel {
   final List<String> unavailableDates; // ISO date strings e.g. "2026-03-15"
   final Map<String, List<String>> unavailableSlots; // e.g. {"2026-03-10": ["12:00-13:00", "17:00-18:00"]}
   final List<String> assignedServiceNames; // service names this member can perform
+  final String? photoUrl; // profile photo URL
 
   TeamMemberModel({
     required this.id,
@@ -25,6 +26,7 @@ class TeamMemberModel {
     this.unavailableDates = const [],
     this.unavailableSlots = const {},
     this.assignedServiceNames = const [],
+    this.photoUrl,
   });
 
   factory TeamMemberModel.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +49,7 @@ class TeamMemberModel {
           {},
       assignedServiceNames:
           List<String>.from(data['assignedServiceNames'] ?? []),
+      photoUrl: data['photoUrl'] as String?,
     );
   }
 
@@ -54,6 +57,7 @@ class TeamMemberModel {
     List<String>? unavailableDates,
     Map<String, List<String>>? unavailableSlots,
     List<String>? assignedServiceNames,
+    String? photoUrl,
   }) {
     return TeamMemberModel(
       id: id,
@@ -67,6 +71,7 @@ class TeamMemberModel {
       unavailableDates: unavailableDates ?? this.unavailableDates,
       unavailableSlots: unavailableSlots ?? this.unavailableSlots,
       assignedServiceNames: assignedServiceNames ?? this.assignedServiceNames,
+      photoUrl: photoUrl ?? this.photoUrl,
     );
   }
 
@@ -82,6 +87,7 @@ class TeamMemberModel {
       'unavailableDates': unavailableDates,
       'unavailableSlots': unavailableSlots,
       'assignedServiceNames': assignedServiceNames,
+      if (photoUrl != null) 'photoUrl': photoUrl,
     };
   }
 }

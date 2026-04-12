@@ -13,6 +13,7 @@ import '../theme/app_constants.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/auth_service.dart';
+import 'member_avatar.dart';
 import '../utils/media_compressor.dart';
 
 /// Shared service creation/editing dialog.
@@ -394,16 +395,17 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  CircleAvatar(
-                                    radius: 10,
-                                    backgroundColor: isSelected ? AppColors.brand500 : AppColors.secondary200,
-                                    child: isSelected
-                                        ? const Icon(Icons.check, size: 10, color: Colors.white)
-                                        : Text(
-                                            m.name.isNotEmpty ? m.name[0].toUpperCase() : '?',
-                                            style: const TextStyle(fontSize: 8, color: AppColors.secondary500),
-                                          ),
-                                  ),
+                                  isSelected
+                                      ? const CircleAvatar(
+                                          radius: 10,
+                                          backgroundColor: AppColors.brand500,
+                                          child: Icon(Icons.check, size: 10, color: Colors.white),
+                                        )
+                                      : MemberAvatar(
+                                          name: m.name,
+                                          photoUrl: m.photoUrl,
+                                          radius: 10,
+                                        ),
                                   const SizedBox(width: 6),
                                   Text(
                                     m.name,

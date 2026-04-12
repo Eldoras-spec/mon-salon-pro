@@ -76,8 +76,8 @@ class MediaCompressor {
 
     if (originalSize > maxVideoInputBytes) return null;
 
-    // Skip compression only for very small videos (< 2 MB)
-    if (originalSize < 2 * 1024 * 1024) {
+    // Skip compression for videos under 10 MB (already optimized)
+    if (originalSize < 10 * 1024 * 1024) {
       return CompressionResult(file: file, originalSize: originalSize, compressedSize: originalSize);
     }
 

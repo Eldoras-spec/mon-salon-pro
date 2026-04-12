@@ -8,6 +8,7 @@ import '../models/appointment_model.dart';
 import '../models/order_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
+import '../widgets/member_avatar.dart';
 
 class OwnerStatisticsScreen extends ConsumerWidget {
   const OwnerStatisticsScreen({super.key});
@@ -1015,23 +1016,9 @@ class _MemberRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.brand50,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: AppColors.brand600,
-                ),
-              ),
-            ),
+          MemberAvatar(
+            name: name,
+            radius: 18,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1110,23 +1097,9 @@ class _ClientRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.brand50,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: AppColors.brand600,
-                ),
-              ),
-            ),
+          MemberAvatar(
+            name: name,
+            radius: 18,
           ),
           const SizedBox(width: 12),
           Expanded(
