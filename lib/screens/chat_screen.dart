@@ -7,9 +7,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_colors.dart';
 import '../models/message_model.dart';
 import '../models/salon_model.dart';
+import '../models/team_member_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
 import '../services/app_localizations.dart';
+import '../widgets/member_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -526,67 +528,131 @@ class _MessageBubbleState extends State<_MessageBubble> {
     );
   }
 
-  void _showApproveDialog(AppLocalizations? l) {
+  void _showApproveDialog(AppLocalizations? l) async {
     final nameCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     final durationCtrl = TextEditingController(text: '30');
 
+    // Load team members for assignment
+    final parts = widget.conversationId.split('_');
+    List<TeamMemberModel> teamMembers = [];
+    if (parts.length >= 2) {
+      final salonId = parts.sublist(1).join('_');
+      final snap = await FirebaseFirestore.instance
+          .collection('salons').doc(salonId).collection('teamMembers')
+          .where('isActive', isEqualTo: true).get();
+      teamMembers = snap.docs.map((d) => TeamMemberModel.fromFirestore(d)).toList();
+    }
+
+    TeamMemberModel? selectedMember;
+
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l?.tr('chat_approve_title') ?? 'Créer la prestation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: l?.tr('chat_approve_name') ?? 'Nom de la prestation',
-                hintText: l?.tr('chat_approve_name_hint') ?? 'Ex: Coupe dégradé personnalisée',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(l?.tr('chat_approve_title') ?? 'Créer la prestation'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: l?.tr('chat_approve_name') ?? 'Nom de la prestation',
+                    hintText: l?.tr('chat_approve_name_hint') ?? 'Ex: Coupe dégradé personnalisée',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l?.tr('chat_approve_price') ?? 'Prix (MAD)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: durationCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l?.tr('chat_approve_duration') ?? 'Durée (min)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                if (teamMembers.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l?.tr('chat_approve_assign') ?? 'Assigner à',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.secondary600),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: teamMembers.map((m) {
+                      final isSelected = selectedMember?.id == m.id;
+                      return GestureDetector(
+                        onTap: () => setDialogState(() {
+                          selectedMember = isSelected ? null : m;
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.brand50 : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected ? AppColors.brand500 : AppColors.secondary200,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              MemberAvatar(name: m.name, photoUrl: m.photoUrl, radius: 14),
+                              const SizedBox(width: 8),
+                              Text(m.name, style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                color: isSelected ? AppColors.brand700 : AppColors.brand950,
+                              )),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: priceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: l?.tr('chat_approve_price') ?? 'Prix (MAD)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: durationCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: l?.tr('chat_approve_duration') ?? 'Durée (min)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final price = double.tryParse(priceCtrl.text.trim());
+                final duration = int.tryParse(durationCtrl.text.trim()) ?? 30;
+                if (price == null || price <= 0) return;
+
+                Navigator.pop(ctx);
+                await _approveRequest(name.isEmpty ? null : name, price, duration, assignedMember: selectedMember);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
+              child: Text(l?.tr('chat_approve_confirm') ?? 'Confirmer', style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              final price = double.tryParse(priceCtrl.text.trim());
-              final duration = int.tryParse(durationCtrl.text.trim()) ?? 30;
-              if (price == null || price <= 0) return;
-
-              Navigator.pop(ctx);
-              await _approveRequest(name.isEmpty ? null : name, price, duration);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
-            child: Text(l?.tr('chat_approve_confirm') ?? 'Confirmer', style: const TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
 
-  Future<void> _approveRequest(String? customName, double price, int duration) async {
+  Future<void> _approveRequest(String? customName, double price, int duration, {TeamMemberModel? assignedMember}) async {
     await MessageService().updateCustomRequest(
       convId: widget.conversationId,
       messageId: message.id,
@@ -615,6 +681,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
           'description': '',
           'visibleTo': [clientId],
           if (message.imageUrl != null) 'imageUrl': message.imageUrl,
+          if (assignedMember != null) 'assignedMembers': [assignedMember.name],
         });
         await FirebaseFirestore.instance.collection('salons').doc(salonId).update({'services': services});
 
