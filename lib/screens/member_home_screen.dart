@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -690,9 +691,103 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
 
   bool get _isTodayFullyUnavailable => _unavailable.contains(_todayKey());
 
-  /// Generate hour labels from 8h to 20h
+  late List<int> _recurringDaysOff = List<int>.from(widget.member.recurringDaysOff);
+
+  Widget _buildRecurringDaysOff() {
+    final l = AppLocalizations.of(context);
+    final dayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.secondary100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_repeat_rounded, size: 18, color: AppColors.brand600),
+              const SizedBox(width: 8),
+              Text(
+                l?.tr('unavailability_recurring_days') ?? 'Jours de repos hebdomadaires',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.brand950),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l?.tr('unavailability_recurring_subtitle') ?? 'Sélectionnez vos jours de repos fixes chaque semaine',
+            style: TextStyle(fontSize: 11, color: AppColors.secondary400),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (i) {
+              final weekday = i + 1; // 1=Mon ... 7=Sun
+              final isOff = _recurringDaysOff.contains(weekday);
+              return GestureDetector(
+                onTap: _saving ? null : () async {
+                  setState(() {
+                    if (isOff) {
+                      _recurringDaysOff.remove(weekday);
+                    } else {
+                      _recurringDaysOff.add(weekday);
+                    }
+                  });
+                  // Save to Firestore
+                  try {
+                    await FirebaseFirestore.instance
+                        .collection('salons')
+                        .doc(widget.salonId)
+                        .collection('teamMembers')
+                        .doc(widget.member.id)
+                        .update({'recurringDaysOff': _recurringDaysOff});
+                  } catch (e) {
+                    debugPrint('Error saving recurring days off: $e');
+                  }
+                },
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isOff ? const Color(0xFFFEE2E2) : AppColors.secondary50,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isOff ? const Color(0xFFFCA5A5) : AppColors.secondary200,
+                      width: isOff ? 1.5 : 1,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    dayLabels[i],
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isOff ? const Color(0xFFDC2626) : AppColors.secondary500,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Generate hour labels from 8h to 22h
   List<int> get _morningHours => [8, 9, 10, 11, 12];
-  List<int> get _afternoonHours => [13, 14, 15, 16, 17, 18, 19];
+  List<int> get _afternoonHours => [13, 14, 15, 16, 17, 18, 19, 20, 21];
 
   bool _isHourUnavailable(int hour) {
     final key = _todayKey();
@@ -933,6 +1028,10 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
           ),
           const SizedBox(height: 20),
 
+          // ── Recurring days off ──
+          _buildRecurringDaysOff(),
+          const SizedBox(height: 16),
+
           // ── Today's hourly unavailability ──
           Container(
             decoration: BoxDecoration(
@@ -1024,10 +1123,14 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _afternoonHours.map(_buildHourChip).toList(),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _afternoonHours.map((h) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: _buildHourChip(h),
+                      )).toList(),
+                    ),
                   ),
                 ],
               ],
