@@ -31,6 +31,13 @@ class TeamMemberModel {
     this.recurringDaysOff = const [],
   });
 
+  /// Check if this member is off on a given date (recurring day off OR specific unavailable date).
+  bool isUnavailableOnDate(DateTime date) {
+    if (recurringDaysOff.contains(date.weekday)) return true;
+    final iso = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return unavailableDates.contains(iso);
+  }
+
   factory TeamMemberModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return TeamMemberModel(

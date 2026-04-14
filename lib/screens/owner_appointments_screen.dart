@@ -899,8 +899,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         if (wh == null || wh['isOpen'] != true) return false;
         // Check if selected member is unavailable the whole day
         if (_selectedMember != null) {
-          final iso = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-          if (_selectedMember!.unavailableDates.contains(iso)) return false;
+          if (_selectedMember!.isUnavailableOnDate(date)) return false;
         }
         return true;
       },
@@ -983,7 +982,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       final svcEnd = cursor.add(Duration(minutes: dur));
 
       final candidates = widget.teamMembers
-          .where((m) => m.isActive && m.assignedServiceNames.contains(sName) && !m.unavailableDates.contains(iso))
+          .where((m) => m.isActive && m.assignedServiceNames.contains(sName) && !m.isUnavailableOnDate(_selectedDate))
           .toList();
 
       if (candidates.isEmpty) {
@@ -1030,11 +1029,11 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     final slotStart = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
     final slotEnd = slotStart.add(Duration(minutes: duration));
 
-    // Check member full-day unavailability
-    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-    if (_selectedMember!.unavailableDates.contains(iso)) return true;
+    // Check member full-day unavailability (includes recurring days off)
+    if (_selectedMember!.isUnavailableOnDate(_selectedDate)) return true;
 
     // Check member hourly unavailability
+    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     final unavailSlots = _selectedMember!.unavailableSlots[iso] ?? [];
     for (final slot in unavailSlots) {
       final sp = slot.split('-');
@@ -1092,7 +1091,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             .where((m) =>
                 m.isActive &&
                 m.assignedServiceNames.contains(sName) &&
-                !m.unavailableDates.contains(iso))
+                !m.isUnavailableOnDate(_selectedDate))
             .toList();
         // Sort by priority ranking
         if (priority.isNotEmpty) {
@@ -1202,14 +1201,14 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       return;
     }
     // Check member unavailability
-    final isoDate =
-        '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-    if (_selectedMember!.unavailableDates.contains(isoDate)) {
+    if (_selectedMember!.isUnavailableOnDate(_selectedDate)) {
       _showError((l?.tr('appointments_error_unavailable_day') ?? '{name} est indisponible ce jour-là').replaceAll('{name}', _selectedMember!.name));
       return;
     }
 
     // Check if the selected time falls within an unavailable slot
+    final isoDate =
+        '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     final duration = _packDuration ?? (_selectedService!['duration'] as int? ?? 30);
     final slots = _selectedMember!.unavailableSlots[isoDate] ?? [];
     if (slots.isNotEmpty) {

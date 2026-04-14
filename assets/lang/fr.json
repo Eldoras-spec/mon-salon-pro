@@ -562,6 +562,8 @@
 
   "unavailability_title": "Mes Indisponibilités",
   "unavailability_info": "Marquez vos indisponibilités par heure (aujourd'hui) ou par jour entier (calendrier).",
+  "unavailability_recurring_days": "Jours de repos hebdomadaires",
+  "unavailability_recurring_subtitle": "Sélectionnez vos jours de repos fixes chaque semaine",
   "unavailability_today": "Aujourd'hui — {date}",
   "unavailability_full_day": "Journée entière indisponible",
   "unavailability_morning": "Matin",

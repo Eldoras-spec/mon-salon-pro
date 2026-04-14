@@ -562,6 +562,8 @@
 
   "unavailability_title": "My Unavailabilities",
   "unavailability_info": "Mark your unavailabilities by hour (today) or by full day (calendar).",
+  "unavailability_recurring_days": "Weekly days off",
+  "unavailability_recurring_subtitle": "Select your fixed days off each week",
   "unavailability_today": "Today — {date}",
   "unavailability_full_day": "Full day unavailable",
   "unavailability_morning": "Morning",
