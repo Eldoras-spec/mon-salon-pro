@@ -42,8 +42,12 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
   final _db = DatabaseService();
 
   DateTime _selectedDate = DateTime.now();
+  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  bool _calendarOpen = false;
   List<TeamMemberModel> _members = [];
   List<AppointmentModel> _appointments = [];
+  // Monthly appointments cache for calendar dots: { "2026-04-14": [AppointmentModel, ...] }
+  Map<String, List<AppointmentModel>> _monthAppointments = {};
   bool _loading = true;
 
   // Timeline config
@@ -101,18 +105,20 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
     }
   }
 
-  void _changeDate(int delta) {
-    setState(() {
-      _selectedDate = _selectedDate.add(Duration(days: delta));
-    });
-    _loadData();
-  }
-
-  void _goToToday() {
-    setState(() {
-      _selectedDate = DateTime.now();
-    });
-    _loadData();
+  Future<void> _loadMonthAppointments() async {
+    try {
+      final start = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
+      final end = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0, 23, 59);
+      final appointments = await _db.getSalonAppointmentsForRange(widget.salonId, start, end);
+      final map = <String, List<AppointmentModel>>{};
+      for (final a in appointments) {
+        final key = DateFormat('yyyy-MM-dd').format(a.dateTime);
+        map.putIfAbsent(key, () => []).add(a);
+      }
+      if (mounted) setState(() => _monthAppointments = map);
+    } catch (e) {
+      debugPrint('Month appointments load error: $e');
+    }
   }
 
   // Total height of the timeline
@@ -216,30 +222,29 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
               ),
             ),
             const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.chevron_left, color: AppColors.brand600, size: 22),
-              onPressed: () => _changeDate(-1),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32),
-            ),
             GestureDetector(
-              onTap: isToday ? null : _goToToday,
-              child: Text(
-                isToday ? (l?.tr('agenda_today') ?? "Aujourd'hui") : _fullDateLabel,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.brand950,
-                ),
+              onTap: () {
+                setState(() => _calendarOpen = !_calendarOpen);
+                if (_calendarOpen) _loadMonthAppointments();
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isToday ? (l?.tr('agenda_today') ?? "Aujourd'hui") : _fullDateLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _calendarOpen ? Icons.keyboard_arrow_up : Icons.calendar_month_rounded,
+                    size: 18, color: AppColors.brand600,
+                  ),
+                ],
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right, color: AppColors.brand600, size: 22),
-              onPressed: () => _changeDate(1),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32),
             ),
           ],
         ),
@@ -258,6 +263,9 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
         },
         child: Column(
           children: [
+            // Calendar overlay
+            if (_calendarOpen) _buildCalendarOverlay(),
+
             // Member header row
             if (!_loading && _members.isNotEmpty)
               _buildMemberHeader(),
@@ -273,6 +281,195 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Calendar overlay ──────────────────────────────────────────
+  Widget _buildCalendarOverlay() {
+    final now = DateTime.now();
+    final firstDay = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
+    final lastDay = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0);
+    final startWeekday = firstDay.weekday; // 1=Mon ... 7=Sun
+    final daysInMonth = lastDay.day;
+
+    final monthNames = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+    final dayHeaders = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+    // Build member color map for dots
+    final memberColorMap = <String, Color>{};
+    for (int i = 0; i < _members.length; i++) {
+      memberColorMap[_members[i].id] = _memberTextColors[i % _memberTextColors.length];
+    }
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Month navigation
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left, size: 20, color: AppColors.brand600),
+                onPressed: () {
+                  setState(() {
+                    _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1);
+                  });
+                  _loadMonthAppointments();
+                },
+              ),
+              Text(
+                '${monthNames[_calendarMonth.month - 1]} ${_calendarMonth.year}',
+                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.brand950),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right, size: 20, color: AppColors.brand600),
+                onPressed: () {
+                  setState(() {
+                    _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1);
+                  });
+                  _loadMonthAppointments();
+                },
+              ),
+            ],
+          ),
+
+          // Day of week headers
+          Row(
+            children: dayHeaders.map((d) => Expanded(
+              child: Center(
+                child: Text(d, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.secondary400)),
+              ),
+            )).toList(),
+          ),
+          const SizedBox(height: 6),
+
+          // Calendar grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              childAspectRatio: 1.0,
+            ),
+            itemCount: ((startWeekday - 1) + daysInMonth + (7 - ((startWeekday - 1 + daysInMonth) % 7)) % 7),
+            itemBuilder: (context, index) {
+              final dayOffset = index - (startWeekday - 1);
+              if (dayOffset < 0 || dayOffset >= daysInMonth) return const SizedBox.shrink();
+
+              final day = dayOffset + 1;
+              final date = DateTime(_calendarMonth.year, _calendarMonth.month, day);
+              final key = DateFormat('yyyy-MM-dd').format(date);
+              final dayAppointments = _monthAppointments[key] ?? [];
+              final isSelected = DateUtils.isSameDay(date, _selectedDate);
+              final isCurrentDay = DateUtils.isSameDay(date, now);
+
+              // Get unique member colors for dots (max 4)
+              final memberIds = dayAppointments
+                  .map((a) => a.assignedMemberId)
+                  .where((id) => id != null)
+                  .toSet()
+                  .take(4)
+                  .toList();
+              final dotColors = memberIds
+                  .map((id) => memberColorMap[id] ?? AppColors.secondary400)
+                  .toList();
+              // Add a dot for unassigned appointments
+              if (dayAppointments.any((a) => a.assignedMemberId == null) && dotColors.length < 4) {
+                dotColors.add(AppColors.secondary400);
+              }
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedDate = date;
+                    _calendarOpen = false;
+                  });
+                  _loadData();
+                },
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.brand600 : null,
+                        border: isCurrentDay && !isSelected ? Border.all(color: AppColors.brand600, width: 1.5) : null,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$day',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected || isCurrentDay ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? Colors.white : isCurrentDay ? AppColors.brand600 : AppColors.brand950,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    // Dots
+                    SizedBox(
+                      height: 6,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: dotColors.map((c) => Container(
+                          width: 5,
+                          height: 5,
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: c),
+                        )).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 8),
+          // Month chips
+          SizedBox(
+            height: 32,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 12,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, i) {
+                final isActive = i == _calendarMonth.month - 1;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _calendarMonth = DateTime(_calendarMonth.year, i + 1);
+                    });
+                    _loadMonthAppointments();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isActive ? AppColors.brand600 : AppColors.secondary50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      monthNames[i],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                        color: isActive ? Colors.white : AppColors.secondary500,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 4),
+          Divider(color: AppColors.secondary100, height: 1),
+        ],
       ),
     );
   }

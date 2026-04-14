@@ -696,6 +696,22 @@ class DatabaseService {
         .toList();
   }
 
+  /// Get all appointments for a salon within a date range (for calendar dots).
+  Future<List<AppointmentModel>> getSalonAppointmentsForRange(
+      String salonId, DateTime start, DateTime end) async {
+    final snap = await _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .get();
+    return snap.docs
+        .map((d) => AppointmentModel.fromFirestore(d))
+        .where((a) =>
+            a.status != 'cancelled' &&
+            !a.dateTime.isBefore(start) &&
+            a.dateTime.isBefore(end.add(const Duration(days: 1))))
+        .toList();
+  }
+
   /// One-shot fetch of all team members (used in booking flow).
   Future<List<TeamMemberModel>> getTeamMembersOnce(String salonId) async {
     final snap = await _firestore
