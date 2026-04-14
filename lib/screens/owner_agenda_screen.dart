@@ -293,8 +293,13 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
     final startWeekday = firstDay.weekday; // 1=Mon ... 7=Sun
     final daysInMonth = lastDay.day;
 
-    final monthNames = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-    final dayHeaders = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+    final isFr = Localizations.localeOf(context).languageCode == 'fr';
+    final monthNames = isFr
+        ? ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+        : ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+    final dayHeaders = isFr
+        ? ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+        : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
     // Build member color map for dots
     final memberColorMap = <String, Color>{};

@@ -695,7 +695,10 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
 
   Widget _buildRecurringDaysOff() {
     final l = AppLocalizations.of(context);
-    final dayLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    final locale = Localizations.localeOf(context).languageCode;
+    final dayLabels = locale == 'fr'
+        ? ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return Container(
       decoration: BoxDecoration(
@@ -980,8 +983,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
   @override
   Widget build(BuildContext context) {
     super.build(context); // required by AutomaticKeepAliveClientMixin
+    final loc = Localizations.localeOf(context).languageCode == 'fr' ? 'fr_FR' : 'en_US';
     final monthLabel =
-        DateFormat('MMMM yyyy', 'fr_FR').format(_focusedMonth);
+        DateFormat('MMMM yyyy', loc).format(_focusedMonth);
     final unavailableThisMonth = _unavailable
         .where((d) {
           final dt = DateTime.parse(d);
@@ -1056,7 +1060,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                         size: 18, color: AppColors.brand600),
                     const SizedBox(width: 8),
                     Text(
-                      (AppLocalizations.of(context)?.tr('unavailability_today') ?? "Aujourd'hui — {date}").replaceAll('{date}', DateFormat('d MMMM', 'fr_FR').format(DateTime.now())),
+                      (AppLocalizations.of(context)?.tr('unavailability_today') ?? "Aujourd'hui — {date}").replaceAll('{date}', DateFormat('d MMMM', Localizations.localeOf(context).languageCode == 'fr' ? 'fr_FR' : 'en_US').format(DateTime.now())),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -1187,7 +1191,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
 
                 // Weekday headers
                 Row(
-                  children: ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+                  children: (Localizations.localeOf(context).languageCode == 'fr'
+                    ? ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+                    : ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
                       .map((d) => Expanded(
                             child: Center(
                               child: Text(
