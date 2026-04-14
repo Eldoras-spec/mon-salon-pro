@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,21 @@ import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../widgets/member_avatar.dart';
+
+/// Save FCM token for a team member so Cloud Functions can send individual push notifications.
+Future<void> _saveMemberFcmToken(String salonId, String memberId) async {
+  try {
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(salonId)
+          .collection('teamMembers')
+          .doc(memberId)
+          .update({'fcmToken': token});
+    }
+  } catch (_) {}
+}
 
 class TeamProfileSelectorScreen extends ConsumerWidget {
   const TeamProfileSelectorScreen({super.key, required this.userModel});
@@ -221,6 +237,8 @@ class _MemberTile extends ConsumerWidget {
           Navigator.pop(ctx);
           ref.read(activeTeamMemberProvider.notifier).state = member;
           ref.read(profileSelectedProvider.notifier).state = true;
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          if (uid != null) _saveMemberFcmToken(uid, member.id);
         },
       ),
     );
@@ -229,6 +247,8 @@ class _MemberTile extends ConsumerWidget {
   void _enterDirectly(WidgetRef ref) {
     ref.read(activeTeamMemberProvider.notifier).state = member;
     ref.read(profileSelectedProvider.notifier).state = true;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) _saveMemberFcmToken(uid, member.id);
   }
 
   @override
