@@ -972,7 +972,7 @@ class _OrdersTab extends ConsumerWidget {
           padding: const EdgeInsets.all(20),
           itemCount: orders.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _OrderCard(order: orders[i]),
+          itemBuilder: (_, i) => _OrderCard(order: orders[i], currency: ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
         );
       },
     );
@@ -981,7 +981,8 @@ class _OrdersTab extends ConsumerWidget {
 
 class _OrderCard extends StatelessWidget {
   final OrderModel order;
-  const _OrderCard({required this.order});
+  final String currency;
+  const _OrderCard({required this.order, this.currency = 'MAD'});
 
   Color get _statusColor {
     switch (order.status) {
@@ -1063,7 +1064,7 @@ class _OrderCard extends StatelessWidget {
                     Expanded(
                         child: Text(item.name,
                             style: const TextStyle(fontSize: 13))),
-                    Text(CurrencyHelper.format(item.total, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
+                    Text(CurrencyHelper.format(item.total, currency),
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
@@ -1078,7 +1079,7 @@ class _OrderCard extends StatelessWidget {
                       child: Text(l?.tr('boutique_delivery') ?? 'Livraison',
                           style: const TextStyle(
                               fontSize: 12, color: AppColors.secondary400))),
-                  Text(CurrencyHelper.format(order.deliveryFee, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
+                  Text(CurrencyHelper.format(order.deliveryFee, currency),
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.secondary400)),
                 ],
@@ -1088,7 +1089,7 @@ class _OrderCard extends StatelessWidget {
           // Total + actions
           Row(
             children: [
-              Text('${l?.tr('boutique_total') ?? 'Total:'} ${CurrencyHelper.format(order.grandTotal, ref.read(ownerSalonProvider).value?.currency ?? 'MAD')}',
+              Text('${l?.tr('boutique_total') ?? 'Total:'} ${CurrencyHelper.format(order.grandTotal, currency)}',
                   style: GoogleFonts.dmSans(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,

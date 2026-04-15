@@ -259,6 +259,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           isMine: isMine,
                           conversationId: widget.conversationId,
                           isClient: widget.isClient,
+                          currencyCode: _salon?.currency ?? 'MAD',
                         ),
                       ],
                     );
@@ -338,11 +339,13 @@ class _MessageBubble extends StatefulWidget {
     required this.isMine,
     required this.conversationId,
     required this.isClient,
+    this.currencyCode = 'MAD',
   });
   final MessageModel message;
   final bool isMine;
   final String conversationId;
   final bool isClient;
+  final String currencyCode;
 
   @override
   State<_MessageBubble> createState() => _MessageBubbleState();
@@ -473,7 +476,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                       ]),
                       if (message.proposedPrice != null) ...[
                         const SizedBox(height: 4),
-                        Text('${CurrencyHelper.format(message.proposedPrice!, _salon?.currency ?? 'MAD')} · ${message.proposedDuration ?? 30} min',
+                        Text('${CurrencyHelper.format(message.proposedPrice!, widget.currencyCode)} · ${message.proposedDuration ?? 30} min',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand950)),
                       ],
                     ],
@@ -570,7 +573,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                   controller: priceCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: l?.tr('chat_approve_price') ?? 'Prix (${_salon?.currency ?? 'MAD'})',
+                    labelText: l?.tr('chat_approve_price') ?? 'Prix (${widget.currencyCode})',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -690,7 +693,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
         await FirebaseFirestore.instance.collection('notifications').add({
           'userId': clientId,
           'title': 'Demande acceptée ✅',
-          'body': '$salonName a accepté votre demande "$serviceName" — ${CurrencyHelper.format(price, _salon?.currency ?? 'MAD')}, $duration min. Vous pouvez maintenant réserver !',
+          'body': '$salonName a accepté votre demande "$serviceName" — ${CurrencyHelper.format(price, widget.currencyCode)}, $duration min. Vous pouvez maintenant réserver !',
           'type': 'custom_request_approved',
           'salonId': salonId,
           'createdAt': FieldValue.serverTimestamp(),
