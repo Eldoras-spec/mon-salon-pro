@@ -270,6 +270,7 @@
   "salon_info_name": "الاسم",
   "salon_info_city": "المدينة",
   "salon_info_address": "العنوان",
+  "salon_info_currency": "العملة",
   "salon_info_description": "الوصف",
   "salon_hours_closed": "مغلق",
   "salon_no_services": "لم يتم إضافة خدمات",
@@ -643,6 +644,10 @@
   "profile_support_send": "إرسال",
   "profile_language": "اللغة",
   "profile_language_auto": "تلقائي",
+  "profile_language_fr": "Français",
+  "profile_language_en": "English",
+  "profile_language_ar": "العربية",
+  "profile_language_es": "Español",
   "profile_edit_title": "تعديل ملفي الشخصي",
 
   "selector_title": "من أنت؟",

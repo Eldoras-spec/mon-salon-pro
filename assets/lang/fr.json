@@ -270,6 +270,7 @@
   "salon_info_name": "Nom",
   "salon_info_city": "Ville",
   "salon_info_address": "Adresse",
+  "salon_info_currency": "Devise",
   "salon_info_description": "Description",
   "salon_hours_closed": "Fermé",
   "salon_no_services": "Aucun service ajouté",
