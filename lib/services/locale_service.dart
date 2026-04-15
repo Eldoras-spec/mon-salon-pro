@@ -7,6 +7,8 @@ class LocaleService {
   static const supportedLocales = [
     Locale('fr'),
     Locale('en'),
+    Locale('ar'),
+    Locale('es'),
   ];
 
   /// Get saved locale, or auto-detect from phone settings.
@@ -19,11 +21,11 @@ class LocaleService {
     return _detectLocale();
   }
 
-  /// Auto-detect: if phone is in French → fr, otherwise → en.
+  /// Auto-detect from phone language settings.
   static Locale _detectLocale() {
     final phoneLang = ui.PlatformDispatcher.instance.locale.languageCode;
-    if (phoneLang == 'fr') return const Locale('fr');
-    return const Locale('en');
+    if (['fr', 'en', 'ar', 'es'].contains(phoneLang)) return Locale(phoneLang);
+    return const Locale('fr');
   }
 
   /// Save user's manual choice.

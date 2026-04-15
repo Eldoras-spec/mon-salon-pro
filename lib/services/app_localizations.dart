@@ -30,7 +30,7 @@ class _AppLocalizationsDelegate
   const _AppLocalizationsDelegate();
 
   @override
-  bool isSupported(Locale locale) => ['fr', 'en'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => ['fr', 'en', 'ar', 'es'].contains(locale.languageCode);
 
   @override
   Future<AppLocalizations> load(Locale locale) async {

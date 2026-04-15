@@ -643,6 +643,10 @@
   "profile_support_send": "Envoyer",
   "profile_language": "Langue",
   "profile_language_auto": "Automatique",
+  "profile_language_fr": "Français",
+  "profile_language_en": "English",
+  "profile_language_ar": "العربية",
+  "profile_language_es": "Español",
   "profile_edit_title": "Modifier mon profil",
 
   "selector_title": "Qui êtes-vous ?",
