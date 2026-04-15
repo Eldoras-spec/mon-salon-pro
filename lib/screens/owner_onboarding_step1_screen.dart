@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
+import '../utils/currency_helper.dart';
 import 'owner_onboarding_step2_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
@@ -43,6 +44,7 @@ class _OwnerOnboardingStep1ScreenState
   double? _latitude;
   double? _longitude;
   bool _isGettingLocation = false;
+  String _selectedCurrency = 'MAD';
 
   @override
   void initState() {
@@ -203,6 +205,7 @@ class _OwnerOnboardingStep1ScreenState
           ? _countryController.text.trim()
           : 'Maroc',
       'category': 'Beauté',
+      'currency': _selectedCurrency,
       'latitude': lat,
       'longitude': lng,
       'socialLinks': {
@@ -593,6 +596,90 @@ class _OwnerOnboardingStep1ScreenState
                           FilteringTextInputFormatter.digitsOnly
                         ],
                         maxLength: 10,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Currency
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l?.tr('onboarding_currency') ?? 'Devise',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedCurrency,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.attach_money,
+                              size: 18, color: AppColors.secondary400),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.secondary200),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.secondary200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                                color: AppColors.brand400, width: 2),
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.secondary800,
+                        ),
+                        dropdownColor: Colors.white,
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: AppColors.secondary400),
+                        items: CurrencyHelper.allCurrencies
+                            .map((c) => DropdownMenuItem<String>(
+                                  value: c.code,
+                                  child: Text(
+                                    c.label,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: c.code == _selectedCurrency
+                                          ? AppColors.brand600
+                                          : AppColors.secondary800,
+                                      fontWeight: c.code == _selectedCurrency
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedCurrency = val);
+                          }
+                        },
                       ),
                     ),
                   ],
