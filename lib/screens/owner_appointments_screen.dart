@@ -12,6 +12,7 @@ import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../utils/currency_helper.dart';
 import '../widgets/member_avatar.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
@@ -694,7 +695,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${a.price.toStringAsFixed(0)} MAD',
+                  CurrencyHelper.format(a.price, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -1425,7 +1426,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       return DropdownMenuItem(
                         value: 'pack_${e.key}',
                         child: Text(
-                          '📦 $name · $price MAD · ${totalDur}min',
+                          '📦 $name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${totalDur}min',
                           style: const TextStyle(
                               fontSize: 13, color: AppColors.brand950),
                         ),
@@ -1440,7 +1441,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       return DropdownMenuItem(
                         value: 'svc_$i',
                         child: Text(
-                          '$name · $price MAD · ${dur}min',
+                          '$name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${dur}min',
                           style: const TextStyle(
                               fontSize: 13, color: AppColors.brand950),
                         ),
@@ -1694,8 +1695,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                     const SizedBox(height: 6),
                     Text(
                       _selectedPack != null
-                          ? 'Pack: ${_selectedPack!['name']} · ${(_selectedPack!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_packDuration ?? 0} min'
-                          : '${_selectedService!['name']} · ${(_selectedService!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_selectedService!['duration'] ?? 30} min',
+                          ? 'Pack: ${_selectedPack!['name']} · ${CurrencyHelper.format((_selectedPack!['price'] as num?)?.toDouble() ?? 0, widget.salon.currency)} · ${_packDuration ?? 0} min'
+                          : '${_selectedService!['name']} · ${CurrencyHelper.format((_selectedService!['price'] as num?)?.toDouble() ?? 0, widget.salon.currency)} · ${_selectedService!['duration'] ?? 30} min',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.brand950),
                     ),

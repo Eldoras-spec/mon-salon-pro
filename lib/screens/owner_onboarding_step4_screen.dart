@@ -10,6 +10,7 @@ import 'registration_success_screen.dart';
 import '../theme/app_constants.dart';
 import '../services/app_localizations.dart';
 import '../widgets/service_form_dialog.dart';
+import '../utils/currency_helper.dart';
 
 class ServiceEntry {
   String name;
@@ -450,7 +451,7 @@ class _OwnerOnboardingStep4ScreenState
                         if (service.price > 0) ...[
                           const SizedBox(width: 8),
                           Text(
-                            '${service.price.toStringAsFixed(0)} MAD',
+                            CurrencyHelper.format(service.price),
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,

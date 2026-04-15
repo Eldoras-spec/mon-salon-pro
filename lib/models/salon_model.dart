@@ -31,6 +31,7 @@ class SalonModel {
   final List<Map<String, dynamic>> servicePacks;
   final bool isPremium;
   final int galleryStorageUsed;
+  final String currency; // ISO code: MAD, EUR, USD, XOF, etc.
 
   SalonModel({
     required this.id,
@@ -70,6 +71,7 @@ class SalonModel {
     this.slug,
     this.isPremium = false,
     this.galleryStorageUsed = 0,
+    this.currency = 'MAD',
   });
 
   factory SalonModel.fromFirestore(DocumentSnapshot doc) {
@@ -118,6 +120,7 @@ class SalonModel {
       slug: data['slug'],
       isPremium: data['isPremium'] ?? false,
       galleryStorageUsed: (data['galleryStorageUsed'] as num?)?.toInt() ?? 0,
+      currency: data['currency'] ?? 'MAD',
     );
   }
 
@@ -147,6 +150,7 @@ class SalonModel {
       'googleReviewReward': googleReviewReward,
       'servicePacks': servicePacks,
       if (slug != null) 'slug': slug,
+      'currency': currency,
     };
   }
 }

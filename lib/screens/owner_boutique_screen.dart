@@ -11,6 +11,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/currency_helper.dart';
 import '../utils/media_compressor.dart';
 
 final _db = DatabaseService();
@@ -103,6 +104,7 @@ class _OwnerBoutiqueScreenState extends ConsumerState<OwnerBoutiqueScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => _ProductFormSheet(
         salonId: salon.id,
+        currency: salon.currency,
         product: product,
       ),
     );
@@ -298,7 +300,7 @@ class _ProductCard extends ConsumerWidget {
                         fontWeight: FontWeight.w600,
                         color: AppColors.brand950)),
                 const SizedBox(height: 2),
-                Text('${product.price.toStringAsFixed(0)} MAD',
+                Text(CurrencyHelper.format(product.price, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -442,8 +444,9 @@ class _ProductCard extends ConsumerWidget {
 
 class _ProductFormSheet extends StatefulWidget {
   final String salonId;
+  final String currency;
   final ProductModel? product;
-  const _ProductFormSheet({required this.salonId, this.product});
+  const _ProductFormSheet({required this.salonId, this.currency = 'MAD', this.product});
 
   @override
   State<_ProductFormSheet> createState() => _ProductFormSheetState();
@@ -713,7 +716,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
 
                   _buildField(l?.tr('boutique_product_name') ?? 'Nom du produit', _nameCtrl, required: true),
                   _buildField(l?.tr('boutique_description') ?? 'Description', _descCtrl, maxLines: 2),
-                  _buildField(l?.tr('boutique_price') ?? 'Prix (MAD)', _priceCtrl,
+                  _buildField(l?.tr('boutique_price') ?? 'Prix (${widget.currency})', _priceCtrl,
                       required: true, keyboard: TextInputType.number),
 
                   // Category dropdown
@@ -789,7 +792,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                         hint: 'ex: Casablanca, Rabat, Marrakech...'),
                   ],
                   if (_deliveryType != 'pickup')
-                    _buildField('Frais de livraison (MAD)', _feeCtrl,
+                    _buildField('Frais de livraison (${widget.currency})', _feeCtrl,
                         keyboard: TextInputType.number, hint: '0 = gratuit'),
 
                   const SizedBox(height: 16),
@@ -1060,7 +1063,7 @@ class _OrderCard extends StatelessWidget {
                     Expanded(
                         child: Text(item.name,
                             style: const TextStyle(fontSize: 13))),
-                    Text('${item.total.toStringAsFixed(0)} MAD',
+                    Text(CurrencyHelper.format(item.total, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
@@ -1075,7 +1078,7 @@ class _OrderCard extends StatelessWidget {
                       child: Text(l?.tr('boutique_delivery') ?? 'Livraison',
                           style: const TextStyle(
                               fontSize: 12, color: AppColors.secondary400))),
-                  Text('${order.deliveryFee.toStringAsFixed(0)} MAD',
+                  Text(CurrencyHelper.format(order.deliveryFee, ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.secondary400)),
                 ],
@@ -1085,7 +1088,7 @@ class _OrderCard extends StatelessWidget {
           // Total + actions
           Row(
             children: [
-              Text('${l?.tr('boutique_total') ?? 'Total:'} ${order.grandTotal.toStringAsFixed(0)} MAD',
+              Text('${l?.tr('boutique_total') ?? 'Total:'} ${CurrencyHelper.format(order.grandTotal, ref.read(ownerSalonProvider).value?.currency ?? 'MAD')}',
                   style: GoogleFonts.dmSans(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,

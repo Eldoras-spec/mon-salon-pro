@@ -18,6 +18,7 @@ import '../services/database_service.dart';
 import '../utils/media_compressor.dart';
 import '../widgets/service_form_dialog.dart';
 import 'owner_onboarding_step1_screen.dart';
+import '../utils/currency_helper.dart';
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
@@ -698,7 +699,7 @@ class _ServicesPreview extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${(s['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD',
+                    CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0),
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1647,7 +1648,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            '${(s['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD',
+                                            CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 12,
@@ -2582,7 +2583,7 @@ class _PacksPreview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${price.toStringAsFixed(0)} MAD',
+                      CurrencyHelper.format(price),
                       style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -2810,7 +2811,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                             Row(
                               children: [
                                 Text(
-                                  '${price.toStringAsFixed(0)} MAD',
+                                  CurrencyHelper.format(price),
                                   style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -2819,7 +2820,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                                 if (discount > 0) ...[
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${originalPrice.toStringAsFixed(0)} MAD',
+                                    CurrencyHelper.format(originalPrice),
                                     style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.secondary400,
@@ -3087,7 +3088,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${sPrice.toStringAsFixed(0)} MAD',
+                            CurrencyHelper.format(sPrice),
                             style: TextStyle(
                               fontSize: 11,
                               color: selected
@@ -3118,7 +3119,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price} MAD').replaceAll('{price}', _originalPrice.toStringAsFixed(0)),
+                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price}').replaceAll('{price}', CurrencyHelper.format(_originalPrice)),
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.secondary500),
                       ),

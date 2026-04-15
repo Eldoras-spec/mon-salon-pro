@@ -11,6 +11,7 @@ import '../models/team_member_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
 import '../services/app_localizations.dart';
+import '../utils/currency_helper.dart';
 import '../widgets/member_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -472,7 +473,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                       ]),
                       if (message.proposedPrice != null) ...[
                         const SizedBox(height: 4),
-                        Text('${message.proposedPrice!.toStringAsFixed(0)} MAD · ${message.proposedDuration ?? 30} min',
+                        Text('${CurrencyHelper.format(message.proposedPrice!, _salon?.currency ?? 'MAD')} · ${message.proposedDuration ?? 30} min',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brand950)),
                       ],
                     ],
@@ -569,7 +570,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
                   controller: priceCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: l?.tr('chat_approve_price') ?? 'Prix (MAD)',
+                    labelText: l?.tr('chat_approve_price') ?? 'Prix (${_salon?.currency ?? 'MAD'})',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -689,7 +690,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
         await FirebaseFirestore.instance.collection('notifications').add({
           'userId': clientId,
           'title': 'Demande acceptée ✅',
-          'body': '$salonName a accepté votre demande "$serviceName" — ${price.toStringAsFixed(0)} MAD, $duration min. Vous pouvez maintenant réserver !',
+          'body': '$salonName a accepté votre demande "$serviceName" — ${CurrencyHelper.format(price, _salon?.currency ?? 'MAD')}, $duration min. Vous pouvez maintenant réserver !',
           'type': 'custom_request_approved',
           'salonId': salonId,
           'createdAt': FieldValue.serverTimestamp(),

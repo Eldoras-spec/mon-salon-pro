@@ -15,6 +15,7 @@ import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../widgets/member_avatar.dart';
 import '../theme/app_colors.dart';
+import '../utils/currency_helper.dart';
 
 class MemberHomeScreen extends ConsumerStatefulWidget {
   const MemberHomeScreen({super.key});
@@ -1813,7 +1814,7 @@ class _MemberAddAppointmentSheetState
                         return DropdownMenuItem(
                           value: 'pack_${e.key}',
                           child: Text(
-                            '📦 $name · $price MAD · ${totalDur}min',
+                            '📦 $name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${totalDur}min',
                             style: const TextStyle(fontSize: 13, color: AppColors.brand950),
                           ),
                         );
@@ -1827,7 +1828,7 @@ class _MemberAddAppointmentSheetState
                         return DropdownMenuItem(
                           value: 'svc_$i',
                           child: Text(
-                            '$name · $price MAD · ${dur}min',
+                            '$name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${dur}min',
                             style: const TextStyle(fontSize: 13, color: AppColors.brand950),
                           ),
                         );
@@ -1998,7 +1999,7 @@ class _MemberAddAppointmentSheetState
                             color: AppColors.brand700)),
                     const SizedBox(height: 6),
                     Text(
-                      '${_selectedService!['name']} · ${(_selectedService!['price'] as num?)?.toStringAsFixed(0) ?? '0'} MAD · ${_selectedService!['duration'] ?? 30} min',
+                      '${_selectedService!['name']} · ${CurrencyHelper.format((_selectedService!['price'] as num?)?.toDouble() ?? 0, widget.salon.currency)} · ${_selectedService!['duration'] ?? 30} min',
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.brand950),
                     ),

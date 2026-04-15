@@ -17,6 +17,7 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../services/app_localizations.dart';
 import '../services/message_service.dart';
+import '../utils/currency_helper.dart';
 import 'conversations_screen.dart';
 
 class OwnerHomeScreen extends ConsumerWidget {
@@ -379,6 +380,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                           dayCounts: weekDayCounts,
                           weekTotal: weekTotal,
                           weekRevenue: weekRevenue,
+                          currency: salon?.currency ?? 'MAD',
                         ),
                       ),
 
@@ -448,7 +450,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                                 children: todayUpcoming
                                     .map((a) => _AppointmentCard(
                                         appointment: a,
-                                        showDate: false))
+                                        showDate: false,
+                                        currency: salon?.currency ?? 'MAD'))
                                     .toList(),
                               ),
                             ),
@@ -499,7 +502,8 @@ class OwnerHomeScreen extends ConsumerWidget {
                                 children: recentAll
                                     .map((a) => _AppointmentCard(
                                         appointment: a,
-                                        showDate: true))
+                                        showDate: true,
+                                        currency: salon?.currency ?? 'MAD'))
                                     .toList(),
                               ),
                             ),
@@ -748,9 +752,10 @@ class _RevenueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final currency = salon?.currency ?? 'MAD';
     final revenueStr = totalRevenue >= 1000
-        ? '${(totalRevenue / 1000).toStringAsFixed(1)}k MAD'
-        : '${totalRevenue.toStringAsFixed(0)} MAD';
+        ? '${(totalRevenue / 1000).toStringAsFixed(1)}k ${CurrencyHelper.symbol(currency)}'
+        : CurrencyHelper.format(totalRevenue, currency);
 
     final open =
         salon != null ? OwnerHomeScreen._isOpen(salon!.workingHours) : false;
@@ -891,11 +896,13 @@ class _WeeklyChart extends StatelessWidget {
     required this.dayCounts,
     required this.weekTotal,
     required this.weekRevenue,
+    this.currency = 'MAD',
   });
 
   final List<int> dayCounts;
   final int weekTotal;
   final double weekRevenue;
+  final String currency;
 
   static const _dayLabels = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -906,8 +913,8 @@ class _WeeklyChart extends StatelessWidget {
     final todayIndex = DateTime.now().weekday - 1;
 
     final revenueStr = weekRevenue >= 1000
-        ? '${(weekRevenue / 1000).toStringAsFixed(1)}k'
-        : weekRevenue.toStringAsFixed(0);
+        ? '${(weekRevenue / 1000).toStringAsFixed(1)}k ${CurrencyHelper.symbol(currency)}'
+        : CurrencyHelper.format(weekRevenue, currency);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -962,7 +969,7 @@ class _WeeklyChart extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '$revenueStr MAD',
+                  revenueStr,
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -1069,9 +1076,11 @@ class _AppointmentCard extends StatefulWidget {
   const _AppointmentCard({
     required this.appointment,
     required this.showDate,
+    this.currency = 'MAD',
   });
   final AppointmentModel appointment;
   final bool showDate;
+  final String currency;
 
   @override
   State<_AppointmentCard> createState() => _AppointmentCardState();
@@ -1211,7 +1220,7 @@ class _AppointmentCardState extends State<_AppointmentCard> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${a.price.toStringAsFixed(0)} MAD',
+                CurrencyHelper.format(a.price, widget.currency),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,

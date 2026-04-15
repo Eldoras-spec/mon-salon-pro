@@ -10,6 +10,7 @@ import '../services/app_localizations.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/database_service.dart';
 import '../widgets/service_form_dialog.dart';
+import '../utils/currency_helper.dart';
 
 class OwnerServicesScreen extends ConsumerStatefulWidget {
   const OwnerServicesScreen({super.key});
@@ -314,7 +315,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
                             ],
                             Text('$duration min', style: const TextStyle(fontSize: 12, color: AppColors.secondary400)),
                             const SizedBox(width: 8),
-                            Text('${price.toStringAsFixed(0)} MAD', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.brand600)),
+                            Text(CurrencyHelper.format(price), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.brand600)),
                           ],
                         ),
                       ],
@@ -530,11 +531,11 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
               Row(
                 children: [
                   if (discount > 0) ...[
-                    Text('${originalPrice.toStringAsFixed(0)} MAD',
+                    Text(CurrencyHelper.format(originalPrice),
                         style: const TextStyle(fontSize: 12, decoration: TextDecoration.lineThrough, color: AppColors.secondary400)),
                     const SizedBox(width: 6),
                   ],
-                  Text('${price.toStringAsFixed(0)} MAD',
+                  Text(CurrencyHelper.format(price),
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.brand600)),
                   if (discount > 0) ...[
                     const SizedBox(width: 6),
@@ -890,7 +891,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     if (_selectedServices.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '${l?.tr('pack_original_price') ?? 'Prix original'} : ${_originalPrice.toStringAsFixed(0)} MAD',
+                        '${l?.tr('pack_original_price') ?? 'Prix original'} : ${CurrencyHelper.format(_originalPrice)}',
                         style: const TextStyle(fontSize: 12, color: AppColors.secondary400),
                       ),
                     ],

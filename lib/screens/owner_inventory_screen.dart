@@ -10,6 +10,7 @@ import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import 'owner_boutique_screen.dart';
+import '../utils/currency_helper.dart';
 
 final _db = DatabaseService();
 
@@ -903,7 +904,7 @@ class _BoutiqueStockSection extends ConsumerWidget {
                                 style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600)),
-                            Text('${p.price.toStringAsFixed(0)} MAD',
+                            Text(CurrencyHelper.format(p.price),
                                 style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.brand600)),

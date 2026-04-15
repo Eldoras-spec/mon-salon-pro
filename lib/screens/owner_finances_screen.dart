@@ -8,6 +8,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/currency_helper.dart';
 
 final _db = DatabaseService();
 
@@ -171,7 +172,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                     label: l?.tr('finances_revenue') ?? 'Revenus',
                                     value: _loadingRevenue
                                         ? '...'
-                                        : '${_revenue.toStringAsFixed(0)} MAD',
+                                        : CurrencyHelper.format(_revenue, salonAsync.value?.currency ?? 'MAD'),
                                     icon: Icons.trending_up_rounded,
                                     iconBg: const Color(0xFFF0FDF4),
                                     iconColor: const Color(0xFF16A34A),
@@ -183,7 +184,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                   child: _FinanceCard(
                                     label: l?.tr('finances_charges') ?? 'Charges',
                                     value:
-                                        '${totalCharges.toStringAsFixed(0)} MAD',
+                                        CurrencyHelper.format(totalCharges, salonAsync.value?.currency ?? 'MAD'),
                                     icon: Icons.trending_down_rounded,
                                     iconBg: const Color(0xFFFEE2E2),
                                     iconColor: const Color(0xFFDC2626),
@@ -224,7 +225,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                               fontSize: 12,
                                               color: Colors.white70)),
                                       Text(
-                                        '${profit.toStringAsFixed(0)} MAD',
+                                        CurrencyHelper.format(profit, salonAsync.value?.currency ?? 'MAD'),
                                         style: const TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.bold,
@@ -278,6 +279,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                       charge: c,
                                       onDelete: () =>
                                           _db.deleteCharge(c.id),
+                                      currency: salonAsync.value?.currency ?? 'MAD',
                                     ),
                                   )),
                             const SizedBox(height: 24),
@@ -306,6 +308,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
         salonId: salonId,
         month: _selectedMonth,
         year: _selectedYear,
+        currency: ref.read(ownerSalonProvider).value?.currency ?? 'MAD',
       ),
     );
   }
@@ -318,10 +321,12 @@ class _AddChargeSheet extends StatefulWidget {
     required this.salonId,
     required this.month,
     required this.year,
+    this.currency = 'MAD',
   });
   final String salonId;
   final int month;
   final int year;
+  final String currency;
 
   @override
   State<_AddChargeSheet> createState() => _AddChargeSheetState();
@@ -473,7 +478,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
           Row(children: [
             Expanded(
               child: _FinanceField(
-                label: l?.tr('finances_amount_hint') ?? 'Montant (MAD)',
+                label: l?.tr('finances_amount_hint') ?? 'Montant (${widget.currency})',
                 controller: _amountCtrl,
                 keyboard: const TextInputType.numberWithOptions(
                     decimal: true),
@@ -554,9 +559,10 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
 // ── Charge Tile ─────────────────────────────────────────────────────────────
 
 class _ChargeTile extends StatelessWidget {
-  const _ChargeTile({required this.charge, required this.onDelete});
+  const _ChargeTile({required this.charge, required this.onDelete, this.currency = 'MAD'});
   final ChargeModel charge;
   final VoidCallback onDelete;
+  final String currency;
 
   static const _typeConfig = <String, (IconData, Color)>{
     'Salaire': (Icons.people_outline_rounded, Color(0xFF7C3AED)),
@@ -612,7 +618,7 @@ class _ChargeTile extends StatelessWidget {
             ),
           ),
           Text(
-            '${charge.amount.toStringAsFixed(0)} MAD',
+            CurrencyHelper.format(charge.amount, currency),
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,

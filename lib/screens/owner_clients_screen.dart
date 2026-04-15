@@ -9,6 +9,7 @@ import '../models/appointment_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../utils/currency_helper.dart';
 
 class OwnerClientsScreen extends ConsumerWidget {
   const OwnerClientsScreen({super.key});
@@ -681,7 +682,7 @@ class _ClientCard extends StatelessWidget {
               const SizedBox(width: 16),
               _MiniStat(
                 icon: Icons.payments_outlined,
-                label: '${client.totalSpent.toStringAsFixed(0)} MAD',
+                label: CurrencyHelper.format(client.totalSpent),
               ),
               const SizedBox(width: 16),
               Expanded(

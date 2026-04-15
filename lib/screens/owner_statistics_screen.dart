@@ -9,6 +9,7 @@ import '../models/order_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../widgets/member_avatar.dart';
+import '../utils/currency_helper.dart';
 
 class OwnerStatisticsScreen extends ConsumerWidget {
   const OwnerStatisticsScreen({super.key});
@@ -290,7 +291,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_revenue') ?? 'Revenus',
-                  value: '${totalRevenue.toStringAsFixed(0)} MAD',
+                  value: CurrencyHelper.format(totalRevenue),
                   icon: Icons.payments_rounded,
                   iconColor: const Color(0xFF059669),
                   iconBg: const Color(0xFFD1FAE5),
@@ -300,7 +301,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_avg_price') ?? 'Panier moyen',
-                  value: '${avgPrice.toStringAsFixed(0)} MAD',
+                  value: CurrencyHelper.format(avgPrice),
                   icon: Icons.shopping_bag_outlined,
                   iconColor: const Color(0xFF7C3AED),
                   iconBg: const Color(0xFFF5F3FF),
@@ -518,7 +519,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_boutique_revenue') ?? 'CA Boutique',
-                  value: '${boutiqueRevenue.toStringAsFixed(0)} MAD',
+                  value: CurrencyHelper.format(boutiqueRevenue),
                   icon: Icons.storefront_outlined,
                   iconColor: const Color(0xFFD97706),
                   iconBg: const Color(0xFFFEF3C7),
@@ -964,7 +965,7 @@ class _ServiceRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                '${revenue.toStringAsFixed(0)} MAD',
+                CurrencyHelper.format(revenue),
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.secondary500,
@@ -1060,7 +1061,7 @@ class _MemberRow extends StatelessWidget {
                 ),
               ),
               Text(
-                '${revenue.toStringAsFixed(0)} MAD',
+                CurrencyHelper.format(revenue),
                 style: const TextStyle(
                   fontSize: 10,
                   color: AppColors.secondary400,
@@ -1125,7 +1126,7 @@ class _ClientRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${revenue.toStringAsFixed(0)} MAD',
+            CurrencyHelper.format(revenue),
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
@@ -1190,7 +1191,7 @@ class _ProductRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                '${revenue.toStringAsFixed(0)} MAD',
+                CurrencyHelper.format(revenue),
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.secondary500,

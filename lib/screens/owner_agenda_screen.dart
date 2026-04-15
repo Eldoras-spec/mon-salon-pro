@@ -8,6 +8,7 @@ import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../utils/currency_helper.dart';
 import '../widgets/member_avatar.dart';
 
 const _memberColors = [
@@ -934,7 +935,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             ],
             _detailRow(
               Icons.monetization_on_outlined,
-              '${appt.price.toStringAsFixed(0)} MAD',
+              CurrencyHelper.format(appt.price),
             ),
             const SizedBox(height: 8),
             _detailRow(
