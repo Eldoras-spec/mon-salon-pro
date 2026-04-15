@@ -1192,7 +1192,7 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
                       ),
                       ListTile(
                         leading: const Text('🇫🇷', style: TextStyle(fontSize: 20)),
-                        title: const Text('Français'),
+                        title: Text(l?.tr('profile_language_fr') ?? 'Français'),
                         selected: locale.languageCode == 'fr',
                         onTap: () {
                           Navigator.pop(context);
@@ -1201,11 +1201,29 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
                       ),
                       ListTile(
                         leading: const Text('🇬🇧', style: TextStyle(fontSize: 20)),
-                        title: const Text('English'),
+                        title: Text(l?.tr('profile_language_en') ?? 'English'),
                         selected: locale.languageCode == 'en',
                         onTap: () {
                           Navigator.pop(context);
                           ref.read(localeProvider.notifier).setLocale(const Locale('en'));
+                        },
+                      ),
+                      ListTile(
+                        leading: const Text('🇸🇦', style: TextStyle(fontSize: 20)),
+                        title: Text(l?.tr('profile_language_ar') ?? 'العربية'),
+                        selected: locale.languageCode == 'ar',
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref.read(localeProvider.notifier).setLocale(const Locale('ar'));
+                        },
+                      ),
+                      ListTile(
+                        leading: const Text('🇪🇸', style: TextStyle(fontSize: 20)),
+                        title: Text(l?.tr('profile_language_es') ?? 'Español'),
+                        selected: locale.languageCode == 'es',
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref.read(localeProvider.notifier).setLocale(const Locale('es'));
                         },
                       ),
                       const SizedBox(height: 16),
@@ -1237,7 +1255,7 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
                             color: AppColors.brand950)),
                   ),
                   Text(
-                    locale.languageCode == 'fr' ? 'Français' : 'English',
+                    {'fr': 'Français', 'en': 'English', 'ar': 'العربية', 'es': 'Español'}[locale.languageCode] ?? locale.languageCode,
                     style: const TextStyle(
                         fontSize: 13, color: AppColors.secondary400),
                   ),
