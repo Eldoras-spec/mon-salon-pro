@@ -1231,7 +1231,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
 
     setState(() => _loading = true);
     try {
-      final dateTime = DateTime(
+      final dateTime = DateTime.utc(
         _selectedDate.year,
         _selectedDate.month,
         _selectedDate.day,

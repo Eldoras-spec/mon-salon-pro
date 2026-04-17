@@ -93,6 +93,7 @@ class DatabaseService {
       socialLinks: salon.socialLinks,
       servicePacks: salon.servicePacks,
       slug: slug,
+      currency: salon.currency,
     );
 
     await _firestore

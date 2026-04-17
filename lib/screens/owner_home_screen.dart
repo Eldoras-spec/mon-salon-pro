@@ -1427,6 +1427,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
   }
 
   Future<void> _fetchFromGemini() async {
+    if (!mounted) return;
     setState(() { _loading = true; _error = false; });
     try {
       final callable = FirebaseFunctions.instance.httpsCallable(
@@ -1435,6 +1436,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
       );
       final lang = Localizations.localeOf(context).languageCode;
       final result = await callable.call({'salonId': widget.salonId, 'lang': lang});
+      if (!mounted) return;
       final data = result.data as Map<String, dynamic>;
 
       setState(() {
@@ -1463,6 +1465,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
         'aiFinancialInsights': _financialInsights,
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _loading = false; _error = true; });
     }
   }
