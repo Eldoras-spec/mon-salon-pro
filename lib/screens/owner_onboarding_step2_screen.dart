@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
+import '../services/plan_config.dart';
 import '../utils/media_compressor.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
@@ -39,11 +40,19 @@ class _OwnerOnboardingStep2ScreenState
       _isUploadingCover ||
       _galleryItems.any((g) => g['uploading'] == true);
 
+  // Video uploads are gated on Business plan. During onboarding the salon
+  // doc doesn't exist yet, so we read the in-progress salonData.
+  bool get _isBusinessPlan =>
+      widget.salonData['plan'] == PlanConfig.planBusiness;
+
   // ── Upload helper ────────────────────────────────────────────────────────────
 
   Future<String?> _uploadToStorage(File file, String storagePath) async {
     final ref = FirebaseStorage.instance.ref().child(storagePath);
-    await ref.putFile(file);
+    await ref.putFile(
+      file,
+      SettableMetadata(cacheControl: 'public, max-age=604800'),
+    );
     return await ref.getDownloadURL();
   }
 
@@ -76,7 +85,10 @@ class _OwnerOnboardingStep2ScreenState
     });
 
     try {
-      final uid = AuthService().currentUserId ?? 'unknown';
+      final uid = AuthService().currentUserId;
+      if (uid == null) {
+        throw StateError('Not authenticated');
+      }
       final path =
           'salon_images/$uid/cover_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final url = await _uploadToStorage(file, path);
@@ -132,11 +144,19 @@ class _OwnerOnboardingStep2ScreenState
     final index = _galleryItems.length;
 
     setState(() {
-      _galleryItems.add({'file': file, 'url': null, 'uploading': true});
+      _galleryItems.add({
+        'file': file,
+        'url': null,
+        'uploading': true,
+        'isVideo': false,
+      });
     });
 
     try {
-      final uid = AuthService().currentUserId ?? 'unknown';
+      final uid = AuthService().currentUserId;
+      if (uid == null) {
+        throw StateError('Not authenticated');
+      }
       final path =
           'salon_images/$uid/gallery_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final url = await _uploadToStorage(file, path);
@@ -157,8 +177,213 @@ class _OwnerOnboardingStep2ScreenState
     }
   }
 
+  Future<void> _pickGalleryVideo() async {
+    if (_galleryItems.length >= 10) return;
+
+    final picked = await _picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(seconds: 60),
+    );
+    if (picked == null) return;
+
+    if (!mounted) return;
+    final compressOverlay =
+        MediaCompressor.showCompressionOverlay(context, isVideo: true);
+    final result = await MediaCompressor.compressVideo(File(picked.path));
+    compressOverlay.remove();
+    if (!mounted) return;
+    if (result == null) {
+      await MediaCompressor.showSizeErrorDialog(context,
+          isVideo: true, afterCompression: false);
+      return;
+    }
+    if (result.compressedSize > MediaCompressor.maxVideoSizeBytes) {
+      await MediaCompressor.showSizeErrorDialog(context,
+          isVideo: true, afterCompression: true);
+      return;
+    }
+
+    final file = result.file;
+    final ext = file.path.split('.').last;
+    final index = _galleryItems.length;
+
+    setState(() {
+      _galleryItems.add({
+        'file': file,
+        'url': null,
+        'uploading': true,
+        'isVideo': true,
+      });
+    });
+
+    try {
+      final uid = AuthService().currentUserId;
+      if (uid == null) {
+        throw StateError('Not authenticated');
+      }
+      final path =
+          'salon_images/$uid/gallery_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final url = await _uploadToStorage(file, path);
+      if (mounted) {
+        setState(() {
+          _galleryItems[index]['url'] = url;
+          _galleryItems[index]['uploading'] = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _galleryItems.removeAt(index));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Erreur upload vidéo galerie : $e'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    }
+  }
+
   void _removeGalleryImage(int index) =>
       setState(() => _galleryItems.removeAt(index));
+
+  // Video tile is unlocked only if the owner picked the Business plan
+  // at step 1. Otherwise we keep the lock + upsell dialog.
+  void _showPickerSheet() {
+    if (_galleryItems.length >= 10) return;
+    final l = AppLocalizations.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.brand50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.add_photo_alternate_outlined,
+                      color: AppColors.brand600, size: 20),
+                ),
+                title: Text(l?.tr('gallery_add_photo') ?? 'Photo',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickGalleryPhoto();
+                },
+              ),
+              if (_isBusinessPlan)
+                ListTile(
+                  leading: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.brand50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.videocam_outlined,
+                        color: AppColors.brand600, size: 20),
+                  ),
+                  title: Text(l?.tr('gallery_add_video') ?? 'Vidéo',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _pickGalleryVideo();
+                  },
+                )
+              else
+                ListTile(
+                  leading: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.lock_outline,
+                        color: Colors.purple, size: 20),
+                  ),
+                  title: Row(
+                    children: [
+                      Text(l?.tr('gallery_add_video') ?? 'Vidéo',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('Business',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.purple,
+                            )),
+                      ),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _showVideoPremiumDialog();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showVideoPremiumDialog() {
+    final l = AppLocalizations.of(context);
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.workspace_premium_rounded,
+              color: Colors.purple, size: 28),
+        ),
+        title: Text(
+          l?.tr('video_premium_dialog_title') ?? 'Fonctionnalité Business',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          l?.tr('gallery_premium_required') ??
+              'Les vidéos sont disponibles avec le plan Business',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary600),
+        ),
+        actions: [
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: Text(l?.tr('ok') ?? 'OK'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ── Navigation ───────────────────────────────────────────────────────────────
 
@@ -503,7 +728,7 @@ class _OwnerOnboardingStep2ScreenState
                     // Add button
                     if (_galleryItems.length < 10)
                       GestureDetector(
-                        onTap: _pickGalleryPhoto,
+                        onTap: _showPickerSheet,
                         child: Container(
                           width: 100,
                           height: 100,
@@ -541,6 +766,7 @@ class _OwnerOnboardingStep2ScreenState
                       final item = _galleryItems[index];
                       final file = item['file'] as File;
                       final uploading = item['uploading'] as bool;
+                      final isVideo = item['isVideo'] == true;
                       return SizedBox(
                         width: 100,
                         height: 100,
@@ -549,7 +775,18 @@ class _OwnerOnboardingStep2ScreenState
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.file(file, fit: BoxFit.cover),
+                              if (isVideo)
+                                Container(
+                                  color: Colors.black87,
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.play_circle_fill_rounded,
+                                    color: Colors.white,
+                                    size: 36,
+                                  ),
+                                )
+                              else
+                                Image.file(file, fit: BoxFit.cover),
                               if (uploading)
                                 Container(
                                   color: Colors.black.withValues(alpha: 0.45),

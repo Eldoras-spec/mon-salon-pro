@@ -13,7 +13,9 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../utils/currency_helper.dart';
+import '../widgets/country_phone_field.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/whatsapp_otp_dialog.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ class _OwnerAppointmentsScreenState
     extends ConsumerState<OwnerAppointmentsScreen> {
   _Filter _selected = _Filter.all;
   String _searchQuery = '';
+  String? _memberFilterId; // null = tous les employés
   final _searchCtrl = TextEditingController();
 
   @override
@@ -74,7 +77,7 @@ class _OwnerAppointmentsScreenState
         child: _AddAppointmentSheet(
           salon: salon,
           teamMembers: team,
-          onCreated: () => ref.invalidate(ownerAppointmentsProvider),
+          onCreated: () => ref.invalidate(ownerAppointmentsRangeProvider),
         ),
       ),
     );
@@ -90,13 +93,22 @@ class _OwnerAppointmentsScreenState
       _Filter.completed => all.where((a) => a.status == 'completed').toList(),
       _Filter.cancelled => all.where((a) => a.status == 'cancelled').toList(),
     };
+    if (_memberFilterId != null) {
+      result = result
+          .where((a) => a.assignedMemberId == _memberFilterId)
+          .toList();
+    }
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
+      final qDigits = q.replaceAll(RegExp(r'\D'), '');
       result = result
           .where((a) =>
               a.serviceName.toLowerCase().contains(q) ||
               (a.clientName ?? '').toLowerCase().contains(q) ||
-              (a.assignedMemberName ?? '').toLowerCase().contains(q))
+              (qDigits.isNotEmpty &&
+                  (a.clientPhone ?? '')
+                      .replaceAll(RegExp(r'\D'), '')
+                      .contains(qDigits)))
           .toList();
     }
     return result;
@@ -105,14 +117,14 @@ class _OwnerAppointmentsScreenState
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
+    final appointmentsAsync = ref.watch(ownerAppointmentsRangeProvider);
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
       body: RefreshIndicator(
         color: AppColors.brand600,
         onRefresh: () async {
-          ref.invalidate(ownerAppointmentsProvider);
+          ref.invalidate(ownerAppointmentsRangeProvider);
           await Future.delayed(const Duration(milliseconds: 500));
         },
         child: CustomScrollView(
@@ -155,6 +167,31 @@ class _OwnerAppointmentsScreenState
               child: _FilterBar(
                 selected: _selected,
                 onSelect: (f) => setState(() => _selected = f),
+              ),
+            ),
+          ),
+
+          // ── Period + Member dropdowns (side by side) ───────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _PeriodDropdown(
+                      selected: ref.watch(appointmentsPeriodProvider),
+                      onSelect: (p) =>
+                          ref.read(appointmentsPeriodProvider.notifier).state = p,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _MemberDropdown(
+                      selectedMemberId: _memberFilterId,
+                      onSelect: (id) => setState(() => _memberFilterId = id),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -227,8 +264,9 @@ class _OwnerAppointmentsScreenState
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, i) => _AppointmentTile(
+                    key: ValueKey(items[i].id),
                     appointment: items[i],
-                    onStatusChanged: () => ref.invalidate(ownerAppointmentsProvider),
+                    onStatusChanged: () => ref.invalidate(ownerAppointmentsRangeProvider),
                   ),
                   childCount: items.length,
                 ),
@@ -287,10 +325,105 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
+// ── Dropdowns (period + member) ─────────────────────────────────────────────
+
+const _dropdownPadding = EdgeInsets.symmetric(horizontal: 10, vertical: 8);
+const _dropdownRadius = 10.0;
+
+class _PeriodDropdown extends StatelessWidget {
+  const _PeriodDropdown({required this.selected, required this.onSelect});
+  final AppointmentsPeriod selected;
+  final ValueChanged<AppointmentsPeriod> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    String label(AppointmentsPeriod p) => switch (p) {
+          AppointmentsPeriod.last3Months =>
+            l?.tr('appointments_period_3m') ?? '3 derniers mois',
+          AppointmentsPeriod.last6Months =>
+            l?.tr('appointments_period_6m') ?? '6 derniers mois',
+          AppointmentsPeriod.lastYear =>
+            l?.tr('appointments_period_1y') ?? 'Dernière année',
+        };
+
+    return Container(
+      padding: _dropdownPadding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.secondary200),
+        borderRadius: BorderRadius.circular(_dropdownRadius),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<AppointmentsPeriod>(
+          value: selected,
+          isExpanded: true,
+          isDense: true,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              size: 18, color: AppColors.secondary500),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.brand700,
+          ),
+          items: [
+            for (final p in AppointmentsPeriod.values)
+              DropdownMenuItem(value: p, child: Text(label(p), overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (p) { if (p != null) onSelect(p); },
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberDropdown extends ConsumerWidget {
+  const _MemberDropdown({required this.selectedMemberId, required this.onSelect});
+  final String? selectedMemberId;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final team = ref.watch(ownerTeamProvider).value ?? [];
+    final allLabel = l?.tr('appointments_members_all') ?? 'Tous les employés';
+
+    return Container(
+      padding: _dropdownPadding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.secondary200),
+        borderRadius: BorderRadius.circular(_dropdownRadius),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: selectedMemberId,
+          isExpanded: true,
+          isDense: true,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              size: 18, color: AppColors.secondary500),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.brand700,
+          ),
+          items: [
+            DropdownMenuItem<String?>(value: null, child: Text(allLabel, overflow: TextOverflow.ellipsis)),
+            for (final m in team)
+              DropdownMenuItem<String?>(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: onSelect,
+        ),
+      ),
+    );
+  }
+}
+
 // ── Appointment tile ─────────────────────────────────────────────────────────
 
 class _AppointmentTile extends ConsumerStatefulWidget {
   const _AppointmentTile({
+    super.key,
     required this.appointment,
     required this.onStatusChanged,
   });
@@ -310,13 +443,32 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
   void initState() {
     super.initState();
     final a = widget.appointment;
+
+    // Prefer the name/phone snapshot written on the appointment itself
+    // (always present for walk-ins via website + mobile walk-in bookings).
+    final storedName = a.clientName?.trim();
+    final storedPhone = a.clientPhone?.trim();
+    if (storedName != null && storedName.isNotEmpty) {
+      _clientName = storedName;
+    }
+    if (storedPhone != null && storedPhone.isNotEmpty) {
+      _clientPhone = storedPhone;
+    }
+
     if (a.clientId == 'walk-in') {
-      _clientName = a.clientName ?? 'Client sans compte';
-      _clientPhone = a.clientPhone;
-    } else {
+      if (storedName == null || storedName.isEmpty) {
+        _clientName = 'Client sans compte';
+      }
+      return;
+    }
+
+    // Registered clients: fill any missing fields from the user doc.
+    if (storedName == null || storedName.isEmpty) {
       DatabaseService().getClientName(a.clientId).then((name) {
         if (mounted) setState(() => _clientName = name);
       });
+    }
+    if (storedPhone == null || storedPhone.isEmpty) {
       DatabaseService().getClientPhone(a.clientId).then((phone) {
         if (mounted) setState(() => _clientPhone = phone);
       });
@@ -328,14 +480,9 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
     try {
       await DatabaseService()
           .updateAppointmentStatus(widget.appointment.id, newStatus);
-      if (newStatus == 'completed') {
-        await DatabaseService().awardPoints(
-          userId: widget.appointment.clientId,
-          salonId: widget.appointment.salonId,
-          bookingAmount: widget.appointment.price,
-          bookingId: widget.appointment.id,
-        );
-      }
+      // Loyalty points are awarded server-side by the
+      // `onAppointmentStatusChanged` Cloud Function whenever the status
+      // transitions to "completed" (manual here + auto-complete CF).
       widget.onStatusChanged();
     } catch (e) {
       if (mounted) {
@@ -507,24 +654,25 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(8),
+            if (a.dateTime.isBefore(DateTime.now()))
+              ListTile(
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.check_rounded,
+                      color: Color(0xFF16A34A), size: 20),
                 ),
-                child: const Icon(Icons.check_rounded,
-                    color: Color(0xFF16A34A), size: 20),
+                title: Text(l?.tr('appointments_mark_completed') ?? 'Marquer comme terminé',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _updateStatus('completed');
+                },
               ),
-              title: Text(l?.tr('appointments_mark_completed') ?? 'Marquer comme terminé',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              onTap: () {
-                Navigator.pop(context);
-                _updateStatus('completed');
-              },
-            ),
             ListTile(
               leading: Container(
                 width: 36,
@@ -824,7 +972,12 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   ];
 
   final _clientNameCtrl = TextEditingController();
-  final _clientPhoneCtrl = TextEditingController();
+  String? _clientWhatsappE164;
+  String? _verifiedWalkInWhatsapp;
+  // Multi-service selection (cap 5). _selectedService is kept in sync with
+  // _selectedServices.first for compatibility with existing single-service
+  // logic paths (slot checks, employee picker).
+  final List<Map<String, dynamic>> _selectedServices = [];
   Map<String, dynamic>? _selectedService;
   Map<String, dynamic>? _selectedPack;
   TeamMemberModel? _selectedMember;
@@ -832,6 +985,79 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
   List<AppointmentModel> _existingAppointments = [];
+  // Service picker UX (matches client app pattern)
+  String? _activeServiceCategory;
+  bool _showAllServices = false;
+
+  bool get _isMultiService => _selectedServices.length > 1;
+
+  List<String> get _serviceCategories {
+    final seen = <String>{};
+    final cats = <String>[];
+    for (final s in widget.salon.services) {
+      if (s['visibleTo'] != null) continue;
+      final cat = s['category'] as String?;
+      if (cat != null && cat.isNotEmpty && seen.add(cat)) cats.add(cat);
+    }
+    return cats;
+  }
+
+  List<Map<String, dynamic>> get _filteredServices {
+    var services = widget.salon.services
+        .where((s) => s['visibleTo'] == null)
+        .cast<Map<String, dynamic>>()
+        .toList();
+    final all = _activeServiceCategory == null
+        ? services
+        : services.where((s) => s['category'] == _activeServiceCategory).toList();
+    // Put selected services first so the user can see what they picked.
+    if (_selectedServices.isNotEmpty) {
+      all.sort((a, b) {
+        final aName = a['name'] ?? a['title'] ?? '';
+        final bName = b['name'] ?? b['title'] ?? '';
+        final aSelected = _selectedServices.any((s) => (s['name'] ?? s['title'] ?? '') == aName) ? 0 : 1;
+        final bSelected = _selectedServices.any((s) => (s['name'] ?? s['title'] ?? '') == bName) ? 0 : 1;
+        return aSelected.compareTo(bSelected);
+      });
+    }
+    return all;
+  }
+
+  int get _totalDuration => _selectedServices.fold<int>(
+    0, (sum, s) => sum + ((s['duration'] as int?) ?? 30),
+  );
+
+  double get _totalPrice => _selectedServices.fold<double>(
+    0.0, (sum, s) => sum + ((s['price'] as num?)?.toDouble() ?? 0.0),
+  );
+
+  void _toggleService(Map<String, dynamic> service) {
+    final svcName = service['name'] ?? service['title'] ?? '';
+    final isSelected = _selectedServices.any(
+      (s) => (s['name'] ?? s['title'] ?? '') == svcName,
+    );
+    if (!isSelected && _selectedServices.length >= 5) {
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l?.tr('booking_max_services') ??
+              'Maximum 5 prestations par réservation. Merci de créer une seconde réservation pour plus.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    setState(() {
+      if (isSelected) {
+        _selectedServices.removeWhere((s) => (s['name'] ?? s['title'] ?? '') == svcName);
+      } else {
+        _selectedServices.add(service);
+        _selectedPack = null; // packs and multi-service are exclusive
+      }
+      _selectedService = _selectedServices.isNotEmpty ? _selectedServices.first : null;
+      _selectedMember = null;
+    });
+  }
 
   @override
   void initState() {
@@ -853,7 +1079,6 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   @override
   void dispose() {
     _clientNameCtrl.dispose();
-    _clientPhoneCtrl.dispose();
     super.dispose();
   }
 
@@ -1061,6 +1286,121 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     return false;
   }
 
+  /// Multi-service mode: auto-assign an available employee per service and
+  /// create one appointment per service chained back-to-back. Mirrors
+  /// _submitPack but iterates over the full service map (with price/duration
+  /// already present) rather than looking up names in salon.services.
+  Future<void> _submitMulti(String clientName, AppLocalizations? l) async {
+    setState(() => _loading = true);
+    try {
+      final existing = await DatabaseService()
+          .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
+
+      var cursor = DateTime(
+        _selectedDate.year, _selectedDate.month, _selectedDate.day,
+        _selectedTime.hour, _selectedTime.minute,
+      );
+
+      final bookings = <Map<String, dynamic>>[];
+
+      for (final svc in _selectedServices) {
+        final sName = svc['name'] as String? ?? svc['title'] as String? ?? 'Service';
+        final dur = (svc['duration'] as int?) ?? 30;
+        final svcEnd = cursor.add(Duration(minutes: dur));
+
+        final priority = List<String>.from(svc['memberPriority'] ?? []);
+        final candidates = widget.teamMembers
+            .where((m) =>
+                m.isActive &&
+                m.assignedServiceNames.contains(sName) &&
+                !m.isUnavailableOnDate(_selectedDate))
+            .toList();
+        if (priority.isNotEmpty) {
+          candidates.sort((a, b) {
+            final aIdx = priority.indexOf(a.name);
+            final bIdx = priority.indexOf(b.name);
+            return (aIdx == -1 ? 999 : aIdx).compareTo(bIdx == -1 ? 999 : bIdx);
+          });
+        }
+
+        TeamMemberModel? assigned;
+        for (final m in candidates) {
+          final busy = existing.any((a) {
+            if (a.assignedMemberId != m.id) return false;
+            final aStart = a.dateTime.toUtc();
+            final aEnd = aStart.add(Duration(minutes: a.durationMinutes));
+            return cursor.toUtc().isBefore(aEnd) && svcEnd.toUtc().isAfter(aStart);
+          });
+          final chainBusy = bookings.any((b) {
+            if (b['memberId'] != m.id) return false;
+            final bStart = b['start'] as DateTime;
+            final bEnd = b['end'] as DateTime;
+            return cursor.isBefore(bEnd) && svcEnd.isAfter(bStart);
+          });
+          if (!busy && !chainBusy) {
+            assigned = m;
+            break;
+          }
+        }
+
+        if (assigned == null && candidates.isNotEmpty) {
+          if (mounted) {
+            _showError('Aucun employé disponible pour "$sName" à ${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}');
+            setState(() => _loading = false);
+          }
+          return;
+        }
+
+        bookings.add({
+          'service': svc,
+          'member': assigned,
+          'memberId': assigned?.id,
+          'start': cursor,
+          'end': svcEnd,
+          'duration': dur,
+        });
+        cursor = svcEnd;
+      }
+
+      final clientWhatsapp = _clientWhatsappE164;
+      for (final b in bookings) {
+        final svc = b['service'] as Map<String, dynamic>;
+        final member = b['member'] as TeamMemberModel?;
+        final appointment = AppointmentModel(
+          id: const Uuid().v4(),
+          clientId: 'walk-in',
+          salonId: widget.salon.id,
+          salonName: widget.salon.name,
+          serviceName: svc['name'] as String? ?? 'Service',
+          price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+          dateTime: DateTime.utc(
+            (b['start'] as DateTime).year,
+            (b['start'] as DateTime).month,
+            (b['start'] as DateTime).day,
+            (b['start'] as DateTime).hour,
+            (b['start'] as DateTime).minute,
+          ),
+          status: 'upcoming',
+          createdAt: DateTime.now(),
+          durationMinutes: b['duration'] as int,
+          clientName: clientName,
+          clientPhone: (clientWhatsapp != null && clientWhatsapp.isNotEmpty)
+              ? clientWhatsapp
+              : null,
+          assignedMemberId: member?.id,
+          assignedMemberName: member?.name,
+        );
+        await DatabaseService().createAppointment(appointment);
+      }
+
+      widget.onCreated();
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) _showError('Erreur: $e');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
   Future<void> _submitPack(String clientName, AppLocalizations? l) async {
     final packServices = List<String>.from(_selectedPack!['services'] ?? []);
     final services = widget.salon.services.cast<Map<String, dynamic>>();
@@ -1145,7 +1485,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       }
 
       // Create all appointments
-      final clientPhone = _clientPhoneCtrl.text.trim();
+      final clientWhatsapp = _clientWhatsappE164;
       for (final b in bookings) {
         final svc = b['service'] as Map<String, dynamic>;
         final member = b['member'] as TeamMemberModel?;
@@ -1161,7 +1501,9 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
           createdAt: DateTime.now(),
           durationMinutes: b['duration'] as int,
           clientName: clientName,
-          clientPhone: clientPhone.isNotEmpty ? clientPhone : null,
+          clientPhone: (clientWhatsapp != null && clientWhatsapp.isNotEmpty)
+              ? clientWhatsapp
+              : null,
           assignedMemberId: member?.id,
           assignedMemberName: member?.name,
         );
@@ -1183,18 +1525,42 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       _showError(l?.tr('appointments_error_client_name') ?? 'Veuillez entrer le nom du client');
       return;
     }
-    if (_selectedService == null) {
+    if (_selectedService == null && _selectedServices.isEmpty) {
       _showError(l?.tr('appointments_error_service') ?? 'Veuillez sélectionner un service');
       return;
     }
-    if (_selectedPack == null && _selectedMember == null) {
+    if (_selectedPack == null && !_isMultiService && _selectedMember == null) {
       _showError(l?.tr('appointments_error_employee') ?? 'Veuillez sélectionner un employé');
       return;
+    }
+
+    // WhatsApp OTP verification (Business plan only — CF gates server-side).
+    // Free/Essentiel salons short-circuit and proceed without OTP. Optional
+    // field: skip entirely if no WA number was entered.
+    final whatsapp = _clientWhatsappE164;
+    if (whatsapp != null && whatsapp.isNotEmpty &&
+        _verifiedWalkInWhatsapp != whatsapp) {
+      final result = await WhatsappOtpDialog.show(
+        context, whatsapp,
+        salonId: widget.salon.id,
+      );
+      if (!mounted) return;
+      if (result == null) {
+        _showError(l?.tr('appointments_walkin_otp_required') ??
+            'Vérification WhatsApp annulée. Réessayez ou laissez le champ vide.');
+        return;
+      }
+      _verifiedWalkInWhatsapp = whatsapp;
     }
 
     // Pack mode → auto-assign and create chained appointments
     if (_selectedPack != null) {
       await _submitPack(clientName, l);
+      return;
+    }
+    // Multi-service mode → auto-assign like pack
+    if (_isMultiService) {
+      await _submitMulti(clientName, l);
       return;
     }
     if (!_isDayOpen(_selectedDate)) {
@@ -1279,7 +1645,10 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         createdAt: DateTime.now(),
         durationMinutes: duration,
         clientName: clientName,
-        clientPhone: _clientPhoneCtrl.text.trim().isNotEmpty ? _clientPhoneCtrl.text.trim() : null,
+        clientPhone: (_clientWhatsappE164 != null &&
+                _clientWhatsappE164!.isNotEmpty)
+            ? _clientWhatsappE164
+            : null,
         assignedMemberId: _selectedMember!.id,
         assignedMemberName: _selectedMember!.name,
       );
@@ -1322,11 +1691,276 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     );
   }
 
+  Widget _buildServicePicker(AppLocalizations? l) {
+    final categories = _serviceCategories;
+    final filtered = _filteredServices;
+    final visibleServices = _showAllServices ? filtered : filtered.take(4).toList();
+    final packs = widget.salon.servicePacks;
+    final showPacks = packs.isNotEmpty &&
+        _activeServiceCategory == null &&
+        _selectedServices.isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Category chips
+        if (categories.isNotEmpty) ...[
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: categories.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, i) {
+                final isAll = i == 0;
+                final cat = isAll ? null : categories[i - 1];
+                final active = _activeServiceCategory == cat;
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    _activeServiceCategory = cat;
+                    _showAllServices = false;
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? AppColors.brand600 : Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: active ? AppColors.brand600 : AppColors.secondary200,
+                      ),
+                    ),
+                    child: Text(
+                      isAll ? (l?.tr('booking_all') ?? 'Tous') : cat!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: active ? Colors.white : AppColors.brand800,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Packs (only when no category filter and no services selected)
+        if (showPacks) ...[
+          ...packs.map((pack) => _buildPackTile(pack, l)),
+          const SizedBox(height: 8),
+        ],
+
+        // Service tiles
+        if (filtered.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              l?.tr('appointments_no_services') ?? 'Aucun service dans cette catégorie',
+              style: const TextStyle(fontSize: 12, color: AppColors.secondary400),
+            ),
+          )
+        else
+          ...visibleServices.map((svc) => _buildServiceTile(svc, l)),
+
+        // "Voir plus" toggle
+        if (filtered.length > 4)
+          Center(
+            child: TextButton(
+              onPressed: () => setState(() => _showAllServices = !_showAllServices),
+              child: Text(
+                _showAllServices
+                    ? (l?.tr('booking_see_less') ?? 'Voir moins')
+                    : (l?.tr('booking_see_all_services') ?? 'Voir tous les services ({count})')
+                        .replaceAll('{count}', filtered.length.toString()),
+                style: const TextStyle(
+                  color: AppColors.brand700,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+
+        // Summary bar when multi-service
+        if (_selectedServices.length >= 2)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.brand50,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, size: 16, color: AppColors.brand600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_selectedServices.length} services · ${_totalDuration}min · ${CurrencyHelper.format(_totalPrice, widget.salon.currency)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brand800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildServiceTile(Map<String, dynamic> svc, AppLocalizations? l) {
+    final name = svc['name'] as String? ?? svc['title'] as String? ?? '';
+    final price = (svc['price'] as num?)?.toDouble() ?? 0.0;
+    final duration = (svc['duration'] as int?) ?? 30;
+    final selected = _selectedServices.any(
+      (s) => (s['name'] ?? s['title'] ?? '') == name,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () => _toggleService(svc),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brand50 : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.brand400 : AppColors.secondary200,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.brand600 : Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: selected ? AppColors.brand600 : AppColors.secondary300,
+                    width: 2,
+                  ),
+                ),
+                child: selected
+                    ? const Icon(Icons.check, color: Colors.white, size: 14)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brand950,
+                        )),
+                    const SizedBox(height: 2),
+                    Text('${duration}min · ${CurrencyHelper.format(price, widget.salon.currency)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.secondary500,
+                        )),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackTile(Map<String, dynamic> pack, AppLocalizations? l) {
+    final name = pack['name'] as String? ?? 'Pack';
+    final price = (pack['price'] as num?)?.toDouble() ?? 0.0;
+    final packServices = List<String>.from(pack['services'] ?? []);
+    final services = widget.salon.services.cast<Map<String, dynamic>>();
+    int totalDur = 0;
+    for (final sName in packServices) {
+      final svc = services.firstWhere(
+        (s) => (s['name'] ?? s['title']) == sName,
+        orElse: () => <String, dynamic>{},
+      );
+      totalDur += ((svc['duration'] ?? 30) as int);
+    }
+    final selected = _selectedPack == pack;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (selected) {
+              _selectedPack = null;
+              _selectedService = null;
+            } else {
+              _selectedPack = pack;
+              _selectedServices.clear();
+              if (packServices.isNotEmpty) {
+                _selectedService = services.firstWhere(
+                  (s) => (s['name'] ?? s['title']) == packServices.first,
+                  orElse: () => services.first,
+                );
+              }
+            }
+            _selectedMember = null;
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brand100 : AppColors.brand50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.brand600 : AppColors.brand200,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Text('📦', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brand950,
+                        )),
+                    const SizedBox(height: 2),
+                    Text('${packServices.length} services · ${totalDur}min · ${CurrencyHelper.format(price, widget.salon.currency)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.brand700,
+                        )),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle, color: AppColors.brand600, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
-    final services = widget.salon.services.where((s) => s['visibleTo'] == null).toList();
     final dateStr = DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
     final timeStr =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
@@ -1376,103 +2010,26 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Client phone
-            _label(l?.tr('appointments_client_phone') ?? 'Téléphone'),
+            // Client WhatsApp (used for OTP verification on Business plan)
+            _label(l?.tr('appointments_client_whatsapp') ?? 'WhatsApp'),
             const SizedBox(height: 6),
-            TextField(
-              controller: _clientPhoneCtrl,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(fontSize: 14, color: AppColors.brand950),
-              decoration: _inputDecoration(l?.tr('appointments_client_phone_hint') ?? 'ex. 0612345678'),
+            CountryPhoneField(
+              initialE164: _clientWhatsappE164,
+              onChanged: (e164) {
+                setState(() {
+                  _clientWhatsappE164 = e164;
+                  if (_verifiedWalkInWhatsapp != e164) {
+                    _verifiedWalkInWhatsapp = null;
+                  }
+                });
+              },
             ),
             const SizedBox(height: 16),
 
             // Service / Pack selection
             _label(l?.tr('appointments_service_label') ?? 'Service *'),
             const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.secondary200),
-                borderRadius: BorderRadius.circular(10),
-                color: AppColors.secondary50,
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: _selectedPack != null
-                      ? 'pack_${widget.salon.servicePacks.indexOf(_selectedPack!)}'
-                      : _selectedService != null
-                          ? 'svc_${services.indexOf(_selectedService!)}'
-                          : null,
-                  hint: Text(l?.tr('appointments_select_service') ?? 'Sélectionner un service',
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.secondary400)),
-                  items: [
-                    // Packs
-                    ...widget.salon.servicePacks.asMap().entries.map((e) {
-                      final pack = e.value;
-                      final name = pack['name'] as String? ?? 'Pack';
-                      final price = (pack['price'] as num?)?.toStringAsFixed(0) ?? '0';
-                      final packServices = List<String>.from(pack['services'] ?? []);
-                      int totalDur = 0;
-                      for (final sName in packServices) {
-                        final svc = services.cast<Map<String, dynamic>>().firstWhere(
-                          (s) => (s['name'] ?? s['title']) == sName,
-                          orElse: () => <String, dynamic>{},
-                        );
-                        totalDur += ((svc['duration'] ?? 30) as int);
-                      }
-                      return DropdownMenuItem(
-                        value: 'pack_${e.key}',
-                        child: Text(
-                          '📦 $name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${totalDur}min',
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.brand950),
-                        ),
-                      );
-                    }),
-                    // Individual services
-                    ...List.generate(services.length, (i) {
-                      final s = services[i];
-                      final name = s['name'] as String? ?? '';
-                      final price = (s['price'] as num?)?.toStringAsFixed(0) ?? '0';
-                      final dur = s['duration'] as int? ?? 30;
-                      return DropdownMenuItem(
-                        value: 'svc_$i',
-                        child: Text(
-                          '$name · ${CurrencyHelper.format(double.tryParse(price) ?? 0, widget.salon.currency)} · ${dur}min',
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.brand950),
-                        ),
-                      );
-                    }),
-                  ],
-                  onChanged: (val) {
-                    if (val == null) return;
-                    setState(() {
-                      if (val.startsWith('pack_')) {
-                        final idx = int.parse(val.substring(5));
-                        _selectedPack = widget.salon.servicePacks[idx];
-                        // Use first service of pack for member filtering
-                        final packServices = List<String>.from(_selectedPack!['services'] ?? []);
-                        if (packServices.isNotEmpty) {
-                          _selectedService = services.cast<Map<String, dynamic>>().firstWhere(
-                            (s) => (s['name'] ?? s['title']) == packServices.first,
-                            orElse: () => services.first,
-                          );
-                        }
-                      } else {
-                        final idx = int.parse(val.substring(4));
-                        _selectedService = services[idx];
-                        _selectedPack = null;
-                      }
-                      _selectedMember = null;
-                    });
-                  },
-                ),
-              ),
-            ),
+            _buildServicePicker(l),
             const SizedBox(height: 16),
 
             // Employee selection (filtered by selected service)
@@ -1486,8 +2043,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       fontSize: 12, color: AppColors.secondary400),
                 );
               }
-              // Pack mode → auto-assign
-              if (_selectedPack != null) {
+              // Pack mode OR multi-service mode → auto-assign
+              if (_selectedPack != null || _isMultiService) {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(

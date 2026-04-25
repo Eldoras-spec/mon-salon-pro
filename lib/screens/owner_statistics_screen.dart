@@ -17,8 +17,9 @@ class OwnerStatisticsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
-    final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
+    final appointmentsAsync = ref.watch(ownerStatisticsAppointmentsProvider);
     final ordersAsync = ref.watch(ownerOrdersProvider);
+    final currency = ref.watch(ownerSalonProvider).value?.currency ?? 'MAD';
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -46,67 +47,37 @@ class OwnerStatisticsScreen extends ConsumerWidget {
         data: (appointments) {
           final orders = ordersAsync.valueOrNull ?? [];
           return _StatisticsBody(
-              appointments: appointments, orders: orders);
+              appointments: appointments, orders: orders, currency: currency);
         },
       ),
     );
   }
 }
 
-class _StatisticsBody extends StatefulWidget {
-  const _StatisticsBody({required this.appointments, required this.orders});
+class _StatisticsBody extends ConsumerStatefulWidget {
+  const _StatisticsBody({required this.appointments, required this.orders, required this.currency});
   final List<AppointmentModel> appointments;
   final List<OrderModel> orders;
+  final String currency;
 
   @override
-  State<_StatisticsBody> createState() => _StatisticsBodyState();
+  ConsumerState<_StatisticsBody> createState() => _StatisticsBodyState();
 }
 
-class _StatisticsBodyState extends State<_StatisticsBody> {
-  int _selectedPeriod = 0; // 0=week, 1=month, 2=all
+class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
+  // The appointments list is already server-filtered to the selected period
+  // via [ownerStatisticsAppointmentsProvider]; no client-side filtering needed.
+  List<AppointmentModel> get _filtered => widget.appointments;
 
-  List<String> _periodLabels(AppLocalizations? l) => [
-    l?.tr('statistics_period_week') ?? 'Semaine',
-    l?.tr('statistics_period_month') ?? 'Mois',
-    l?.tr('statistics_period_all') ?? 'Tout',
-  ];
-
-  List<AppointmentModel> get _filtered {
-    final now = DateTime.now();
-    switch (_selectedPeriod) {
-      case 0: // week
-        final weekStart = now.subtract(Duration(days: now.weekday - 1));
-        final start = DateTime(weekStart.year, weekStart.month, weekStart.day);
-        return widget.appointments
-            .where((a) => !a.dateTime.isBefore(start))
-            .toList();
-      case 1: // month
-        final start = DateTime(now.year, now.month, 1);
-        return widget.appointments
-            .where((a) => !a.dateTime.isBefore(start))
-            .toList();
-      default:
-        return widget.appointments;
-    }
-  }
-
+  // Orders are still loaded in full — filter locally to match the current
+  // statistics period (orders aren't yet paginated at the DB level).
   List<OrderModel> get _filteredOrders {
-    final now = DateTime.now();
-    switch (_selectedPeriod) {
-      case 0:
-        final weekStart = now.subtract(Duration(days: now.weekday - 1));
-        final start = DateTime(weekStart.year, weekStart.month, weekStart.day);
-        return widget.orders
-            .where((o) => !o.createdAt.isBefore(start))
-            .toList();
-      case 1:
-        final start = DateTime(now.year, now.month, 1);
-        return widget.orders
-            .where((o) => !o.createdAt.isBefore(start))
-            .toList();
-      default:
-        return widget.orders;
-    }
+    final period = ref.watch(statisticsPeriodProvider);
+    final r = resolveStatisticsRange(period);
+    return widget.orders
+        .where((o) =>
+            !o.createdAt.isBefore(r.start) && o.createdAt.isBefore(r.end))
+        .toList();
   }
 
   void _showListBottomSheet(
@@ -188,21 +159,59 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
     final topServices = serviceCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    // Daily breakdown for chart
+    // Activity breakdown — granularity adapts to the selected period.
+    // Week / month / 3 months → daily grid. 6 months / 1 year → monthly grid.
+    final period = ref.watch(statisticsPeriodProvider);
     final now = DateTime.now();
-    final int dayCount = _selectedPeriod == 0 ? 7 : (_selectedPeriod == 1 ? 30 : 30);
-    final dayCounts = List.filled(dayCount, 0);
-    final dayRevenues = List.filled(dayCount, 0.0);
-    final startDate = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: dayCount - 1));
+    final bool isMonthly = period == StatisticsPeriod.last6Months ||
+        period == StatisticsPeriod.lastYear;
+
+    final int binCount;
+    final List<DateTime> binStarts;
+    if (isMonthly) {
+      final monthCount = period == StatisticsPeriod.last6Months ? 6 : 12;
+      binCount = monthCount;
+      // Oldest month first → current month last. Start-of-month dates.
+      binStarts = List.generate(monthCount,
+          (i) => DateTime(now.year, now.month - (monthCount - 1 - i), 1));
+    } else {
+      final int dayCount = switch (period) {
+        StatisticsPeriod.currentWeek => 7,
+        StatisticsPeriod.currentMonth => 30,
+        StatisticsPeriod.last3Months => 90,
+        _ => 30,
+      };
+      binCount = dayCount;
+      final start = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: dayCount - 1));
+      binStarts = List.generate(dayCount,
+          (i) => start.add(Duration(days: i)));
+    }
+    final dayCounts = List.filled(binCount, 0);
+    final dayRevenues = List.filled(binCount, 0.0);
+    final startDate = binStarts.first;
 
     for (final a in items) {
-      final diff = a.dateTime
-          .difference(DateTime(startDate.year, startDate.month, startDate.day))
-          .inDays;
-      if (diff >= 0 && diff < dayCount) {
-        dayCounts[diff]++;
-        if (a.status == 'completed') dayRevenues[diff] += a.price;
+      int? bin;
+      if (isMonthly) {
+        // Match on (year, month).
+        for (int i = 0; i < binStarts.length; i++) {
+          if (a.dateTime.year == binStarts[i].year &&
+              a.dateTime.month == binStarts[i].month) {
+            bin = i;
+            break;
+          }
+        }
+      } else {
+        final diff = a.dateTime
+            .difference(DateTime(
+                startDate.year, startDate.month, startDate.day))
+            .inDays;
+        if (diff >= 0 && diff < binCount) bin = diff;
+      }
+      if (bin != null) {
+        dayCounts[bin]++;
+        if (a.status == 'completed') dayRevenues[bin] += a.price;
       }
     }
 
@@ -276,11 +285,11 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period selector
-          _PeriodSelector(
-            selected: _selectedPeriod,
-            labels: _periodLabels(l),
-            onSelect: (i) => setState(() => _selectedPeriod = i),
+          // Period selector (5 explicit ranges — server-filtered data)
+          _StatisticsPeriodChips(
+            selected: ref.watch(statisticsPeriodProvider),
+            onSelect: (p) =>
+                ref.read(statisticsPeriodProvider.notifier).state = p,
           ),
 
           const SizedBox(height: 20),
@@ -291,7 +300,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_revenue') ?? 'Revenus',
-                  value: CurrencyHelper.format(totalRevenue),
+                  value: CurrencyHelper.format(totalRevenue, widget.currency),
                   icon: Icons.payments_rounded,
                   iconColor: const Color(0xFF059669),
                   iconBg: const Color(0xFFD1FAE5),
@@ -301,9 +310,9 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_avg_price') ?? 'Panier moyen',
-                  value: CurrencyHelper.format(avgPrice),
+                  value: CurrencyHelper.format(avgPrice, widget.currency),
                   icon: Icons.shopping_bag_outlined,
-                  iconColor: const Color(0xFF7C3AED),
+                  iconColor: AppColors.brand600,
                   iconBg: const Color(0xFFF5F3FF),
                 ),
               ),
@@ -367,7 +376,9 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
             dayCounts: dayCounts,
             dayRevenues: dayRevenues,
             startDate: startDate,
-            isWeek: _selectedPeriod == 0,
+            binStarts: binStarts,
+            isWeek: period == StatisticsPeriod.currentWeek,
+            isMonthly: isMonthly,
           ),
 
           const SizedBox(height: 28),
@@ -385,6 +396,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                         count: topServices[i].value,
                         revenue: serviceRevenue[topServices[i].key] ?? 0,
                         maxCount: topServices.first.value,
+                        currency: widget.currency,
                       ),
                     )
                 : null,
@@ -398,6 +410,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                   count: e.value,
                   revenue: serviceRevenue[e.key] ?? 0,
                   maxCount: topServices.first.value,
+                  currency: widget.currency,
                 )),
 
           const SizedBox(height: 28),
@@ -416,6 +429,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                           count: topMembers[i].value,
                           revenue: memberRevenue[topMembers[i].key] ?? 0,
                           maxCount: topMembers.first.value,
+                          currency: widget.currency,
                         ),
                       )
                   : null,
@@ -426,6 +440,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                   count: e.value,
                   revenue: memberRevenue[e.key] ?? 0,
                   maxCount: topMembers.first.value,
+                  currency: widget.currency,
                 )),
           ],
 
@@ -445,6 +460,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                             name: clientNames[cid] ?? '—',
                             visits: clientVisits[cid] ?? 0,
                             revenue: topClients[i].value,
+                            currency: widget.currency,
                           );
                         },
                       )
@@ -455,6 +471,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                   name: clientNames[e.key] ?? '—',
                   visits: clientVisits[e.key] ?? 0,
                   revenue: e.value,
+                  currency: widget.currency,
                 )),
           ],
 
@@ -474,6 +491,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                             name: clientNames[cid] ?? '—',
                             visits: recurringClients[i].value,
                             revenue: clientRevenue[cid] ?? 0,
+                            currency: widget.currency,
                           );
                         },
                       )
@@ -484,6 +502,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                   name: clientNames[e.key] ?? '—',
                   visits: e.value,
                   revenue: clientRevenue[e.key] ?? 0,
+                  currency: widget.currency,
                 )),
           ],
 
@@ -495,7 +514,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
             label: l?.tr('statistics_new_clients') ?? 'Nouveaux clients',
             value: '${newClientsThisMonth.length}',
             icon: Icons.person_add_outlined,
-            iconColor: const Color(0xFF7C3AED),
+            iconColor: AppColors.brand600,
             iconBg: const Color(0xFFF5F3FF),
           ),
 
@@ -519,7 +538,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_boutique_revenue') ?? 'CA Boutique',
-                  value: CurrencyHelper.format(boutiqueRevenue),
+                  value: CurrencyHelper.format(boutiqueRevenue, widget.currency),
                   icon: Icons.storefront_outlined,
                   iconColor: const Color(0xFFD97706),
                   iconBg: const Color(0xFFFEF3C7),
@@ -553,6 +572,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                           quantity: topProducts[i].value,
                           revenue: productRevenue[topProducts[i].key] ?? 0,
                           maxQty: topProducts.first.value,
+                          currency: widget.currency,
                         ),
                       )
                   : null,
@@ -563,6 +583,7 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
                   quantity: e.value,
                   revenue: productRevenue[e.key] ?? 0,
                   maxQty: topProducts.first.value,
+                  currency: widget.currency,
                 )),
           ],
 
@@ -575,59 +596,65 @@ class _StatisticsBodyState extends State<_StatisticsBody> {
 
 // ── Period selector ──────────────────────────────────────────────────────────
 
-class _PeriodSelector extends StatelessWidget {
-  const _PeriodSelector({
+class _StatisticsPeriodChips extends StatelessWidget {
+  const _StatisticsPeriodChips({
     required this.selected,
-    required this.labels,
     required this.onSelect,
   });
-  final int selected;
-  final List<String> labels;
-  final ValueChanged<int> onSelect;
+  final StatisticsPeriod selected;
+  final ValueChanged<StatisticsPeriod> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.secondary100,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    final l = AppLocalizations.of(context);
+    String label(StatisticsPeriod p) => switch (p) {
+          StatisticsPeriod.currentWeek =>
+            l?.tr('statistics_period_current_week') ?? 'Cette semaine',
+          StatisticsPeriod.currentMonth =>
+            l?.tr('statistics_period_current_month') ?? 'Ce mois',
+          StatisticsPeriod.last3Months =>
+            l?.tr('statistics_period_3m') ?? '3 mois',
+          StatisticsPeriod.last6Months =>
+            l?.tr('statistics_period_6m') ?? '6 mois',
+          StatisticsPeriod.lastYear =>
+            l?.tr('statistics_period_1y') ?? '1 an',
+        };
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(labels.length, (i) {
-          final active = i == selected;
-          return Expanded(
+        children: StatisticsPeriod.values.map((p) {
+          final active = p == selected;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
             child: GestureDetector(
-              onTap: () => onSelect(i),
+              onTap: () => onSelect(p),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                duration: const Duration(milliseconds: 180),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: active ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: active
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          )
-                        ]
-                      : null,
+                  color: active ? AppColors.brand50 : Colors.white,
+                  border: Border.all(
+                      color: active
+                          ? AppColors.brand600
+                          : AppColors.secondary200),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  labels[i],
-                  textAlign: TextAlign.center,
+                  label(p),
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: active ? FontWeight.bold : FontWeight.w500,
-                    color: active ? AppColors.brand950 : AppColors.secondary500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: active
+                        ? AppColors.brand700
+                        : AppColors.secondary500,
                   ),
                 ),
               ),
             ),
           );
-        }),
+        }).toList(),
       ),
     );
   }
@@ -712,20 +739,33 @@ class _ActivityChart extends StatelessWidget {
     required this.dayRevenues,
     required this.startDate,
     required this.isWeek,
+    this.isMonthly = false,
+    this.binStarts = const [],
   });
   final List<int> dayCounts;
   final List<double> dayRevenues;
   final DateTime startDate;
   final bool isWeek;
+  // When true, each cell aggregates a full calendar month.
+  final bool isMonthly;
+  // Start date of each bin (used for monthly view labels/tooltips).
+  final List<DateTime> binStarts;
 
   static const _shortDays = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
   @override
   Widget build(BuildContext context) {
     final maxCount = dayCounts.fold<int>(0, (a, b) => a > b ? a : b);
-    final todayIndex = DateTime.now()
-        .difference(DateTime(startDate.year, startDate.month, startDate.day))
-        .inDays;
+    final now = DateTime.now();
+    final int todayIndex;
+    if (isMonthly) {
+      todayIndex = binStarts.indexWhere(
+          (d) => d.year == now.year && d.month == now.month);
+    } else {
+      todayIndex = now
+          .difference(DateTime(startDate.year, startDate.month, startDate.day))
+          .inDays;
+    }
 
     if (isWeek) {
       // Bar chart for weekly view
@@ -822,41 +862,65 @@ class _ActivityChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Heatmap-style grid
+          // Heatmap-style grid. Monthly mode uses larger cells with month
+          // abbreviations ("Jan", "Fév", …); daily mode keeps compact squares.
           Wrap(
             spacing: 4,
             runSpacing: 4,
             children: List.generate(dayCounts.length, (i) {
               final ratio = maxCount > 0 ? dayCounts[i] / maxCount : 0.0;
-              final date = startDate.add(Duration(days: i));
+              final date = isMonthly
+                  ? binStarts[i]
+                  : startDate.add(Duration(days: i));
               final isToday = i == todayIndex;
+              final tooltipMsg = isMonthly
+                  ? '${DateFormat('MMMM yyyy', 'fr_FR').format(date)}: ${dayCounts[i]} RDV'
+                  : '${DateFormat('d MMM', 'fr_FR').format(date)}: ${dayCounts[i]} RDV';
+              final cellText = isMonthly
+                  ? DateFormat('MMM', 'fr_FR')
+                      .format(date)
+                      .replaceAll('.', '')
+                  : '${date.day}';
 
               return Tooltip(
-                message:
-                    '${DateFormat('d MMM', 'fr_FR').format(date)}: ${dayCounts[i]} RDV',
+                message: tooltipMsg,
                 child: Container(
-                  width: 28,
-                  height: 28,
+                  width: isMonthly ? 52 : 28,
+                  height: isMonthly ? 52 : 28,
                   decoration: BoxDecoration(
                     color: dayCounts[i] == 0
                         ? AppColors.secondary50
                         : AppColors.brand500.withValues(alpha: 0.2 + ratio * 0.8),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(isMonthly ? 10 : 6),
                     border: isToday
                         ? Border.all(color: AppColors.brand600, width: 2)
                         : null,
                   ),
                   child: Center(
-                    child: Text(
-                      '${date.day}',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight:
-                            isToday ? FontWeight.bold : FontWeight.w500,
-                        color: dayCounts[i] > 0
-                            ? Colors.white
-                            : AppColors.secondary400,
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          cellText,
+                          style: TextStyle(
+                            fontSize: isMonthly ? 11 : 9,
+                            fontWeight: isToday || isMonthly
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: dayCounts[i] > 0
+                                ? Colors.white
+                                : AppColors.secondary400,
+                          ),
+                        ),
+                        if (isMonthly && dayCounts[i] > 0)
+                          Text(
+                            '${dayCounts[i]}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -921,11 +985,13 @@ class _ServiceRow extends StatelessWidget {
     required this.count,
     required this.revenue,
     required this.maxCount,
+    required this.currency,
   });
   final String name;
   final int count;
   final double revenue;
   final int maxCount;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -965,7 +1031,7 @@ class _ServiceRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                CurrencyHelper.format(revenue),
+                CurrencyHelper.format(revenue, currency),
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.secondary500,
@@ -998,11 +1064,13 @@ class _MemberRow extends StatelessWidget {
     required this.count,
     required this.revenue,
     required this.maxCount,
+    required this.currency,
   });
   final String name;
   final int count;
   final double revenue;
   final int maxCount;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -1061,7 +1129,7 @@ class _MemberRow extends StatelessWidget {
                 ),
               ),
               Text(
-                CurrencyHelper.format(revenue),
+                CurrencyHelper.format(revenue, currency),
                 style: const TextStyle(
                   fontSize: 10,
                   color: AppColors.secondary400,
@@ -1082,10 +1150,12 @@ class _ClientRow extends StatelessWidget {
     required this.name,
     required this.visits,
     required this.revenue,
+    required this.currency,
   });
   final String name;
   final int visits;
   final double revenue;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -1126,7 +1196,7 @@ class _ClientRow extends StatelessWidget {
             ),
           ),
           Text(
-            CurrencyHelper.format(revenue),
+            CurrencyHelper.format(revenue, currency),
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
@@ -1147,11 +1217,13 @@ class _ProductRow extends StatelessWidget {
     required this.quantity,
     required this.revenue,
     required this.maxQty,
+    required this.currency,
   });
   final String name;
   final int quantity;
   final double revenue;
   final int maxQty;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -1191,7 +1263,7 @@ class _ProductRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                CurrencyHelper.format(revenue),
+                CurrencyHelper.format(revenue, currency),
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.secondary500,

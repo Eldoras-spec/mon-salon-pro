@@ -103,6 +103,7 @@ class ConversationsScreen extends StatelessWidget {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, i) => _ConversationTile(
+                      key: ValueKey(convs[i].id),
                       conv: convs[i],
                       currentUserId: currentUserId,
                       isClient: isClient,
@@ -123,6 +124,7 @@ class ConversationsScreen extends StatelessWidget {
 
 class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
+    super.key,
     required this.conv,
     required this.currentUserId,
     required this.isClient,

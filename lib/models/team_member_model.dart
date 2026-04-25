@@ -5,7 +5,7 @@ class TeamMemberModel {
   final String salonId;
   final String name;
   final String role; // 'gerant' | 'member'
-  final String pinHash; // SHA256 of 6-digit PIN
+  final String pinHash; // SHA256 of 6-digit PIN (legacy, optional)
   final String? phone;
   final bool isActive;
   final DateTime createdAt;
@@ -14,6 +14,12 @@ class TeamMemberModel {
   final List<String> assignedServiceNames; // service names this member can perform
   final String? photoUrl; // profile photo URL
   final List<int> recurringDaysOff; // weekday numbers (1=Mon ... 7=Sun)
+  final int? agendaColorIndex; // 0..6, index into agenda palette. null = auto by position.
+  final String? loginCode; // "XK3F-9B2M" — employee auth code
+  // Reason the member is inactive, when `isActive == false`. 'free_cap' means
+  // the `enforceFreeTeamCap` CF deactivated this member after a Free plan
+  // grace period. null otherwise (manually deactivated by owner or active).
+  final String? deactivatedReason;
 
   TeamMemberModel({
     required this.id,
@@ -29,7 +35,15 @@ class TeamMemberModel {
     this.assignedServiceNames = const [],
     this.photoUrl,
     this.recurringDaysOff = const [],
+    this.agendaColorIndex,
+    this.loginCode,
+    this.deactivatedReason,
   });
+
+  /// True when the CF deactivated this member due to Free plan team cap.
+  /// These members are reactivated automatically when the salon upgrades.
+  bool get isDeactivatedByCap =>
+      !isActive && deactivatedReason == 'free_cap';
 
   /// Check if this member is off on a given date (recurring day off OR specific unavailable date).
   bool isUnavailableOnDate(DateTime date) {
@@ -61,6 +75,9 @@ class TeamMemberModel {
       photoUrl: data['photoUrl'] as String?,
       recurringDaysOff:
           List<int>.from(data['recurringDaysOff'] ?? []),
+      agendaColorIndex: data['agendaColorIndex'] as int?,
+      loginCode: data['loginCode'] as String?,
+      deactivatedReason: data['deactivatedReason'] as String?,
     );
   }
 
@@ -102,6 +119,8 @@ class TeamMemberModel {
       'assignedServiceNames': assignedServiceNames,
       if (photoUrl != null) 'photoUrl': photoUrl,
       'recurringDaysOff': recurringDaysOff,
+      if (agendaColorIndex != null) 'agendaColorIndex': agendaColorIndex,
+      if (loginCode != null) 'loginCode': loginCode,
     };
   }
 }

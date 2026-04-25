@@ -9,6 +9,7 @@ import '../widgets/custom_text_field.dart';
 import '../providers/auth_providers.dart';
 import '../services/app_localizations.dart';
 import 'basic_registration_screen.dart';
+import 'employee_login_screen.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -171,7 +172,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF3E8FF), // light purple
+              AppColors.brand50,
               Colors.white,
               Colors.white,
             ],
@@ -225,7 +226,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             height: 1.5,
                           ),
                         ),
-                        const SizedBox(height: 36),
+                        const SizedBox(height: 20),
+
+                        // ── Role tab switcher: Propriétaire (this screen) | Employé (code flow)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.secondary100),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brand600,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    l?.tr('login_tab_owner') ?? 'Propriétaire',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const EmployeeLoginScreen()),
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      l?.tr('login_tab_employee') ?? 'Employé',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.secondary500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
 
                         // Form card
                         Container(
@@ -238,7 +293,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
+                                color: AppColors.brand600.withValues(alpha: 0.06),
                                 blurRadius: 20,
                                 offset: const Offset(0, 4),
                               ),
@@ -301,11 +356,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                             decoration: BoxDecoration(
                                               borderRadius: BorderRadius.circular(5),
                                               color: _rememberMe
-                                                  ? const Color(0xFF7C3AED)
+                                                  ? AppColors.brand600
                                                   : Colors.white,
                                               border: Border.all(
                                                 color: _rememberMe
-                                                    ? const Color(0xFF7C3AED)
+                                                    ? AppColors.brand600
                                                     : AppColors.secondary300,
                                                 width: 2,
                                               ),
@@ -338,7 +393,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         style: GoogleFonts.plusJakartaSans(
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
-                                          color: const Color(0xFF7C3AED),
+                                          color: AppColors.brand600,
                                         ),
                                       ),
                                     ),
@@ -356,11 +411,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                              colors: [AppColors.brand500, AppColors.brand600],
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                                color: AppColors.brand600.withValues(alpha: 0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 4),
                               ),
@@ -429,7 +484,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 child: Text(
                                   l?.tr('login_create_account') ?? 'Créer un compte',
                                   style: GoogleFonts.plusJakartaSans(
-                                    color: const Color(0xFF7C3AED),
+                                    color: AppColors.brand600,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                   ),

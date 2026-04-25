@@ -1057,7 +1057,7 @@ class _PromoTile extends StatelessWidget {
                     if (promo.isAiGenerated)
                       _Badge(
                           label: l?.tr('promotions_badge_ai') ?? 'IA',
-                          color: const Color(0xFF8B5CF6)),
+                          color: AppColors.brand500),
                     if (promo.isAiGenerated) const SizedBox(width: 4),
                     if (isExpired)
                       _Badge(
@@ -1081,13 +1081,13 @@ class _PromoTile extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.person_outline_rounded,
-                          size: 12, color: Color(0xFF8B5CF6)),
+                          size: 12, color: AppColors.brand500),
                       const SizedBox(width: 4),
                       Text(
                         (l?.tr('promotions_for_client') ?? 'Pour {name}').replaceAll('{name}', promo.targetedClientName!),
                         style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF8B5CF6),
+                            color: AppColors.brand500,
                             fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -1544,7 +1544,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
     );
   }
 
-  void _showSettingsDialog() {
+  void _showSettingsDialog({bool forceEnable = false}) {
     final l = AppLocalizations.of(context);
     final percentCtrl = TextEditingController(
         text: '${widget.config['discountPercent'] ?? 10}');
@@ -1650,9 +1650,19 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                           int.tryParse(percentCtrl.text.trim()) ?? 10;
                       final mapsUrl = mapsUrlCtrl.text.trim();
                       if (percent <= 0 || percent > 100) return;
+                      if (forceEnable && mapsUrl.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text(l?.tr('promotions_google_review_url_required') ??
+                                'Merci d\'entrer votre lien Google Maps pour activer la récompense.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
                       setDlgState(() => saving = true);
                       final newConfig = {
-                        'enabled': widget.enabled,
+                        'enabled': forceEnable ? true : widget.enabled,
                         'discountPercent': percent,
                         'googleMapsUrl': mapsUrl,
                       };
@@ -1682,9 +1692,16 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
   }
 
   Future<void> _toggleEnabled(bool value) async {
-    final newConfig = Map<String, dynamic>.from(widget.config);
-    newConfig['enabled'] = value;
-    await _db.updateGoogleReviewReward(widget.salonId, newConfig);
+    if (value) {
+      // Activation → ouvrir directement la popup des paramètres.
+      // Le save du dialog fera enabled=true (via forceEnable).
+      _showSettingsDialog(forceEnable: true);
+    } else {
+      // Désactivation → save direct.
+      final newConfig = Map<String, dynamic>.from(widget.config);
+      newConfig['enabled'] = false;
+      await _db.updateGoogleReviewReward(widget.salonId, newConfig);
+    }
   }
 
   Future<void> _validateReward(ReviewRewardModel reward) async {

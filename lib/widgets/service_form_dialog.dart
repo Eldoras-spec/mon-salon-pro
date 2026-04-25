@@ -14,6 +14,7 @@ import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/auth_service.dart';
 import 'member_avatar.dart';
+import '../utils/currency_helper.dart';
 import '../utils/media_compressor.dart';
 
 /// Shared service creation/editing dialog.
@@ -31,8 +32,10 @@ class ServiceFormDialog extends StatefulWidget {
     required this.teamMembers,
     required this.onSave,
     required this.salonId,
+    this.salonType = 'femme',
     this.isPremium = false,
     this.galleryStorageUsed = 0,
+    this.currency = 'MAD',
   });
 
   final Map<String, dynamic>? existing;
@@ -40,8 +43,10 @@ class ServiceFormDialog extends StatefulWidget {
   final List<TeamMemberModel> teamMembers;
   final void Function(Map<String, dynamic> entry) onSave;
   final String salonId;
+  final String salonType; // 'femme' | 'homme' | 'mixte' — filters category list
   final bool isPremium;
   final int galleryStorageUsed;
+  final String currency;
 
   @override
   State<ServiceFormDialog> createState() => _ServiceFormDialogState();
@@ -72,9 +77,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           : '',
     );
     _descCtrl = TextEditingController(text: e?['description'] as String? ?? '');
-    _category = e?['category'] as String? ?? AppConstants.categoryNames.first;
-    if (!AppConstants.categoryNames.contains(_category)) {
-      _category = AppConstants.categoryNames.first;
+    final cats = AppConstants.categoryNamesFor(widget.salonType);
+    _category = e?['category'] as String? ?? cats.first;
+    if (!cats.contains(_category)) {
+      _category = cats.first;
     }
     _duration = e?['duration'] as int? ?? 30;
     _selectedMembers = Set<String>.from(widget.assignedMembers);
@@ -185,7 +191,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     // Name
                     _label(l?.tr('salon_service_form_name') ?? 'Nom du service *'),
                     const SizedBox(height: 6),
-                    _field(_nameCtrl, l?.tr('salon_service_form_name_hint') ?? 'ex. Coupe femme & Brushing'),
+                    _field(_nameCtrl, l?.tr('salon_service_form_name_hint') ?? 'ex. Coupe & Brushing'),
                     const SizedBox(height: 14),
 
                     // Category
@@ -201,7 +207,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                         child: DropdownButton<String>(
                           isExpanded: true,
                           value: _category,
-                          items: AppConstants.categoryNames
+                          items: AppConstants.categoryNamesFor(widget.salonType)
                               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),
                           onChanged: (val) {
@@ -248,7 +254,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _label(l?.tr('salon_service_form_price') ?? 'Prix (MAD)'),
+                              _label(l?.tr('salon_service_form_price') ?? 'Prix (${CurrencyHelper.symbol(widget.currency)})'),
                               const SizedBox(height: 6),
                               _field(_priceCtrl, '0', keyboardType: TextInputType.number),
                             ],
@@ -676,7 +682,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            Expanded(child: _modifierField(stepIdx, cIdx, 'priceModifier', '+/- MAD', Icons.payments_outlined)),
+                            Expanded(child: _modifierField(stepIdx, cIdx, 'priceModifier', '+/- ${CurrencyHelper.symbol(widget.currency)}', Icons.payments_outlined)),
                             const SizedBox(width: 6),
                             Expanded(child: _modifierField(stepIdx, cIdx, 'durationModifier', '+/- min', Icons.schedule)),
                           ],
@@ -988,7 +994,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                   children: [
                                     Text(item['label'] ?? '', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                                       maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    Text('+${item['priceModifier'] ?? 0} MAD · +${item['durationModifier'] ?? 0} min',
+                                    Text('+${item['priceModifier'] ?? 0} ${CurrencyHelper.symbol(widget.currency)} · +${item['durationModifier'] ?? 0} min',
                                       style: const TextStyle(fontSize: 10, color: AppColors.secondary400)),
                                   ],
                                 ),
@@ -1028,12 +1034,17 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _pickGalleryItem(ctx, setModalState, stepIdx, choiceIdx, ch, items, l, true),
-                        icon: const Icon(Icons.videocam, size: 16),
+                        onPressed: widget.isPremium
+                            ? () => _pickGalleryItem(ctx, setModalState, stepIdx, choiceIdx, ch, items, l, true)
+                            : () => _showVideoPremiumDialog(ctx, l),
+                        icon: Icon(
+                          widget.isPremium ? Icons.videocam : Icons.lock_outline,
+                          size: 16,
+                        ),
                         label: const Text('Vidéo', style: TextStyle(fontSize: 13)),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.purple,
-                          side: const BorderSide(color: Colors.purple),
+                          foregroundColor: widget.isPremium ? Colors.purple : Colors.grey,
+                          side: BorderSide(color: widget.isPremium ? Colors.purple : Colors.grey),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
@@ -1045,6 +1056,41 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showVideoPremiumDialog(BuildContext ctx, AppLocalizations? l) {
+    showDialog(
+      context: ctx,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.workspace_premium_rounded, color: Colors.purple, size: 28),
+        ),
+        title: Text(
+          l?.tr('video_premium_dialog_title') ?? 'Fonctionnalité Business',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          l?.tr('gallery_premium_required') ?? 'Les vidéos sont disponibles avec le plan Business',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary600),
+        ),
+        actions: [
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: Text(l?.tr('ok') ?? 'OK'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1110,7 +1156,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
     // Check storage limit
     final fileSize = await fileToUpload.length();
-    final maxStorage = widget.isPremium ? 20 * 1024 * 1024 * 1024 : 3 * 1024 * 1024 * 1024;
+    final maxStorage = widget.isPremium ? 5 * 1024 * 1024 * 1024 : 3 * 1024 * 1024 * 1024;
     if (widget.galleryStorageUsed + fileSize > maxStorage) {
       if (ctx.mounted) {
         showDialog(
@@ -1118,7 +1164,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           builder: (dialogCtx) => AlertDialog(
             icon: const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 48),
             title: const Text('Stockage plein'),
-            content: Text('Vous avez atteint la limite de ${widget.isPremium ? "20" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
+            content: Text('Vous avez atteint la limite de ${widget.isPremium ? "5" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('OK')),
             ],
@@ -1159,10 +1205,15 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       final ts = DateTime.now().millisecondsSinceEpoch;
       final ext = fileToUpload.path.split('.').last;
 
-      // Upload main file with progress
+      // Upload main file with progress.
+      // Cache-Control: 7 days — clients re-viewing the same gallery media
+      // cache it locally instead of re-downloading from Storage (saves egress).
       final storageRef = FirebaseStorage.instance.ref()
           .child('salons/$uid/designs/$ts.$ext');
-      final uploadTask = storageRef.putFile(fileToUpload);
+      final uploadTask = storageRef.putFile(
+        fileToUpload,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       uploadTask.snapshotEvents.listen((snap) {
         if (snap.totalBytes > 0) {
           progressNotifier.value = snap.bytesTransferred / snap.totalBytes;
@@ -1189,7 +1240,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           if (thumbData != null) {
             final thumbRef = FirebaseStorage.instance.ref()
                 .child('salons/$uid/designs/${ts}_thumb.jpg');
-            await thumbRef.putData(thumbData, SettableMetadata(contentType: 'image/jpeg'));
+            await thumbRef.putData(thumbData, SettableMetadata(
+              contentType: 'image/jpeg',
+              cacheControl: 'public, max-age=604800',
+            ));
             thumbnailUrl = await thumbRef.getDownloadURL();
           }
         } catch (e) {
@@ -1230,7 +1284,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: TextField(controller: priceCtrl, keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: '+MAD', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+                decoration: InputDecoration(labelText: '+${CurrencyHelper.symbol(widget.currency)}', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
               const SizedBox(width: 8),
               Expanded(child: TextField(controller: durationCtrl, keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: '+min', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),

@@ -13,6 +13,7 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
+import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
 
 /// Save FCM token for a team member so Cloud Functions can send individual push notifications.
@@ -42,13 +43,18 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
     final liveUser = ref.watch(userStreamProvider).value ?? userModel;
     final hasPinSet = liveUser.pinHash != null;
 
+    final isWide = MediaQuery.sizeOf(context).shortestSide >= 600;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isWide ? 500 : double.infinity),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
               const SizedBox(height: 48),
               Text(
                 l?.tr('selector_title') ?? 'Qui êtes-vous ?',
@@ -95,7 +101,7 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
                       ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 32),
 
               // Skip button — masqué si le propriétaire a un PIN
               if (!hasPinSet)
@@ -112,8 +118,10 @@ class TeamProfileSelectorScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 32),
             ],
+          ),
+          ),
           ),
         ),
       ),
@@ -253,57 +261,95 @@ class _MemberTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
     final requiresPin = member.role == 'gerant';
-    return GestureDetector(
-      onTap: requiresPin
-          ? () => _showPinDialog(context, ref)
-          : () => _enterDirectly(ref),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C2333),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08), width: 1),
-        ),
-        child: Row(
-          children: [
-            MemberAvatar(
-              name: member.name,
-              photoUrl: member.photoUrl,
-              radius: 26,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C2333),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08), width: 1),
+      ),
+      child: Column(
+        children: [
+          // Top row: tap anywhere outside the share button to open the profile.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: requiresPin
+                ? () => _showPinDialog(context, ref)
+                : () => _enterDirectly(ref),
+            child: Row(
+              children: [
+                MemberAvatar(
+                  name: member.name,
+                  photoUrl: member.photoUrl,
+                  radius: 26,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _roleLabel(context),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                requiresPin
+                    ? Icon(Icons.lock_outline_rounded,
+                        color: Colors.white.withValues(alpha: 0.3), size: 18)
+                    : Icon(Icons.arrow_forward_ios_rounded,
+                        color: Colors.white.withValues(alpha: 0.3), size: 16),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    member.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _roleLabel(context),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+          ),
+          const SizedBox(height: 12),
+          // Share-code button — full width, explicit label.
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => showEmployeeCodeSheet(
+                context: context,
+                salonId: member.salonId,
+                memberId: member.id,
+                memberName: member.name,
+                initialCode: member.loginCode,
+              ),
+              icon: const Icon(Icons.key_rounded, size: 16),
+              label: Text(
+                l?.tr('selector_share_code') ?? 'Partager le code de connexion',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brand300,
+                side: BorderSide(
+                    color: AppColors.brand600.withValues(alpha: 0.4), width: 1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
               ),
             ),
-            requiresPin
-                ? Icon(Icons.lock_outline_rounded,
-                    color: Colors.white.withValues(alpha: 0.3), size: 18)
-                : Icon(Icons.arrow_forward_ios_rounded,
-                    color: Colors.white.withValues(alpha: 0.3), size: 16),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

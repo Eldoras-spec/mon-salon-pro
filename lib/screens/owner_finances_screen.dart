@@ -362,12 +362,12 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
   };
 
   static const _chargeTypeIcons = <String, (IconData, Color)>{
-    'Salaire': (Icons.people_outline_rounded, Color(0xFF7C3AED)),
+    'Salaire': (Icons.people_outline_rounded, AppColors.brand600),
     'Loyer': (Icons.home_outlined, Color(0xFFDC2626)),
     'Produits': (Icons.shopping_bag_outlined, Color(0xFFEA580C)),
     'Équipement': (Icons.build_outlined, Color(0xFF2563EB)),
     'Factures': (Icons.receipt_outlined, Color(0xFF0891B2)),
-    'Marketing': (Icons.campaign_outlined, Color(0xFFDB2777)),
+    'Marketing': (Icons.campaign_outlined, AppColors.brand600),
     'Autre': (Icons.more_horiz_rounded, Color(0xFF6B7280)),
   };
 
@@ -565,12 +565,12 @@ class _ChargeTile extends StatelessWidget {
   final String currency;
 
   static const _typeConfig = <String, (IconData, Color)>{
-    'Salaire': (Icons.people_outline_rounded, Color(0xFF7C3AED)),
+    'Salaire': (Icons.people_outline_rounded, AppColors.brand600),
     'Loyer': (Icons.home_outlined, Color(0xFFDC2626)),
     'Produits': (Icons.shopping_bag_outlined, Color(0xFFEA580C)),
     'Équipement': (Icons.build_outlined, Color(0xFF2563EB)),
     'Factures': (Icons.receipt_outlined, Color(0xFF0891B2)),
-    'Marketing': (Icons.campaign_outlined, Color(0xFFDB2777)),
+    'Marketing': (Icons.campaign_outlined, AppColors.brand600),
     'Autre': (Icons.more_horiz_rounded, Color(0xFF6B7280)),
   };
 

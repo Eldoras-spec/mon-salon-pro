@@ -8,8 +8,8 @@ import '../services/app_localizations.dart';
 class ForceUpdateScreen extends StatelessWidget {
   const ForceUpdateScreen({super.key});
 
-  static const _appStoreUrl = 'https://apps.apple.com/app/mon-salon/id0000000000'; // TODO: real App Store ID
-  static const _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.blagence.monsalon';
+  static const _appStoreUrl = 'https://apps.apple.com/ma/app/mon-salon-pro/id6760326230';
+  static const _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.blagence.monsalonpro';
 
   void _openStore() {
     final url = Platform.isIOS ? _appStoreUrl : _playStoreUrl;

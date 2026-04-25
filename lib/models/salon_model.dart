@@ -32,6 +32,26 @@ class SalonModel {
   final bool isPremium;
   final int galleryStorageUsed;
   final String currency; // ISO code: MAD, EUR, USD, XOF, etc.
+  final String salonType; // 'femme', 'homme', 'mixte'
+  final List<String> dismissedSetupTasks; // keys of setup tasks owner has manually hidden
+
+  // ── Subscription plan (source of truth) ────────────────────────────────
+  // 'free'      → team capped at 2 members (owner + 1), no videos
+  // 'essentiel' → unlimited team, AI widgets, everything except Business extras
+  // 'business'  → essentiel + video uploads + SMS verification + AI chatbot
+  // `isPremium` is the derived boolean kept in sync server-side by the
+  // `onSalonPlanChange` CF (plan == 'business' ⇔ isPremium == true).
+  final String plan;
+  // End of Essentiel free trial (3 months). null if not on trial / already paid.
+  final DateTime? trialEndsAt;
+  // When a Free salon has >2 team members (e.g. after downgrade from a paid
+  // plan), this stamps the 30-day grace deadline. The `enforceFreeTeamCap`
+  // CF deactivates excess members once it passes. null if no grace pending.
+  final DateTime? freeCapGraceEndsAt;
+  // Stamped server-side the first time a salon touches any paid plan
+  // (essentiel or business). Once true, the free trial is never granted
+  // again — see `onSalonPlanChange` CF.
+  final bool paidPlanEverActivated;
 
   SalonModel({
     required this.id,
@@ -72,7 +92,31 @@ class SalonModel {
     this.isPremium = false,
     this.galleryStorageUsed = 0,
     this.currency = 'MAD',
+    this.salonType = 'femme',
+    this.dismissedSetupTasks = const [],
+    this.plan = 'essentiel',
+    this.trialEndsAt,
+    this.freeCapGraceEndsAt,
+    this.paidPlanEverActivated = false,
   });
+
+  /// Client-side predictor of whether this salon would get the 3-month
+  /// trial if it upgraded to Essentiel now. Mirrors the CF guard — used
+  /// for UI (hide "3 mois offerts" when we already know it won't apply).
+  /// The server remains the real authority (phone registry is server-only).
+  bool get isTrialEligible {
+    if (paidPlanEverActivated) return false;
+    if (trialEndsAt != null) return false;
+    if (plan == 'business' || plan == 'essentiel') return false;
+    return true;
+  }
+
+  /// Shorthand accessors for plan-based feature gating.
+  /// `isPremium` continues to represent Business (field kept for legacy
+  /// rules + triggers). `isFree` / `isEssentiel` are read-only derivations.
+  bool get isFree => plan == 'free';
+  bool get isEssentiel => plan == 'essentiel';
+  bool get isBusiness => plan == 'business';
 
   factory SalonModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
@@ -121,6 +165,21 @@ class SalonModel {
       isPremium: data['isPremium'] ?? false,
       galleryStorageUsed: (data['galleryStorageUsed'] as num?)?.toInt() ?? 0,
       currency: data['currency'] ?? 'MAD',
+      salonType: data['salonType'] ?? 'femme',
+      dismissedSetupTasks:
+          List<String>.from(data['dismissedSetupTasks'] ?? const []),
+      // Fallback for legacy salons without `plan` field: derive from
+      // `isPremium` (grandfathered as Essentiel so existing non-premium
+      // salons keep full features by default).
+      plan: data['plan'] as String? ??
+          ((data['isPremium'] == true) ? 'business' : 'essentiel'),
+      trialEndsAt: (data['trialEndsAt'] is Timestamp)
+          ? (data['trialEndsAt'] as Timestamp).toDate()
+          : null,
+      freeCapGraceEndsAt: (data['freeCapGraceEndsAt'] is Timestamp)
+          ? (data['freeCapGraceEndsAt'] as Timestamp).toDate()
+          : null,
+      paidPlanEverActivated: data['paidPlanEverActivated'] == true,
     );
   }
 
@@ -151,6 +210,8 @@ class SalonModel {
       'servicePacks': servicePacks,
       if (slug != null) 'slug': slug,
       'currency': currency,
+      'salonType': salonType,
+      'plan': plan,
     };
   }
 }

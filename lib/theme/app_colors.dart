@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Brand Colors (Pink Theme)
-  static const Color brand50 = Color(0xFFFDF2F8);
-  static const Color brand100 = Color(0xFFFCE7F3);
-  static const Color brand200 = Color(0xFFFBCFE8);
-  static const Color brand300 = Color(0xFFF9A8D4);
-  static const Color brand400 = Color(0xFFF472B6);
-  static const Color brand500 = Color(0xFFEC4899);
-  static const Color brand600 = Color(0xFFDB2777);
-  static const Color brand700 = Color(0xFFBE185D);
-  static const Color brand800 = Color(0xFF9D174D);
-  static const Color brand900 = Color(0xFF831843);
-  static const Color brand950 = Color(0xFF500724);
+  // Brand Colors (Polly Green — Professional, gender-neutral)
+  static const Color brand50 = Color(0xFFF3F8F1);
+  static const Color brand100 = Color(0xFFE4EFE0);
+  static const Color brand200 = Color(0xFFC9DFC2);
+  static const Color brand300 = Color(0xFFA3C898);
+  static const Color brand400 = Color(0xFF7BAF6D);
+  static const Color brand500 = Color(0xFF6A9B5C);
+  static const Color brand600 = Color(0xFF558148);
+  static const Color brand700 = Color(0xFF446838);
+  static const Color brand800 = Color(0xFF38542E);
+  static const Color brand900 = Color(0xFF2E4526);
+  static const Color brand950 = Color(0xFF1A2916);
 
   // Secondary Colors (Slates)
   static const Color secondary50 = Color(0xFFF8FAFC);

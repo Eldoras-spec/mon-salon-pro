@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "402750428517-s4hlrsdvjkt8d1hnm1e7n0imcmvnslor.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.blagence.monsalon",
+            "certificate_hash": "4055c159caa99fa7f98b6ee972674c73754393b8"
+          }
+        },
+        {
           "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -49,6 +57,22 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "402750428517-1q6v2g636apf12734pso6rlak7e4rhan.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.blagence.monsalonpro",
+            "certificate_hash": "0c53e6bf68b19351cf53ee759f7a79a782e17281"
+          }
+        },
+        {
+          "client_id": "402750428517-2fbelre5utk69aunedod3n2vn806n548.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.blagence.monsalonpro",
+            "certificate_hash": "d485d717145f3e087515919840529461ae7f33d1"
+          }
+        },
         {
           "client_id": "402750428517-1jlpsj56tgj5087kjkg298hjvs86bpv6.apps.googleusercontent.com",
           "client_type": 3

@@ -51,7 +51,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
                 onPressed: () {
                   final salonId = salonAsync.value?.id;
                   if (salonId != null) {
-                    _showAddItemSheet(context, salonId);
+                    _showAddItemSheet(context, salonId, salonAsync.value?.currency ?? 'MAD');
                   }
                 },
               ),
@@ -110,7 +110,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
                           onAction: () {
                             final salonId = salonAsync.value?.id;
                             if (salonId != null) {
-                              _showAddItemSheet(context, salonId);
+                              _showAddItemSheet(context, salonId, salonAsync.value?.currency ?? 'MAD');
                             }
                           },
                         )
@@ -150,7 +150,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
     );
   }
 
-  void _showAddItemSheet(BuildContext context, String salonId) {
+  void _showAddItemSheet(BuildContext context, String salonId, String currency) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -158,7 +158,7 @@ class OwnerInventoryScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _AddItemSheet(salonId: salonId),
+      builder: (_) => _AddItemSheet(salonId: salonId, currency: currency),
     );
   }
 
@@ -201,8 +201,9 @@ class OwnerInventoryScreen extends ConsumerWidget {
 // ── Add Item Sheet ─────────────────────────────────────────────────────────
 
 class _AddItemSheet extends StatefulWidget {
-  const _AddItemSheet({required this.salonId});
+  const _AddItemSheet({required this.salonId, required this.currency});
   final String salonId;
+  final String currency;
 
   @override
   State<_AddItemSheet> createState() => _AddItemSheetState();
@@ -340,7 +341,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           ]),
           const SizedBox(height: 14),
           _Field(
-              label: l?.tr('inventory_unit_price') ?? 'Prix unitaire (MAD, optionnel)',
+              label: l?.tr('inventory_unit_price') ?? 'Prix unitaire (${CurrencyHelper.symbol(widget.currency)}, optionnel)',
               controller: _priceCtrl,
               keyboard:
                   const TextInputType.numberWithOptions(decimal: true)),
@@ -904,7 +905,7 @@ class _BoutiqueStockSection extends ConsumerWidget {
                                 style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600)),
-                            Text(CurrencyHelper.format(p.price),
+                            Text(CurrencyHelper.format(p.price, ref.watch(ownerSalonProvider).value?.currency ?? 'MAD'),
                                 style: const TextStyle(
                                     fontSize: 12,
                                     color: AppColors.brand600)),

@@ -133,6 +133,12 @@ class _OwnerOnboardingStep4ScreenState
         socialLinks: finalSalonData['socialLinks'] != null
             ? Map<String, String>.from(finalSalonData['socialLinks'])
             : {},
+        currency: finalSalonData['currency'] as String? ?? 'MAD',
+        salonType: finalSalonData['salonType'] as String? ?? 'femme',
+        // Plan chosen at the onboarding plan-selection screen. Defaults to
+        // Essentiel if the field is missing (shouldn't happen — plan screen
+        // is mandatory between step 1 and step 2).
+        plan: finalSalonData['plan'] as String? ?? 'essentiel',
       );
 
       await _databaseService.saveSalon(salon);
@@ -198,8 +204,10 @@ class _OwnerOnboardingStep4ScreenState
           assignedMembers: assignedMembers,
           teamMembers: widget.teamMembers,
           salonId: widget.salonData['ownerId'] as String? ?? '',
+          salonType: (widget.salonData['salonType'] as String?) ?? 'femme',
           isPremium: false,
           galleryStorageUsed: 0,
+          currency: widget.salonData['currency'] as String? ?? 'MAD',
           onSave: (map) {
             final entry = ServiceEntry(
               name: map['name'] as String,
@@ -451,7 +459,7 @@ class _OwnerOnboardingStep4ScreenState
                         if (service.price > 0) ...[
                           const SizedBox(width: 8),
                           Text(
-                            CurrencyHelper.format(service.price),
+                            CurrencyHelper.format(service.price, widget.salonData['currency'] as String? ?? 'MAD'),
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,

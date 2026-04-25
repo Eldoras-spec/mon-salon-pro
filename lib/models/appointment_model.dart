@@ -74,7 +74,40 @@ class AppointmentModel {
     );
   }
 
-  Map<String, dynamic> toMap() {
+  /// Clone with overrides — used to merge `private/contact` subcol into
+  /// an existing instance during dual-source reads.
+  AppointmentModel copyWith({
+    String? clientName,
+    String? clientPhone,
+    String? managementToken,
+  }) {
+    return AppointmentModel(
+      id: id,
+      clientId: clientId,
+      salonId: salonId,
+      salonName: salonName,
+      serviceName: serviceName,
+      price: price,
+      dateTime: dateTime,
+      status: status,
+      createdAt: createdAt,
+      durationMinutes: durationMinutes,
+      clientName: clientName ?? this.clientName,
+      clientPhone: clientPhone ?? this.clientPhone,
+      assignedMemberId: assignedMemberId,
+      assignedMemberName: assignedMemberName,
+      groupId: groupId,
+      selectedOptions: selectedOptions,
+      selectedDesignUrl: selectedDesignUrl,
+      selectedDesignLabel: selectedDesignLabel,
+      selectedDesignThumbnail: selectedDesignThumbnail,
+      selectedDesignIsVideo: selectedDesignIsVideo,
+      managementToken: managementToken ?? this.managementToken,
+    );
+  }
+
+  /// Public fields — written to `appointments/{id}`. No PII.
+  Map<String, dynamic> toPublicMap() {
     return {
       'clientId': clientId,
       'salonId': salonId,
@@ -85,8 +118,6 @@ class AppointmentModel {
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       'durationMinutes': durationMinutes,
-      if (clientName != null) 'clientName': clientName,
-      if (clientPhone != null) 'clientPhone': clientPhone,
       if (assignedMemberId != null) 'assignedMemberId': assignedMemberId,
       if (assignedMemberName != null) 'assignedMemberName': assignedMemberName,
       if (groupId != null) 'groupId': groupId,
@@ -95,7 +126,19 @@ class AppointmentModel {
       if (selectedDesignLabel != null) 'selectedDesignLabel': selectedDesignLabel,
       if (selectedDesignThumbnail != null) 'selectedDesignThumbnail': selectedDesignThumbnail,
       if (selectedDesignIsVideo == true) 'selectedDesignIsVideo': true,
+    };
+  }
+
+  /// PII fields — written to `appointments/{id}/private/contact`.
+  Map<String, dynamic> toPrivateMap() {
+    return {
+      if (clientName != null) 'clientName': clientName,
+      if (clientPhone != null) 'clientPhone': clientPhone,
       if (managementToken != null) 'managementToken': managementToken,
     };
+  }
+
+  Map<String, dynamic> toMap() {
+    return {...toPublicMap(), ...toPrivateMap()};
   }
 }

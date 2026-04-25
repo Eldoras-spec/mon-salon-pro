@@ -549,7 +549,10 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     for (final file in _newImages) {
       final ref = storage.ref(
           'products/${widget.salonId}/${DateTime.now().millisecondsSinceEpoch}_${urls.length}.jpg');
-      await ref.putFile(file);
+      await ref.putFile(
+        file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       urls.add(await ref.getDownloadURL());
     }
     return urls;
@@ -620,8 +623,16 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final isEdit = widget.product != null;
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.92,
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Shrink sheet when keyboard opens so the save button stays accessible.
+    final sheetHeight = (screenHeight * 0.92 - viewInsets).clamp(
+      screenHeight * 0.4,
+      screenHeight * 0.92,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      height: sheetHeight,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -812,10 +823,15 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
               ),
             ),
           ),
-          // Save button
+          // Save button — bottom padding: safe-area when keyboard closed, 12 when open
           Padding(
             padding: EdgeInsets.fromLTRB(
-                20, 8, 20, MediaQuery.of(context).padding.bottom + 12),
+                20,
+                8,
+                20,
+                viewInsets > 0
+                    ? 12
+                    : MediaQuery.of(context).padding.bottom + 12),
             child: SizedBox(
               width: double.infinity,
               height: 50,

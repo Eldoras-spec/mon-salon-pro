@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
 import 'basic_registration_screen.dart';
+import 'employee_login_screen.dart';
 import 'login_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
@@ -140,6 +141,34 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ? Icons.arrow_forward_rounded
                         : Icons.rocket_launch_rounded,
                   ),
+                  if (_currentPage == _pageIcons.length - 1) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const EmployeeLoginScreen()),
+                        ),
+                        icon: const Icon(Icons.badge_outlined),
+                        label: Text(
+                          l?.tr('welcome_i_am_employee') ?? 'Je suis un employé',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brand700,
+                          side: const BorderSide(color: AppColors.brand600, width: 1.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Center(
                     child: Row(

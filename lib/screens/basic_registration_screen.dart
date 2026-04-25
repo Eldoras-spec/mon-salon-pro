@@ -66,35 +66,27 @@ class _BasicRegistrationScreenState
     setState(() => _passwordStrength = strength);
   }
 
-  // ── Device-level rate limiting ─────────────────────────────
-  static const _maxAccountsPerDevice = 2;
+  // ── Device-level cooldown ──────────────────────────────────
+  // The per-device max-accounts cap was removed: SMS OTP on signup
+  // already enforces 1 phone = 1 account (via Firebase Auth account
+  // linking), which is a stronger guarantee than a client-side counter.
+  // Only the 60s cooldown remains to throttle rapid retries.
   static const _cooldownSeconds = 60;
 
   Future<String?> _checkDeviceLimit() async {
     final prefs = await SharedPreferences.getInstance();
     final l = AppLocalizations.of(context);
-
-    // Check cooldown (60s between attempts)
     final lastAttempt = prefs.getInt('reg_last_attempt') ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - lastAttempt < _cooldownSeconds * 1000) {
       final remaining = _cooldownSeconds - ((now - lastAttempt) ~/ 1000);
       return (l?.tr('register_cooldown') ?? 'Veuillez patienter {remaining}s avant de r\u00e9essayer.').replaceAll('{remaining}', '$remaining');
     }
-
-    // Check max accounts per device
-    final count = prefs.getInt('reg_device_count') ?? 0;
-    if (count >= _maxAccountsPerDevice) {
-      return l?.tr('register_device_limit') ?? 'Limite de cr\u00e9ation de compte atteinte sur cet appareil.';
-    }
-
-    return null; // OK
+    return null;
   }
 
-  Future<void> _incrementDeviceCount() async {
+  Future<void> _recordAttempt() async {
     final prefs = await SharedPreferences.getInstance();
-    final count = prefs.getInt('reg_device_count') ?? 0;
-    await prefs.setInt('reg_device_count', count + 1);
     await prefs.setInt('reg_last_attempt', DateTime.now().millisecondsSinceEpoch);
   }
 
@@ -149,8 +141,8 @@ class _BasicRegistrationScreenState
             isClient: false,
           );
 
-      // Registration succeeded — increment device counter
-      await _incrementDeviceCount();
+      // Registration succeeded — record timestamp for the cooldown.
+      await _recordAttempt();
 
       if (mounted) {
         setState(() => _isLoading = false);

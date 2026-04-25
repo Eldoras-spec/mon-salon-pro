@@ -935,7 +935,9 @@ export const onProductStockChanged = functions.firestore
 //     Includes: no-show prediction, price suggestions, financial
 //     insights, action suggestions, monthly comparison
 // ============================================================
-export const generateDailySummary = functions.https.onCall(async (data, context) => {
+export const generateDailySummary = functions
+    .runWith({ secrets: ["GEMINI_API_KEY"] })
+    .https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Auth required");
     }

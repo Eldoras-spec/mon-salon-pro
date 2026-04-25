@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class VersionService {
-  static const String currentVersion = '1.1.0';
-
   static Future<bool> needsForceUpdate() async {
     try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+
       final doc = await FirebaseFirestore.instance
           .collection('config')
           .doc('app')
@@ -12,7 +14,7 @@ class VersionService {
 
       if (!doc.exists) return false;
 
-      final minVersion = doc.data()?['minVersion'] as String?;
+      final minVersion = doc.data()?['minVersionPro'] as String?;
       if (minVersion == null) return false;
 
       return _isVersionLower(currentVersion, minVersion);

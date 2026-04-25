@@ -12,6 +12,7 @@ import '../models/waitlist_model.dart';
 import '../models/product_model.dart';
 import '../models/order_model.dart';
 import '../models/review_reward_model.dart';
+import '../models/client_summary_model.dart';
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -94,12 +95,20 @@ class DatabaseService {
       servicePacks: salon.servicePacks,
       slug: slug,
       currency: salon.currency,
+      rewardPointsEnabled: salon.rewardPointsEnabled,
+      aiPromosEnabled: salon.aiPromosEnabled,
+      aiPromoConfig: salon.aiPromoConfig,
+      googleReviewReward: salon.googleReviewReward,
+      isPremium: salon.isPremium,
+      galleryStorageUsed: salon.galleryStorageUsed,
+      salonType: salon.salonType,
+      plan: salon.plan,
     );
 
     await _firestore
         .collection('salons')
         .doc(updatedSalon.id)
-        .set(updatedSalon.toMap());
+        .set(updatedSalon.toMap(), SetOptions(merge: true));
   }
 
   // Get all salons (Stream)
@@ -174,29 +183,49 @@ class DatabaseService {
 
   // --- Appointment Operations ---
 
-  // Create Appointment
+  // Create Appointment — splits PII into `private/contact` subcollection
+  // so `appointments/{id}` stays safe for public read.
   Future<void> createAppointment(AppointmentModel appointment) async {
-    await _firestore
-        .collection('appointments')
-        .doc(appointment.id)
-        .set(appointment.toMap());
+    final docRef =
+        _firestore.collection('appointments').doc(appointment.id);
+    final batch = _firestore.batch();
+    batch.set(docRef, appointment.toPublicMap());
+    final privateMap = appointment.toPrivateMap();
+    if (privateMap.isNotEmpty) {
+      batch.set(docRef.collection('private').doc('contact'), privateMap);
+    }
+    await batch.commit();
   }
 
-  // Get client appointments (Stream) — sorted client-side to avoid composite index
-  Stream<List<AppointmentModel>> getClientAppointments(String clientId, {String? status}) {
-    return _firestore
-        .collection('appointments')
-        .where('clientId', isEqualTo: clientId)
-        .limit(50)
-        .snapshots()
-        .map((snapshot) {
-          final list = snapshot.docs
-              .map((doc) => AppointmentModel.fromFirestore(doc))
-              .where((a) => status == null || a.status == status)
-              .toList();
-          list.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-          return list;
-        });
+  /// Dual-source hydration: for each appointment doc, fetch
+  /// `private/contact` subcol in parallel and merge PII into the model.
+  /// Falls back gracefully if subcol is absent (legacy flat docs).
+  Future<List<AppointmentModel>> _enrichWithPrivate(
+      Iterable<DocumentSnapshot<Map<String, dynamic>>> docs) async {
+    return Future.wait(docs.map((doc) async {
+      final appt = AppointmentModel.fromFirestore(doc);
+      // Legacy flat format already has PII in main doc
+      if (appt.clientName != null || appt.clientPhone != null) {
+        return appt;
+      }
+      try {
+        final priv = await doc.reference
+            .collection('private')
+            .doc('contact')
+            .get();
+        if (priv.exists) {
+          final data = priv.data()!;
+          return appt.copyWith(
+            clientName: data['clientName'] as String?,
+            clientPhone: data['clientPhone'] as String?,
+            managementToken: data['managementToken'] as String?,
+          );
+        }
+      } catch (_) {
+        // Private subcol unreadable (rules block or not yet migrated) — return appt as-is
+      }
+      return appt;
+    }));
   }
 
   // Get completed appointments once (for recommendations)
@@ -207,7 +236,7 @@ class DatabaseService {
         .where('status', isEqualTo: 'completed')
         .limit(20)
         .get();
-    return snapshot.docs.map((doc) => AppointmentModel.fromFirestore(doc)).toList();
+    return _enrichWithPrivate(snapshot.docs);
   }
 
   // Update appointment status
@@ -333,6 +362,77 @@ class DatabaseService {
             : SalonModel.fromFirestore(snap.docs.first));
   }
 
+  /// Live stream of all appointments for [salonId] within a date range.
+  /// Server-side filtered — no client-side limit, scales to any volume.
+  /// Requires composite index (salonId ASC, dateTime ASC).
+  Stream<List<AppointmentModel>> streamSalonAppointmentsForRange(
+      String salonId, DateTime start, DateTime end) {
+    return _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('dateTime', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .asyncMap((snap) async {
+          final list = await _enrichWithPrivate(snap.docs);
+          list.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+          return list;
+        });
+  }
+
+  /// Live stream of per-client aggregates for a salon, maintained by the
+  /// `maintainClientSummary` Cloud Function. [since] filters server-side on
+  /// `lastVisit` — pass null to stream every client (opt-in "All" view).
+  Stream<List<ClientSummaryModel>> streamClientSummaries(
+      String salonId, {DateTime? since}) {
+    Query<Map<String, dynamic>> q = _firestore
+        .collection('salons')
+        .doc(salonId)
+        .collection('clientSummaries')
+        .orderBy('lastVisit', descending: true);
+    if (since != null) {
+      q = q.where('lastVisit',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(since));
+    }
+    return q.snapshots().map((snap) =>
+        snap.docs.map((d) => ClientSummaryModel.fromFirestore(d)).toList());
+  }
+
+  /// Live stream of the number of completed appointments for [salonId]
+  /// during [year]/[month]. Reuses the same composite index as [streamMonthlyRevenue].
+  Stream<int> streamMonthlyCompletedCount(
+      String salonId, int year, int month) {
+    final start = DateTime(year, month);
+    final end = DateTime(year, month + 1);
+    return _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .where('status', isEqualTo: 'completed')
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('dateTime', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
+  /// Live stream of the total revenue for [salonId] during [year]/[month].
+  /// Sums the `price` of all appointments with status='completed' whose
+  /// dateTime is within the month. Server-side filtered — scales indefinitely.
+  Stream<double> streamMonthlyRevenue(String salonId, int year, int month) {
+    final start = DateTime(year, month);
+    final end = DateTime(year, month + 1);
+    return _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .where('status', isEqualTo: 'completed')
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('dateTime', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .map((snap) => snap.docs.fold<double>(
+            0,
+            (sum, doc) =>
+                sum + ((doc.data()['price'] as num?)?.toDouble() ?? 0)));
+  }
+
   /// Returns all appointments booked at [salonId], ordered by date desc.
   Stream<List<AppointmentModel>> getSalonAppointments(String salonId) {
     return _firestore
@@ -340,10 +440,8 @@ class DatabaseService {
         .where('salonId', isEqualTo: salonId)
         .limit(100)
         .snapshots()
-        .map((snap) {
-          final list = snap.docs
-              .map((d) => AppointmentModel.fromFirestore(d))
-              .toList();
+        .asyncMap((snap) async {
+          final list = await _enrichWithPrivate(snap.docs);
           list.sort((a, b) => b.dateTime.compareTo(a.dateTime));
           return list;
         });
@@ -368,6 +466,9 @@ class DatabaseService {
       final doc = await _firestore.collection('users').doc(clientId).get();
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
+        // Read `whatsapp` (post-migration) or fall back to legacy `phone`.
+        final wa = data['whatsapp'] as String?;
+        if (wa != null && wa.trim().isNotEmpty) return wa;
         final phone = data['phone'] as String?;
         if (phone != null && phone.trim().isNotEmpty) return phone;
       }
@@ -375,12 +476,16 @@ class DatabaseService {
     return null;
   }
 
-  // Save a new notification to Firestore
+  // Save a new notification to Firestore.
+  // pushSent defaults to true so the onNewNotification Cloud Function skips
+  // this doc (the local app already showed the banner). Set false only when
+  // the server should send an FCM push for this notification.
   Future<void> saveNotification({
     required String userId,
     required String title,
     required String body,
     String type = 'general',
+    bool pushSent = true,
   }) async {
     await _firestore.collection('notifications').add({
       'userId': userId,
@@ -388,18 +493,23 @@ class DatabaseService {
       'body': body,
       'type': type,
       'isRead': false,
+      'pushSent': pushSent,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
   // --- Review Operations ---
 
-  /// Stream all reviews for a salon, ordered by date desc.
-  Stream<List<ReviewModel>> getReviews(String salonId) {
+  /// Stream reviews posted after [since] for [salonId], newest first.
+  /// Server-side filtered by `createdAt` — no arbitrary limit, scales
+  /// whatever the salon's total review count.
+  /// Requires composite index: reviews (salonId ASC, createdAt ASC).
+  Stream<List<ReviewModel>> streamRecentReviews(String salonId, DateTime since) {
     return _firestore
         .collection('reviews')
         .where('salonId', isEqualTo: salonId)
-        .limit(30)
+        .where('createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(since))
         .snapshots()
         .map((snap) {
           final list = snap.docs
@@ -441,64 +551,6 @@ class DatabaseService {
       }
     }
     return total;
-  }
-
-  /// Awards 5 % of [bookingAmount] as points to [userId] for [salonId].
-  /// Idempotent (one award per booking). Prevents self-charging.
-  Future<void> awardPoints({
-    required String userId,
-    required String salonId,
-    required double bookingAmount,
-    required String bookingId,
-  }) async {
-    // Anti-fraud: never award if the client is the salon owner
-    final salonDoc = await _firestore.collection('salons').doc(salonId).get();
-    if (!salonDoc.exists) return;
-    final ownerId =
-        ((salonDoc.data() as Map<String, dynamic>)['ownerId'] as String?) ?? '';
-    if (ownerId == userId) return;
-
-    // Idempotency: skip if points were already awarded for this booking
-    final existing = await _firestore
-        .collection('points')
-        .where('bookingId', isEqualTo: bookingId)
-        .limit(1)
-        .get();
-    if (existing.docs.isNotEmpty) return;
-
-    final pointAmount = bookingAmount * 0.05;
-    if (pointAmount <= 0) return;
-
-    await _firestore.collection('points').add({
-      'userId': userId,
-      'salonId': salonId,
-      'amount': pointAmount,
-      'bookingId': bookingId,
-      'isUsed': false,
-      'expiresAt': Timestamp.fromDate(
-          DateTime.now().add(const Duration(days: 30))),
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  /// Marks all valid (non-expired) points for [userId] at [salonId] as used.
-  Future<void> redeemPoints(String userId, String salonId) async {
-    final now = DateTime.now();
-    final snap = await _firestore
-        .collection('points')
-        .where('userId', isEqualTo: userId)
-        .where('salonId', isEqualTo: salonId)
-        .where('isUsed', isEqualTo: false)
-        .get();
-    final batch = _firestore.batch();
-    for (final doc in snap.docs) {
-      final expiresAt =
-          ((doc.data())['expiresAt'] as Timestamp).toDate();
-      if (expiresAt.isAfter(now)) {
-        batch.update(doc.reference, {'isUsed': true});
-      }
-    }
-    await batch.commit();
   }
 
   // ── Inventory Operations ──────────────────────────────────────────────────
@@ -678,38 +730,36 @@ class DatabaseService {
   }
 
   /// One-shot fetch of appointments for a salon on a specific date (non-cancelled).
+  /// Server-side filtered by date — requires index (salonId, dateTime).
   Future<List<AppointmentModel>> getSalonAppointmentsForDate(
       String salonId, DateTime date) async {
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
-    // Single-field where to avoid composite index requirement;
-    // date filtering done client-side.
     final snap = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
+        .where('dateTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where('dateTime', isLessThan: Timestamp.fromDate(endOfDay))
         .get();
-    return snap.docs
-        .map((d) => AppointmentModel.fromFirestore(d))
-        .where((a) =>
-            a.status != 'cancelled' &&
-            !a.dateTime.isBefore(startOfDay) &&
-            a.dateTime.isBefore(endOfDay))
-        .toList();
+    final all = await _enrichWithPrivate(snap.docs);
+    return all.where((a) => a.status != 'cancelled').toList();
   }
 
   /// Get all appointments for a salon within a date range (for calendar dots).
+  /// Server-side filtered by date — requires index (salonId, dateTime).
   Future<List<AppointmentModel>> getSalonAppointmentsForRange(
       String salonId, DateTime start, DateTime end) async {
+    final endExclusive = end.add(const Duration(days: 1));
     final snap = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('dateTime', isLessThan: Timestamp.fromDate(endExclusive))
         .get();
     return snap.docs
         .map((d) => AppointmentModel.fromFirestore(d))
-        .where((a) =>
-            a.status != 'cancelled' &&
-            !a.dateTime.isBefore(start) &&
-            a.dateTime.isBefore(end.add(const Duration(days: 1))))
+        .where((a) => a.status != 'cancelled')
         .toList();
   }
 
@@ -744,6 +794,7 @@ class DatabaseService {
       createdAt: member.createdAt,
       unavailableDates: member.unavailableDates,
       assignedServiceNames: member.assignedServiceNames,
+      agendaColorIndex: member.agendaColorIndex,
     );
   }
 
@@ -768,6 +819,47 @@ class DatabaseService {
         .delete();
   }
 
+  /// Get upcoming appointments assigned to a member (one-shot).
+  /// Used when deleting a member to warn about active bookings.
+  Future<List<AppointmentModel>> getUpcomingAppointmentsForMember(
+      String salonId, String memberId) async {
+    final snap = await _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .where('assignedMemberId', isEqualTo: memberId)
+        .where('status', isEqualTo: 'upcoming')
+        .get();
+    final list = await _enrichWithPrivate(snap.docs);
+    list.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    return list;
+  }
+
+  /// Get all upcoming appointments for a salon (one-shot).
+  /// Used by reassignment logic to check member availability.
+  Future<List<AppointmentModel>> getUpcomingAppointmentsForSalon(
+      String salonId) async {
+    final snap = await _firestore
+        .collection('appointments')
+        .where('salonId', isEqualTo: salonId)
+        .where('status', isEqualTo: 'upcoming')
+        .get();
+    return snap.docs.map((d) => AppointmentModel.fromFirestore(d)).toList();
+  }
+
+  /// Batch reassign appointments to new members.
+  /// [assignments] maps appointmentId → {memberId, memberName}.
+  Future<void> reassignAppointments(
+      Map<String, Map<String, String>> assignments) async {
+    final batch = _firestore.batch();
+    assignments.forEach((apptId, data) {
+      batch.update(_firestore.collection('appointments').doc(apptId), {
+        'assignedMemberId': data['memberId'],
+        'assignedMemberName': data['memberName'],
+      });
+    });
+    await batch.commit();
+  }
+
   /// Assign an appointment to a team member.
   Future<void> assignAppointment(
       String appointmentId, String memberId, String memberName) async {
@@ -786,10 +878,8 @@ class DatabaseService {
         .where('assignedMemberId', isEqualTo: memberId)
         .limit(50)
         .snapshots()
-        .map((snap) {
-          final list = snap.docs
-              .map((d) => AppointmentModel.fromFirestore(d))
-              .toList();
+        .asyncMap((snap) async {
+          final list = await _enrichWithPrivate(snap.docs);
           list.sort((a, b) => b.dateTime.compareTo(a.dateTime));
           return list;
         });
@@ -878,6 +968,19 @@ class DatabaseService {
     return _firestore.collection('waitlist').doc(entryId).update({'notified': true});
   }
 
+  /// Live stream of pending (not yet notified) waitlist entries for a salon.
+  Stream<List<WaitlistEntry>> getSalonWaitlistPending(String salonId) {
+    return _firestore
+        .collection('waitlist')
+        .where('salonId', isEqualTo: salonId)
+        .where('notified', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => WaitlistEntry.fromFirestore(d))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  }
+
   /// Remove a waitlist entry.
   Future<void> removeFromWaitlist(String entryId) {
     return _firestore.collection('waitlist').doc(entryId).delete();
@@ -899,7 +1002,8 @@ class DatabaseService {
 
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Submit a review and recalculate the salon average rating atomically.
+  /// Submit a review. Salon rating/reviewCount are recomputed server-side
+  /// by the `onReviewWrite` Cloud Function — clients only write the review doc.
   Future<void> submitReview({
     required String salonId,
     required String userId,
@@ -907,33 +1011,13 @@ class DatabaseService {
     required int rating,
     required String comment,
   }) async {
-    final reviewRef = _firestore.collection('reviews').doc();
-    final salonRef = _firestore.collection('salons').doc(salonId);
-
-    await _firestore.runTransaction((tx) async {
-      final salonSnap = await tx.get(salonRef);
-      final data = salonSnap.data() as Map<String, dynamic>;
-      final currentCount = (data['reviewCount'] ?? 0) as int;
-      final currentRating = (data['rating'] ?? 0.0).toDouble();
-
-      // Compute new average
-      final newCount = currentCount + 1;
-      final newRating =
-          ((currentRating * currentCount) + rating) / newCount;
-
-      tx.set(reviewRef, {
-        'salonId': salonId,
-        'userId': userId,
-        'userName': userName,
-        'rating': rating,
-        'comment': comment,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      tx.update(salonRef, {
-        'rating': double.parse(newRating.toStringAsFixed(1)),
-        'reviewCount': newCount,
-      });
+    await _firestore.collection('reviews').add({
+      'salonId': salonId,
+      'userId': userId,
+      'userName': userName,
+      'rating': rating,
+      'comment': comment,
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -1094,8 +1178,34 @@ class DatabaseService {
   }
 
   Future<void> updateOrderStatus(String orderId, String status) async {
-    await _firestore.collection('orders').doc(orderId).update({
-      'status': status,
+    final orderRef = _firestore.collection('orders').doc(orderId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(orderRef);
+      if (!snap.exists) return;
+      final prevStatus = (snap.data()?['status'] ?? '') as String;
+      if (prevStatus == status) return;
+
+      // Transitioning INTO cancelled from a non-cancelled state → restore stock.
+      // Read all product docs first (Firestore transactions require reads before writes),
+      // skip any that have been deleted since the order was placed.
+      final toRestore = <DocumentReference, int>{};
+      if (status == 'cancelled' && prevStatus != 'cancelled') {
+        final items = (snap.data()?['items'] as List?) ?? const [];
+        for (final raw in items) {
+          final map = raw as Map<String, dynamic>;
+          final productId = map['productId'] as String?;
+          final qty = (map['quantity'] as num?)?.toInt() ?? 0;
+          if (productId == null || productId.isEmpty || qty <= 0) continue;
+          final productRef = _firestore.collection('products').doc(productId);
+          final productSnap = await tx.get(productRef);
+          if (productSnap.exists) toRestore[productRef] = qty;
+        }
+      }
+
+      for (final entry in toRestore.entries) {
+        tx.update(entry.key, {'stock': FieldValue.increment(entry.value)});
+      }
+      tx.update(orderRef, {'status': status});
     });
   }
 

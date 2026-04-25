@@ -203,10 +203,13 @@ class MessageService {
   }
 
   /// All conversations for a salon (owner view), sorted by most recent.
-  Stream<List<ConversationModel>> getOwnerConversations(String salonId) {
+  /// Filter by ownerId (not salonId) so the Firestore rule
+  /// `read if resource.data.ownerId == request.auth.uid` can validate the
+  /// query is safe. `salonId == ownerId` by convention (salon doc id = owner uid).
+  Stream<List<ConversationModel>> getOwnerConversations(String ownerId) {
     return _db
         .collection('conversations')
-        .where('salonId', isEqualTo: salonId)
+        .where('ownerId', isEqualTo: ownerId)
         .snapshots()
         .map((snap) {
       final list =
@@ -229,10 +232,13 @@ class MessageService {
   }
 
   /// Total unread messages for the owner across their salon.
-  Stream<int> getOwnerUnreadCount(String salonId) {
+  /// Filter by ownerId so the rule can validate. Requires composite index
+  /// (ownerId ASC, unreadByOwner ASC) — Firestore will prompt a create link
+  /// in the console on first call.
+  Stream<int> getOwnerUnreadCount(String ownerId) {
     return _db
         .collection('conversations')
-        .where('salonId', isEqualTo: salonId)
+        .where('ownerId', isEqualTo: ownerId)
         .where('unreadByOwner', isGreaterThan: 0)
         .snapshots()
         .map((snap) => snap.docs.fold<int>(

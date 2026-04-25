@@ -11,6 +11,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
+import '../widgets/country_phone_field.dart';
+import '../widgets/whatsapp_otp_dialog.dart';
 import '../models/user_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
@@ -20,6 +22,8 @@ import '../providers/locale_provider.dart';
 import '../services/locale_service.dart';
 import '../utils/media_compressor.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'login_screen.dart';
+import 'owner_subscription_screen.dart';
 
 String _hashPin(String pin) {
   final bytes = utf8.encode(pin);
@@ -141,8 +145,10 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       if (mounted) {
         ref.invalidate(authStateProvider);
         ref.invalidate(userModelProvider);
-        Navigator.of(context, rootNavigator: true)
-            .popUntil((route) => route.isFirst);
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -204,9 +210,13 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     const SizedBox(height: 20),
 
                     // ── Mon compte ─────────────────────────────────────────
-                    _AccountCard(user: user, onSaved: () {}),
-
-                    const SizedBox(height: 8),
+                    // Hidden for employees (code-logged): they don't have a
+                    // users/{uid} doc so editing would silently fail, and a
+                    // phone field here could confuse the account/phone flow.
+                    if (ref.watch(employeeSessionProvider).value == null) ...[
+                      _AccountCard(user: user, onSaved: () {}),
+                      const SizedBox(height: 8),
+                    ],
 
                     // ── Section spécifique au type ─────────────────────────
                     if (isOwner) ...[
@@ -523,9 +533,9 @@ class _AccountCard extends StatelessWidget {
               label: l?.tr('profile_email') ?? 'Email',
               value: user.email),
           _ProfileRow(
-              icon: Icons.phone_outlined,
-              label: l?.tr('profile_phone') ?? 'Téléphone',
-              value: user.phone.isNotEmpty ? user.phone : '—'),
+              icon: FontAwesomeIcons.whatsapp,
+              label: l?.tr('profile_whatsapp') ?? 'WhatsApp',
+              value: user.whatsapp.isNotEmpty ? user.whatsapp : '—'),
           _ProfileRow(
               icon: Icons.location_city_outlined,
               label: l?.tr('profile_city') ?? 'Ville',
@@ -609,8 +619,8 @@ class _ClientStatsCard extends StatelessWidget {
           Expanded(
             child: _StatTile(
               icon: Icons.favorite_border_rounded,
-              color: const Color(0xFFDB2777),
-              bg: const Color(0xFFFDF2F8),
+              color: AppColors.brand600,
+              bg: AppColors.brand50,
               value: '${user.favorites.length}',
               label: l?.tr('profile_favorites') ?? 'Favoris',
             ),
@@ -802,15 +812,17 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
   late final TextEditingController _instagramCtrl;
   late final TextEditingController _facebookCtrl;
   late final TextEditingController _tiktokCtrl;
-  late final TextEditingController _whatsappCtrl;
+  String _whatsappInitial = ''; // raw value from Firestore (used as initial for the picker)
+  String? _whatsappE164; // current edited value
   bool _initialized = false;
 
-  void _initControllers(Map<String, String> links) {
+  void _initControllers(Map<String, String> links, String country) {
     if (_initialized) return;
     _instagramCtrl = TextEditingController(text: links['instagram'] ?? '');
     _facebookCtrl = TextEditingController(text: links['facebook'] ?? '');
     _tiktokCtrl = TextEditingController(text: links['tiktok'] ?? '');
-    _whatsappCtrl = TextEditingController(text: links['whatsapp'] ?? '');
+    _whatsappInitial = links['whatsapp'] ?? '';
+    _whatsappE164 = _whatsappInitial.isEmpty ? null : _whatsappInitial;
     _initialized = true;
   }
 
@@ -820,7 +832,6 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
       _instagramCtrl.dispose();
       _facebookCtrl.dispose();
       _tiktokCtrl.dispose();
-      _whatsappCtrl.dispose();
     }
     super.dispose();
   }
@@ -833,7 +844,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
           'instagram': _instagramCtrl.text.trim().replaceAll('@', ''),
           'facebook': _facebookCtrl.text.trim().replaceAll('@', ''),
           'tiktok': _tiktokCtrl.text.trim().replaceAll('@', ''),
-          'whatsapp': _whatsappCtrl.text.trim(),
+          'whatsapp': _whatsappE164 ?? '',
         },
       });
       ref.invalidate(ownerSalonProvider);
@@ -866,7 +877,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
     final salon = salonAsync.value;
     if (salon == null) return const SizedBox.shrink();
 
-    _initControllers(salon.socialLinks);
+    _initControllers(salon.socialLinks, salon.country);
 
     final l = AppLocalizations.of(context);
     return _Card(
@@ -918,13 +929,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
             controller: _tiktokCtrl,
             hint: 'nom_utilisateur',
           ),
-          _socialRow(
-            icon: FontAwesomeIcons.whatsapp,
-            color: const Color(0xFF25D366),
-            label: 'WhatsApp',
-            controller: _whatsappCtrl,
-            hint: '+212...',
-          ),
+          _whatsappRow(),
         ],
       ),
     );
@@ -980,6 +985,44 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
                           fontStyle: controller.text.isEmpty
                               ? FontStyle.italic
                               : FontStyle.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _whatsappRow() {
+    final displayValue = _whatsappE164 ?? _whatsappInitial;
+    final hasValue = displayValue.trim().isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _editing
+                ? CountryPhoneField(
+                    initialE164: _whatsappInitial,
+                    onChanged: (v) => _whatsappE164 = v,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('WhatsApp',
+                          style: const TextStyle(fontSize: 11, color: AppColors.secondary400)),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasValue ? displayValue : (AppLocalizations.of(context)?.tr('profile_social_not_set') ?? 'Non renseigné'),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: hasValue ? AppColors.brand950 : AppColors.secondary300,
+                          fontStyle: hasValue ? FontStyle.normal : FontStyle.italic,
                         ),
                       ),
                     ],
@@ -1140,12 +1183,27 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
           if (widget.user.userType == UserType.owner) ...[
             _SettingsRow(
               icon: Icons.pin_outlined,
-              iconColor: const Color(0xFF7C3AED),
+              iconColor: AppColors.brand600,
               iconBg: const Color(0xFFF5F3FF),
               label: widget.user.pinHash != null
                   ? (l?.tr('profile_change_pin') ?? 'Changer le PIN de profil')
                   : (l?.tr('profile_set_pin') ?? 'Définir un PIN de profil'),
               onTap: _openChangePin,
+            ),
+            const Divider(height: 1, indent: 46),
+
+            // ── Abonnement (propriétaire uniquement) ────────────────────
+            _SettingsRow(
+              icon: Icons.workspace_premium_rounded,
+              iconColor: const Color(0xFFB45309),
+              iconBg: const Color(0xFFFEF3C7),
+              label: l?.tr('menu_subscription') ?? 'Mon abonnement',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OwnerSubscriptionScreen(),
+                ),
+              ),
             ),
             const Divider(height: 1, indent: 46),
           ],
@@ -2052,7 +2110,8 @@ class _EditProfileSheet extends StatefulWidget {
 
 class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _name;
-  late final TextEditingController _phone;
+  late final String _whatsappInitial;
+  String? _whatsappE164;
   late final TextEditingController _city;
   bool _loading = false;
 
@@ -2060,14 +2119,14 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.user.fullName);
-    _phone = TextEditingController(text: widget.user.phone);
+    _whatsappInitial = widget.user.whatsapp;
+    _whatsappE164 = _whatsappInitial.isEmpty ? null : _whatsappInitial;
     _city = TextEditingController(text: widget.user.city);
   }
 
   @override
   void dispose() {
     _name.dispose();
-    _phone.dispose();
     _city.dispose();
     super.dispose();
   }
@@ -2075,13 +2134,27 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   Future<void> _save() async {
     if (_name.text.trim().isEmpty) return;
     setState(() => _loading = true);
+    final newWa = _whatsappE164 ?? widget.user.whatsapp;
+    final waChanged = newWa.isNotEmpty && newWa != _whatsappInitial;
+
     try {
+      // If the WhatsApp changed, run the WA OTP claim flow. The CF
+      // atomically verifies, releases from any other account, and writes
+      // the new WA on the caller's user doc — no separate write needed.
+      if (waChanged) {
+        final result = await WhatsappOtpDialog.showForClaim(context, newWa);
+        if (!mounted) return;
+        if (result == null) {
+          setState(() => _loading = false);
+          return;
+        }
+      }
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.user.id)
           .update({
         'fullName': _name.text.trim(),
-        'phone': _phone.text.trim(),
         'city': _city.text.trim(),
       });
       widget.onSaved();
@@ -2128,10 +2201,15 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           const SizedBox(height: 20),
           _InputField(controller: _name, label: l?.tr('profile_full_name') ?? 'Nom complet'),
           const SizedBox(height: 12),
-          _InputField(
-              controller: _phone,
-              label: l?.tr('profile_phone') ?? 'Téléphone',
-              keyboardType: TextInputType.phone),
+          Text(
+            l?.tr('profile_whatsapp') ?? 'WhatsApp',
+            style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
+          ),
+          const SizedBox(height: 6),
+          CountryPhoneField(
+            initialE164: _whatsappInitial,
+            onChanged: (v) => _whatsappE164 = v,
+          ),
           const SizedBox(height: 12),
           _InputField(controller: _city, label: l?.tr('profile_city') ?? 'Ville'),
           const SizedBox(height: 24),

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
-import '../services/notification_service.dart';
 import '../services/app_localizations.dart';
 
 class RegistrationSuccessScreen extends StatefulWidget {
@@ -18,37 +16,11 @@ class RegistrationSuccessScreen extends StatefulWidget {
 }
 
 class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
-  bool _notificationsEnabled = false;
-  final NotificationService _notificationService = NotificationService();
-
-  Future<void> _goToDashboard() async {
-    if (_notificationsEnabled) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        try {
-          await _notificationService.saveTokenForUser(user.uid);
-        } catch (e) {
-          debugPrint('Erreur FCM token: $e');
-        }
-      }
-    }
-
-    if (!mounted) return;
-
+  void _goToDashboard() {
     Navigator.of(
       context,
       rootNavigator: true,
     ).popUntil((route) => route.isFirst);
-  }
-
-  Future<void> _handleNotificationToggle(bool value) async {
-    setState(() {
-      _notificationsEnabled = value;
-    });
-
-    if (value) {
-      await _notificationService.initialize();
-    }
   }
 
   @override
@@ -163,61 +135,6 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
                           'Compte pr\u00eat \u00e0 utiliser',
                         ),
                       ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Notification Toggle
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: AppColors.secondary200),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: AppColors.brand50,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: AppColors.brand600,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l?.tr('success_enable_notif') ?? 'Activer les notifications',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.secondary900,
-                              ),
-                            ),
-                            Text(
-                              l?.tr('success_notif_desc') ?? 'Recevez des alertes pour les nouvelles r\u00e9servations',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.secondary500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _notificationsEnabled,
-                        onChanged: _handleNotificationToggle,
-                        activeColor: AppColors.brand500,
-                        activeTrackColor: AppColors.brand200,
-                      ),
                     ],
                   ),
                 ),

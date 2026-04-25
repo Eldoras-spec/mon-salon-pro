@@ -6,10 +6,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../models/salon_model.dart';
+import '../models/team_member_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
@@ -18,7 +20,12 @@ import '../services/database_service.dart';
 import '../services/app_localizations.dart';
 import '../services/message_service.dart';
 import '../utils/currency_helper.dart';
+import 'owner_subscription_screen.dart';
 import 'conversations_screen.dart';
+import '../widgets/owner_tasks_card.dart';
+import '../widgets/owner_setup_card.dart';
+import '../providers/owner_tasks_provider.dart';
+import '../providers/setup_tasks_provider.dart';
 
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
@@ -48,6 +55,17 @@ class OwnerHomeScreen extends ConsumerWidget {
     return dt.year == n.year && dt.month == n.month && dt.day == n.day;
   }
 
+  // Show the trial reminder UI when the salon is on Essentiel, still
+  // inside trial, and within 7 days of expiry.
+  static bool _shouldShowTrialBanner(SalonModel salon) {
+    if (!salon.isEssentiel) return false;
+    final end = salon.trialEndsAt;
+    if (end == null) return false;
+    final now = DateTime.now();
+    if (end.isBefore(now)) return false;
+    return end.difference(now).inDays <= 7;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(userModelProvider);
@@ -72,12 +90,8 @@ class OwnerHomeScreen extends ConsumerWidget {
               .toList()
             ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
-          final totalRevenue = appointments
-              .where((a) => a.status == 'completed')
-              .fold<double>(0, (s, a) => s + a.price);
-
-          final completedCount =
-              appointments.where((a) => a.status == 'completed').length;
+          // Current-month revenue + completed count come from dedicated
+          // server-side providers (see ownerCurrentMonth* providers).
 
           final recentAll = appointments.take(5).toList();
 
@@ -118,9 +132,9 @@ class OwnerHomeScreen extends ConsumerWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          Color(0xFF831843), // brand900
-                          Color(0xFFBE185D), // brand700
-                          Color(0xFFDB2777), // brand600
+                          AppColors.brand900,
+                          AppColors.brand700,
+                          AppColors.brand600,
                         ],
                       ),
                       borderRadius: BorderRadius.only(
@@ -163,30 +177,33 @@ class OwnerHomeScreen extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                // Profile switch
-                                GestureDetector(
-                                  onTap: () {
-                                    ref
-                                        .read(activeTeamMemberProvider.notifier)
-                                        .state = null;
-                                    ref
-                                        .read(profileSelectedProvider.notifier)
-                                        .state = false;
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
+                                // Profile switch — hidden when logged in via
+                                // employee code (no other profile to switch to).
+                                if (ref.watch(employeeSessionProvider).value == null) ...[
+                                  GestureDetector(
+                                    onTap: () {
+                                      ref
+                                          .read(activeTeamMemberProvider.notifier)
+                                          .state = null;
+                                      ref
+                                          .read(profileSelectedProvider.notifier)
+                                          .state = false;
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                          Icons.swap_horiz_rounded,
+                                          size: 20,
+                                          color: Colors.white),
                                     ),
-                                    child: const Icon(
-                                        Icons.swap_horiz_rounded,
-                                        size: 20,
-                                        color: Colors.white),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
+                                  const SizedBox(width: 8),
+                                ],
                                 // Security & Account
                                 // Messages shortcut with unread badge
                                 GestureDetector(
@@ -322,12 +339,19 @@ class OwnerHomeScreen extends ConsumerWidget {
                                   icon: Icons.calendar_today_rounded,
                                 ),
                                 const SizedBox(width: 10),
-                                _GlassStat(
-                                  value: appointmentsAsync.isLoading
-                                      ? '…'
-                                      : '$completedCount',
-                                  label: l?.tr('home_completed') ?? 'Terminés',
-                                  icon: Icons.check_circle_outline_rounded,
+                                Consumer(
+                                  builder: (context, ref, _) {
+                                    final countAsync = ref.watch(
+                                        ownerCurrentMonthCompletedCountProvider);
+                                    return _GlassStat(
+                                      value: countAsync.isLoading
+                                          ? '…'
+                                          : '${countAsync.value ?? 0}',
+                                      label: l?.tr('home_completed_month') ??
+                                          'Terminés ce mois',
+                                      icon: Icons.check_circle_outline_rounded,
+                                    );
+                                  },
                                 ),
                                 const SizedBox(width: 10),
                                 _GlassStat(
@@ -351,19 +375,71 @@ class OwnerHomeScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Side-effect widget: checks trial countdown and pops
+                      // a reminder dialog at most once per day during the
+                      // last 7 days of Essentiel trial. Renders nothing.
+                      if (salon != null) _TrialReminderWatcher(salon: salon),
+
                       const SizedBox(height: 16),
 
-                      // Revenue + salon card
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _RevenueCard(
-                          totalRevenue: totalRevenue,
-                          salon: salon,
-                          loading: appointmentsAsync.isLoading,
+                      // ── Trial ends soon banner (≤ 7 days) ─────────────
+                      // Persistent inline reminder — the popup above fires
+                      // only once per day, the banner is always visible.
+                      if (salon != null && _shouldShowTrialBanner(salon)) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _TrialEndingSoonBanner(salon: salon),
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                      ],
 
-                      const SizedBox(height: 16),
+                      // ── Free team cap banners ─────────────────────────
+                      // Either a countdown banner during the 30-day grace
+                      // period, or a post-grace banner showing how many
+                      // members were deactivated. Both send to the upgrade
+                      // screen. Owner only — gerants/members don't see them.
+                      if (salon != null && activeMember?.role != 'gerant')
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final team = ref.watch(ownerTeamProvider).value
+                                ?? const <TeamMemberModel>[];
+                            final now = DateTime.now();
+                            final graceEnd = salon.freeCapGraceEndsAt;
+                            final inGrace = salon.isFree &&
+                                graceEnd != null &&
+                                now.isBefore(graceEnd) &&
+                                team.length > 2;
+                            final deactivatedCount = team
+                                .where((m) => m.isDeactivatedByCap)
+                                .length;
+                            if (inGrace) {
+                              return Column(children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: _TeamCapGraceBanner(
+                                    graceEnd: graceEnd,
+                                    teamCount: team.length,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ]);
+                            }
+                            if (salon.isFree && deactivatedCount > 0) {
+                              return Column(children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: _TeamCapDeactivatedBanner(
+                                    deactivatedCount: deactivatedCount,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ]);
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
 
                       // ── Salon web link ─────────────────────────────────
                       if (salon != null)
@@ -372,6 +448,53 @@ class OwnerHomeScreen extends ConsumerWidget {
                           child: _SalonLinkCard(salon: salon),
                         ),
                       if (salon != null) const SizedBox(height: 16),
+
+                      // Setup card — owner only. Gerants don't need the
+                      // onboarding tasks (salon setup is owner's responsibility).
+                      if (activeMember?.role != 'gerant') ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: OwnerSetupCard(),
+                        ),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final hasSetup =
+                                ref.watch(setupTasksProvider).isNotEmpty;
+                            return SizedBox(height: hasSetup ? 16 : 0);
+                          },
+                        ),
+                      ],
+
+                      // Tasks to do (hidden when empty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: OwnerTasksCard(),
+                      ),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final hasTasks =
+                              ref.watch(ownerTasksProvider).isNotEmpty;
+                          return SizedBox(height: hasTasks ? 16 : 0);
+                        },
+                      ),
+
+                      // Revenue card (current month)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final revenueAsync =
+                                ref.watch(ownerCurrentMonthRevenueProvider);
+                            return _RevenueCard(
+                              monthlyRevenue: revenueAsync.value ?? 0,
+                              salon: salon,
+                              loading: revenueAsync.isLoading,
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
 
                       // ── Weekly chart ─────────────────────────────────────
                       Padding(
@@ -510,6 +633,11 @@ class OwnerHomeScreen extends ConsumerWidget {
                           ),
                         ),
 
+                      const SizedBox(height: 28),
+
+                      // ── Add-on services (premium Mon Salon offerings) ───
+                      const _AddOnServicesSection(),
+
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -518,6 +646,316 @@ class OwnerHomeScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// ─── Add-on services section ─────────────────────────────────────────────────
+//
+// Horizontal carousel of premium services offered by Mon Salon to salon owners.
+// Each tap opens WhatsApp on +212 663 32 24 29 with a pre-filled message
+// identifying which service the owner is interested in.
+
+class _AddOnServicesSection extends StatelessWidget {
+  const _AddOnServicesSection();
+
+  static const String _phone = '212663322429';
+
+  Future<void> _open(String message) async {
+    final url = Uri.parse(
+      'https://wa.me/$_phone?text=${Uri.encodeComponent(message)}',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+
+    final services = <_AddOnService>[
+      _AddOnService(
+        icon: Icons.campaign_rounded,
+        gradient: const [Color(0xFF7C3AED), Color(0xFFEC4899)],
+        title: l?.tr('addon_social_campaign_title') ?? 'Campagne social media',
+        subtitle: l?.tr('addon_social_campaign_sub') ??
+            'Instagram & TikTok clé en main',
+        message: l?.tr('addon_social_campaign_msg') ??
+            "Bonjour, je souhaite être accompagné pour créer une campagne publicitaire Instagram/TikTok pour mon salon.",
+      ),
+      _AddOnService(
+        icon: Icons.language_rounded,
+        gradient: const [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
+        title: l?.tr('addon_custom_website_title') ?? 'Site web sur mesure',
+        subtitle: l?.tr('addon_custom_website_sub') ??
+            'Vitrine pro & booking intégré',
+        message: l?.tr('addon_custom_website_msg') ??
+            "Bonjour, je suis intéressé par la création d'un site web personnalisé pour mon salon.",
+      ),
+      _AddOnService(
+        icon: Icons.tune_rounded,
+        gradient: const [Color(0xFF10B981), Color(0xFF84CC16)],
+        title: l?.tr('addon_custom_option_title') ?? 'Option sur mesure',
+        subtitle: l?.tr('addon_custom_option_sub') ??
+            'Feature dédiée pour votre salon',
+        message: l?.tr('addon_custom_option_msg') ??
+            "Bonjour, j'aimerais discuter d'une option sur mesure pour mon salon (intégration, feature spécifique…).",
+      ),
+      _AddOnService(
+        icon: Icons.photo_camera_rounded,
+        gradient: const [Color(0xFFF59E0B), Color(0xFFEF4444)],
+        title: l?.tr('addon_photo_title') ?? 'Shooting photo pro',
+        subtitle: l?.tr('addon_photo_sub') ?? 'Salon, équipe & prestations',
+        message: l?.tr('addon_photo_msg') ??
+            "Bonjour, je souhaite faire un shooting photo professionnel de mon salon et de mes prestations.",
+      ),
+      _AddOnService(
+        icon: Icons.movie_creation_rounded,
+        gradient: const [Color(0xFFEF4444), Color(0xFFEC4899)],
+        title: l?.tr('addon_video_title') ?? 'Vidéos TikTok / Reels',
+        subtitle: l?.tr('addon_video_sub') ?? 'Contenu régulier viral',
+        message: l?.tr('addon_video_msg') ??
+            "Bonjour, je cherche un accompagnement pour créer du contenu vidéo (TikTok/Reels) pour mon salon.",
+      ),
+      _AddOnService(
+        icon: Icons.location_on_rounded,
+        gradient: const [Color(0xFF2563EB), Color(0xFF8B5CF6)],
+        title: l?.tr('addon_google_seo_title') ?? 'Google & SEO local',
+        subtitle: l?.tr('addon_google_seo_sub') ??
+            'Fiche Google + gestion des avis',
+        message: l?.tr('addon_google_seo_msg') ??
+            "Bonjour, j'aimerais optimiser ma fiche Google + gérer les avis pour attirer plus de clients locaux.",
+      ),
+      _AddOnService(
+        icon: Icons.school_rounded,
+        gradient: const [Color(0xFF6366F1), Color(0xFFA855F7)],
+        title: l?.tr('addon_training_title') ?? 'Formation équipe',
+        subtitle: l?.tr('addon_training_sub') ??
+            'Service client & techniques de vente',
+        message: l?.tr('addon_training_msg') ??
+            "Bonjour, je suis intéressé par une formation pour mon équipe (service client, techniques de vente).",
+      ),
+      _AddOnService(
+        icon: Icons.palette_rounded,
+        gradient: const [Color(0xFFEC4899), Color(0xFFF97316)],
+        title: l?.tr('addon_branding_title') ?? 'Logo & identité visuelle',
+        subtitle: l?.tr('addon_branding_sub') ??
+            'Création ou rebranding complet',
+        message: l?.tr('addon_branding_msg') ??
+            "Bonjour, je souhaite créer/refaire le logo et l'identité visuelle de mon salon.",
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with title + subtitle
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF558148), Color(0xFF84CC16)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.auto_awesome_rounded,
+                    size: 16, color: Colors.white),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l?.tr('addon_section_title') ??
+                          'Propulsez votre salon',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brand950,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      l?.tr('addon_section_subtitle') ??
+                          'Services premium Mon Salon',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.secondary500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Horizontal carousel
+        SizedBox(
+          height: 168,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: services.length,
+            itemBuilder: (_, i) => _AddOnCard(
+              service: services[i],
+              onTap: () => _open(services[i].message),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddOnService {
+  const _AddOnService({
+    required this.icon,
+    required this.gradient,
+    required this.title,
+    required this.subtitle,
+    required this.message,
+  });
+  final IconData icon;
+  final List<Color> gradient;
+  final String title;
+  final String subtitle;
+  final String message;
+}
+
+class _AddOnCard extends StatefulWidget {
+  const _AddOnCard({required this.service, required this.onTap});
+  final _AddOnService service;
+  final VoidCallback onTap;
+
+  @override
+  State<_AddOnCard> createState() => _AddOnCardState();
+}
+
+class _AddOnCardState extends State<_AddOnCard> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final s = widget.service;
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          width: 196,
+          margin: const EdgeInsets.only(right: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: s.gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: s.gradient.first.withValues(alpha: 0.28),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Decorative background bubble (subtle depth)
+              Positioned(
+                top: -24,
+                right: -24,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(s.icon, color: Colors.white, size: 20),
+                  ),
+                  const Spacer(),
+                  Text(
+                    s.title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    s.subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.88),
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          l?.tr('addon_cta') ?? 'Discuter',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: s.gradient.last,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_rounded,
+                            size: 12, color: s.gradient.last),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -741,11 +1179,11 @@ class _GlassStat extends StatelessWidget {
 
 class _RevenueCard extends StatelessWidget {
   const _RevenueCard({
-    required this.totalRevenue,
+    required this.monthlyRevenue,
     required this.salon,
     required this.loading,
   });
-  final double totalRevenue;
+  final double monthlyRevenue;
   final SalonModel? salon;
   final bool loading;
 
@@ -753,9 +1191,9 @@ class _RevenueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final currency = salon?.currency ?? 'MAD';
-    final revenueStr = totalRevenue >= 1000
-        ? '${(totalRevenue / 1000).toStringAsFixed(1)}k ${CurrencyHelper.symbol(currency)}'
-        : CurrencyHelper.format(totalRevenue, currency);
+    final revenueStr = monthlyRevenue >= 1000
+        ? '${(monthlyRevenue / 1000).toStringAsFixed(1)}k ${CurrencyHelper.symbol(currency)}'
+        : CurrencyHelper.format(monthlyRevenue, currency);
 
     final open =
         salon != null ? OwnerHomeScreen._isOpen(salon!.workingHours) : false;
@@ -794,7 +1232,7 @@ class _RevenueCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      l?.tr('home_total_revenue') ?? 'Revenus totaux',
+                      l?.tr('home_monthly_revenue') ?? 'Revenus du mois',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary500,
@@ -1093,13 +1531,18 @@ class _AppointmentCardState extends State<_AppointmentCard> {
   void initState() {
     super.initState();
     final a = widget.appointment;
-    if (a.clientId == 'walk-in') {
-      _clientName = a.clientName ?? 'Client sans compte';
-    } else {
-      DatabaseService().getClientName(a.clientId).then((name) {
-        if (mounted) setState(() => _clientName = name);
-      });
+    final storedName = a.clientName?.trim();
+    if (storedName != null && storedName.isNotEmpty) {
+      _clientName = storedName;
+      return;
     }
+    if (a.clientId == 'walk-in') {
+      _clientName = 'Client sans compte';
+      return;
+    }
+    DatabaseService().getClientName(a.clientId).then((name) {
+      if (mounted) setState(() => _clientName = name);
+    });
   }
 
   @override
@@ -1488,7 +1931,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFFDF2F8), Color(0xFFFFFFFF)],
+          colors: [AppColors.brand50, const Color(0xFFFFFFFF)],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.brand100, width: 1),
@@ -1599,7 +2042,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                 const SizedBox(height: 14),
                 _AISectionRow(
                   icon: Icons.compare_arrows_rounded,
-                  color: const Color(0xFF7C3AED),
+                  color: AppColors.brand600,
                   text: _monthlyComparison!,
                   label: _isEn ? 'Monthly comparison' : 'Comparaison mensuelle',
                 ),
@@ -1971,6 +2414,369 @@ class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
             ),
           ],
 
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Trial reminder side-effect: once per day during the last 7 days
+// of Essentiel trial, pops a blocking dialog asking the owner to
+// upgrade before downgrade. `salon.lastTrialReminderAt` records
+// the last firing so we don't spam.
+// ═══════════════════════════════════════════════════════════════
+class _TrialReminderWatcher extends ConsumerStatefulWidget {
+  final SalonModel salon;
+  const _TrialReminderWatcher({required this.salon});
+
+  @override
+  ConsumerState<_TrialReminderWatcher> createState() =>
+      _TrialReminderWatcherState();
+}
+
+class _TrialReminderWatcherState
+    extends ConsumerState<_TrialReminderWatcher> {
+  bool _checked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checked) return;
+    _checked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShow());
+  }
+
+  Future<void> _maybeShow() async {
+    if (!mounted) return;
+    final salon = widget.salon;
+    if (!OwnerHomeScreen._shouldShowTrialBanner(salon)) return;
+
+    // Fetch latest lastTrialReminderAt to avoid showing twice when the
+    // home rebuilds (stream update comes after we wrote the field).
+    final doc = await FirebaseFirestore.instance
+        .collection('salons')
+        .doc(salon.id)
+        .get();
+    final last = doc.data()?['lastTrialReminderAt'];
+    final lastDt = last is Timestamp ? last.toDate() : null;
+    if (lastDt != null && OwnerHomeScreen._isToday(lastDt)) return;
+    if (!mounted) return;
+
+    final l = AppLocalizations.of(context);
+    final daysLeft =
+        salon.trialEndsAt!.difference(DateTime.now()).inDays;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.timer_outlined,
+              color: Colors.amber.shade800, size: 28),
+        ),
+        title: Text(
+          (l?.tr('trial_reminder_title') ??
+                  'Plus que {days} jours d\'essai gratuit')
+              .replaceAll('{days}', daysLeft.toString()),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          l?.tr('trial_reminder_body') ??
+              'Après cette date, votre salon passera automatiquement en Free (équipe limitée à 2 membres). Passez en Essentiel dès maintenant pour ne pas être interrompu.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary600),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: Text(l?.tr('trial_reminder_later') ?? 'Plus tard'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand600,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(l?.tr('trial_reminder_manage') ??
+                'Gérer mon abonnement'),
+          ),
+        ],
+      ),
+    );
+
+    // Stamp the flag regardless of the choice — we fired once today.
+    try {
+      await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(salon.id)
+          .update({
+        'lastTrialReminderAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) { /* best effort */ }
+
+    if (proceed == true && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const OwnerSubscriptionScreen(),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Inline banner (always visible) for the last 7 days of trial.
+// Complements the daily popup — user can tap "Gérer" to go to the
+// subscription screen anytime without waiting for next-day reminder.
+// ═══════════════════════════════════════════════════════════════
+class _TrialEndingSoonBanner extends StatelessWidget {
+  final SalonModel salon;
+  const _TrialEndingSoonBanner({required this.salon});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final daysLeft = salon.trialEndsAt!
+        .difference(DateTime.now())
+        .inDays;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.brand50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.brand200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined,
+              size: 22, color: AppColors.brand700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (l?.tr('trial_banner_title') ??
+                          'Plus que {days}j de trial Essentiel')
+                      .replaceAll('{days}', daysLeft.toString()),
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brand950),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l?.tr('trial_banner_body') ??
+                      'Passez en Essentiel pour éviter le downgrade en Free.',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary500,
+                      height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const OwnerSubscriptionScreen(),
+              ),
+            ),
+            child: Text(l?.tr('trial_banner_cta') ?? 'Gérer'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Orange warning banner shown on the owner home during the 30-day grace
+// period following a downgrade to Free while the team still has >2 members.
+// Displays a countdown and a CTA to the subscription screen.
+class _TeamCapGraceBanner extends StatelessWidget {
+  final DateTime graceEnd;
+  final int teamCount;
+  const _TeamCapGraceBanner({
+    required this.graceEnd,
+    required this.teamCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final daysLeft = graceEnd.difference(DateTime.now()).inDays;
+    final excess = teamCount - 2;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFCD34D),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.timer_outlined,
+                color: Color(0xFF92400E), size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (l?.tr('team_cap_grace_title') ??
+                          'Plan Free : {days} jour(s) avant désactivation')
+                      .replaceAll('{days}', daysLeft.toString()),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF78350F),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  (l?.tr('team_cap_grace_body') ??
+                          'Équipe limitée à 2 membres sur Free. {excess} membre(s) seront désactivés à la fin du délai. Passez en Essentiel pour tout conserver.')
+                      .replaceAll('{excess}', excess.toString()),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF92400E),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerSubscriptionScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_upward, size: 14),
+                  label: Text(
+                    l?.tr('team_cap_grace_cta') ?? 'Passer en Essentiel',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF92400E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Red banner shown on the owner home after the Free plan grace period
+// expired and CF `enforceFreeTeamCap` deactivated the excess members.
+// Indicates the count and pitches the upgrade to reactivate them.
+class _TeamCapDeactivatedBanner extends StatelessWidget {
+  final int deactivatedCount;
+  const _TeamCapDeactivatedBanner({required this.deactivatedCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE2E2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFCA5A5),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person_off_outlined,
+                color: Color(0xFF7F1D1D), size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (l?.tr('team_cap_deactivated_title') ??
+                          '{count} membre(s) désactivé(s)')
+                      .replaceAll('{count}', deactivatedCount.toString()),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF7F1D1D),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l?.tr('team_cap_deactivated_body') ??
+                      'Limite Free atteinte. Leurs données sont conservées. Passez en Essentiel pour les réactiver instantanément.',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF991B1B),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerSubscriptionScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.restart_alt_rounded, size: 14),
+                  label: Text(
+                    l?.tr('team_cap_deactivated_cta') ??
+                        'Réactiver via Essentiel',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7F1D1D),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -9,12 +9,19 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_button.dart';
+import '../widgets/country_phone_field.dart';
+import '../widgets/whatsapp_otp_dialog.dart';
 import '../services/app_localizations.dart';
+import '../services/plan_config.dart';
 import '../utils/currency_helper.dart';
-import 'owner_onboarding_step2_screen.dart';
+import 'owner_onboarding_plan_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
   const OwnerOnboardingStep1Screen({super.key});
@@ -31,7 +38,9 @@ class _OwnerOnboardingStep1ScreenState
   final _instagramController = TextEditingController();
   final _facebookController = TextEditingController();
   final _tiktokController = TextEditingController();
-  final _whatsappController = TextEditingController();
+  String? _whatsappE164;
+  String? _verifiedWhatsappE164; // last WA number successfully verified this session
+  bool _isProcessingNext = false; // guards _handleNext against re-entry
 
   // Structured address fields
   final _countryController = TextEditingController(text: 'Maroc');
@@ -45,6 +54,7 @@ class _OwnerOnboardingStep1ScreenState
   double? _longitude;
   bool _isGettingLocation = false;
   String _selectedCurrency = 'MAD';
+  String _selectedSalonType = 'femme';
 
   @override
   void initState() {
@@ -54,6 +64,20 @@ class _OwnerOnboardingStep1ScreenState
         _charCount = _descriptionController.text.length;
       });
     });
+    // Auto-detect currency via GeoJS (IP geolocation). The user can still
+    // override manually via the dropdown — we only prime the default.
+    _autoDetectCurrency();
+  }
+
+  Future<void> _autoDetectCurrency() async {
+    try {
+      final detected = await PlanConfig.detectCurrencyByIp();
+      if (!mounted) return;
+      // Only overwrite if the user hasn't already interacted with the picker.
+      if (_selectedCurrency == 'MAD') {
+        setState(() => _selectedCurrency = detected);
+      }
+    } catch (_) { /* best effort, fallback to MAD */ }
   }
 
   @override
@@ -63,7 +87,6 @@ class _OwnerOnboardingStep1ScreenState
     _instagramController.dispose();
     _facebookController.dispose();
     _tiktokController.dispose();
-    _whatsappController.dispose();
     _countryController.dispose();
     _streetController.dispose();
     _cityController.dispose();
@@ -133,7 +156,65 @@ class _OwnerOnboardingStep1ScreenState
     }
   }
 
+  /// Pre-checks WA availability for an owner account, then shows the
+  /// WhatsApp OTP dialog. On success, persists the WhatsApp number on
+  /// the user doc with `whatsappVerified: true`. Returns true on success,
+  /// false on cancel / availability conflict / OTP failure.
+  Future<bool> _verifyWhatsapp() async {
+    final whatsapp = _whatsappE164;
+    if (whatsapp == null) return false;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+
+    // Pre-check: same WhatsApp + same userType already exists?
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('checkWhatsappAvailable')
+          .call({'whatsapp': whatsapp, 'userType': 'owner'});
+      final available = (res.data is Map) && res.data['available'] == true;
+      if (!available) {
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Ce numéro WhatsApp est déjà utilisé pour un compte pro.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return false;
+      }
+    } catch (_) { /* non-fatal — proceed to OTP */ }
+
+    final result = await WhatsappOtpDialog.show(context, whatsapp);
+    if (result == null) return false; // user cancelled or OTP failed
+
+    // Mark verified IMMEDIATELY before any further awaits to prevent a
+    // concurrent _handleNext from re-entering the OTP flow.
+    _verifiedWhatsappE164 = whatsapp;
+
+    // Persist the WhatsApp number on the user doc.
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({'whatsapp': whatsapp, 'whatsappVerified': true});
+    } catch (_) { /* non-fatal */ }
+
+    return true;
+  }
+
   Future<void> _handleNext() async {
+    if (_isProcessingNext) return;
+    _isProcessingNext = true;
+    try {
+      await _handleNextInner();
+    } finally {
+      _isProcessingNext = false;
+    }
+  }
+
+  Future<void> _handleNextInner() async {
     final name = _salonNameController.text.trim();
     final city = _cityController.text.trim();
 
@@ -147,7 +228,7 @@ class _OwnerOnboardingStep1ScreenState
       return;
     }
 
-    if (_whatsappController.text.trim().isEmpty) {
+    if (_whatsappE164 == null || _whatsappE164!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l?.tr('onboarding_whatsapp_required') ?? 'Le numéro WhatsApp est obligatoire'),
@@ -155,6 +236,23 @@ class _OwnerOnboardingStep1ScreenState
         ),
       );
       return;
+    }
+
+    // Verify the WhatsApp number via WA OTP if not already verified this session.
+    if (_verifiedWhatsappE164 != _whatsappE164) {
+      final verified = await _verifyWhatsapp();
+      if (!verified) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l?.tr('onboarding_whatsapp_verify_required') ??
+                'La vérification WhatsApp est obligatoire. Complétez-la pour continuer.'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
     }
 
     // Build full address string
@@ -206,13 +304,14 @@ class _OwnerOnboardingStep1ScreenState
           : 'Maroc',
       'category': 'Beauté',
       'currency': _selectedCurrency,
+      'salonType': _selectedSalonType,
       'latitude': lat,
       'longitude': lng,
       'socialLinks': {
         'instagram': _instagramController.text.trim().replaceAll('@', ''),
         'facebook': _facebookController.text.trim().replaceAll('@', ''),
         'tiktok': _tiktokController.text.trim().replaceAll('@', ''),
-        'whatsapp': _whatsappController.text.trim(),
+        'whatsapp': _whatsappE164 ?? '',
       },
     };
 
@@ -220,7 +319,7 @@ class _OwnerOnboardingStep1ScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => OwnerOnboardingStep2Screen(salonData: salonData),
+        builder: (context) => OwnerOnboardingPlanScreen(salonData: salonData),
       ),
     );
   }
@@ -602,6 +701,47 @@ class _OwnerOnboardingStep1ScreenState
                 ),
                 const SizedBox(height: 14),
 
+                // Salon Type
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l?.tr('onboarding_salon_type') ?? 'Type de salon',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _SalonTypeChip(
+                          label: l?.tr('salon_type_femme') ?? 'Femme',
+                          icon: Icons.female,
+                          selected: _selectedSalonType == 'femme',
+                          onTap: () => setState(() => _selectedSalonType = 'femme'),
+                        ),
+                        const SizedBox(width: 8),
+                        _SalonTypeChip(
+                          label: l?.tr('salon_type_homme') ?? 'Homme',
+                          icon: Icons.male,
+                          selected: _selectedSalonType == 'homme',
+                          onTap: () => setState(() => _selectedSalonType = 'homme'),
+                        ),
+                        const SizedBox(width: 8),
+                        _SalonTypeChip(
+                          label: l?.tr('salon_type_mixte') ?? 'Mixte',
+                          icon: Icons.people,
+                          selected: _selectedSalonType == 'mixte',
+                          onTap: () => setState(() => _selectedSalonType = 'mixte'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
                 // Currency
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -799,6 +939,50 @@ class _OwnerOnboardingStep1ScreenState
                 ),
                 const SizedBox(height: 32),
 
+                // ── WhatsApp (required, WA OTP-verified) ─────────────
+                Row(
+                  children: [
+                    Text(
+                      l?.tr('onboarding_step1_whatsapp') ?? 'Numéro WhatsApp',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.secondary700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFE4E6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        l?.tr('onboarding_step1_required') ?? 'Obligatoire',
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFFBE123C)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l?.tr('onboarding_step1_whatsapp_hint') ??
+                      'Vérifié par WhatsApp. Utilisé pour recevoir les notifications de réservation et sécuriser votre compte.',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.secondary400),
+                ),
+                const SizedBox(height: 16),
+                CountryPhoneField(
+                  onChanged: (e164) {
+                    _whatsappE164 = e164;
+                    // Changing the WA number invalidates the previous verification.
+                    if (_verifiedWhatsappE164 != e164) _verifiedWhatsappE164 = null;
+                  },
+                ),
+                const SizedBox(height: 32),
+
                 // ── Social media ─────────────────────────────────────────────
                 Row(
                   children: [
@@ -856,18 +1040,6 @@ class _OwnerOnboardingStep1ScreenState
                   icon: FontAwesomeIcons.tiktok,
                   color: Colors.black87,
                 ),
-                const SizedBox(height: 12),
-                _buildSocialField(
-                  controller: _whatsappController,
-                  hint: '212661234567',
-                  prefix: 'wa.me/',
-                  icon: FontAwesomeIcons.whatsapp,
-                  color: const Color(0xFF25D366),
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
-                ),
                 const SizedBox(height: 32),
 
                 // Actions
@@ -876,12 +1048,64 @@ class _OwnerOnboardingStep1ScreenState
                   onPressed: _handleNext,
                   icon: Icons.arrow_forward,
                 ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _handleCancelSignup,
+                  child: Text(
+                    l?.tr('onboarding_cancel_signup') ?? 'Annuler mon inscription',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// Deletes the in-progress Firebase Auth user and returns to the login
+  /// screen. Used when the owner abandons the onboarding before OTP
+  /// validation so their orphan account doesn't persist.
+  Future<void> _handleCancelSignup() async {
+    final l = AppLocalizations.of(context);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l?.tr('onboarding_cancel_title') ?? 'Annuler l\'inscription ?'),
+        content: Text(l?.tr('onboarding_cancel_message')
+            ?? 'Votre compte en cours sera supprimé définitivement. Cette action ne peut pas être annulée.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              l?.tr('onboarding_cancel_confirm') ?? 'Oui, supprimer',
+              style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    try {
+      await user?.delete();
+    } catch (_) {
+      try {
+        await FirebaseFunctions.instance.httpsCallable('forceDeleteSelf').call();
+      } catch (_) { /* swallowed */ }
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
   }
 
   Widget _buildSocialField({
@@ -937,6 +1161,54 @@ class _OwnerOnboardingStep1ScreenState
           borderRadius: BorderRadius.circular(12),
           borderSide:
               const BorderSide(color: AppColors.brand400, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+class _SalonTypeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SalonTypeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brand50 : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.brand600 : AppColors.secondary200,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 22, color: selected ? AppColors.brand600 : AppColors.secondary400),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                  color: selected ? AppColors.brand600 : AppColors.secondary500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

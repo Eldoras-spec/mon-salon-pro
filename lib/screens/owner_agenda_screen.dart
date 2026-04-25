@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
@@ -15,25 +17,38 @@ const _memberColors = [
   Color(0xFFFDE68A), // amber
   Color(0xFFA7F3D0), // emerald
   Color(0xFFBFDBFE), // blue
-  Color(0xFFFBCFE8), // pink
+  Color(0xFFD9F99D), // lime
   Color(0xFFC4B5FD), // violet
   Color(0xFFFED7AA), // orange
   Color(0xFF99F6E4), // teal
+  Color(0xFFFECDD3), // rose
+  Color(0xFFFBCFE8), // pink
+  Color(0xFFBAE6FD), // sky
+  Color(0xFFC7D2FE), // indigo
+  Color(0xFFF5D0FE), // fuchsia
+  Color(0xFFE2E8F0), // slate
 ];
 
 const _memberTextColors = [
   Color(0xFF92400E), // amber dark
   Color(0xFF065F46), // emerald dark
   Color(0xFF1E40AF), // blue dark
-  Color(0xFF9D174D), // pink dark
+  Color(0xFF3F6212), // lime dark
   Color(0xFF5B21B6), // violet dark
   Color(0xFFC2410C), // orange dark
   Color(0xFF115E59), // teal dark
+  Color(0xFF9F1239), // rose dark
+  Color(0xFF9D174D), // pink dark
+  Color(0xFF075985), // sky dark
+  Color(0xFF3730A3), // indigo dark
+  Color(0xFF86198F), // fuchsia dark
+  Color(0xFF475569), // slate dark
 ];
 
 class OwnerAgendaScreen extends StatefulWidget {
   final String salonId;
-  const OwnerAgendaScreen({super.key, required this.salonId});
+  final String currency;
+  const OwnerAgendaScreen({super.key, required this.salonId, this.currency = 'MAD'});
 
   @override
   State<OwnerAgendaScreen> createState() => _OwnerAgendaScreenState();
@@ -67,15 +82,22 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
     super.initState();
     _loadData();
     // Sync horizontal scroll between header and grid
+    bool _syncing = false;
     _headerScrollController.addListener(() {
+      if (_syncing) return;
+      _syncing = true;
       if (_gridScrollController.hasClients) {
         _gridScrollController.jumpTo(_headerScrollController.offset);
       }
+      _syncing = false;
     });
     _gridScrollController.addListener(() {
+      if (_syncing) return;
+      _syncing = true;
       if (_headerScrollController.hasClients) {
         _headerScrollController.jumpTo(_gridScrollController.offset);
       }
+      _syncing = false;
     });
   }
 
@@ -209,10 +231,13 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.brand900),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: MediaQuery.sizeOf(context).shortestSide >= 600
+            ? const SizedBox.shrink()
+            : IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.brand900),
+                onPressed: () => Navigator.pop(context),
+              ),
+        leadingWidth: MediaQuery.sizeOf(context).shortestSide >= 600 ? 16 : null,
         title: Row(
           children: [
             Text(
@@ -265,7 +290,13 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
         child: Column(
           children: [
             // Calendar overlay
-            if (_calendarOpen) _buildCalendarOverlay(),
+            if (_calendarOpen)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                ),
+                child: SingleChildScrollView(child: _buildCalendarOverlay()),
+              ),
 
             // Member header row
             if (!_loading && _members.isNotEmpty)
@@ -302,10 +333,11 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
         ? ['L', 'M', 'M', 'J', 'V', 'S', 'D']
         : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-    // Build member color map for dots
+    // Build member color map for dots — honors custom agendaColorIndex when set
     final memberColorMap = <String, Color>{};
     for (int i = 0; i < _members.length; i++) {
-      memberColorMap[_members[i].id] = _memberTextColors[i % _memberTextColors.length];
+      final ci = _members[i].agendaColorIndex ?? i;
+      memberColorMap[_members[i].id] = _memberTextColors[ci % _memberTextColors.length];
     }
 
     return Container(
@@ -343,6 +375,43 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             ],
           ),
 
+          // Month chips
+          SizedBox(
+            height: 32,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 12,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, i) {
+                final isActive = i == _calendarMonth.month - 1;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _calendarMonth = DateTime(_calendarMonth.year, i + 1);
+                    });
+                    _loadMonthAppointments();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isActive ? AppColors.brand600 : AppColors.secondary50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      monthNames[i],
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                        color: isActive ? Colors.white : AppColors.secondary500,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Day of week headers
           Row(
             children: dayHeaders.map((d) => Expanded(
@@ -357,9 +426,9 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: 1.0,
+              childAspectRatio: MediaQuery.sizeOf(context).shortestSide >= 600 ? 1.8 : 1.0,
             ),
             itemCount: ((startWeekday - 1) + daysInMonth + (7 - ((startWeekday - 1 + daysInMonth) % 7)) % 7),
             itemBuilder: (context, index) {
@@ -437,42 +506,6 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             },
           ),
 
-          const SizedBox(height: 8),
-          // Month chips
-          SizedBox(
-            height: 32,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: 12,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (context, i) {
-                final isActive = i == _calendarMonth.month - 1;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _calendarMonth = DateTime(_calendarMonth.year, i + 1);
-                    });
-                    _loadMonthAppointments();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isActive ? AppColors.brand600 : AppColors.secondary50,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      monthNames[i],
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                        color: isActive ? Colors.white : AppColors.secondary500,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
           const SizedBox(height: 4),
           Divider(color: AppColors.secondary100, height: 1),
         ],
@@ -509,7 +542,8 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                   ..._members.asMap().entries.map((entry) {
                     final idx = entry.key;
                     final member = entry.value;
-                    final color = _memberColors[idx % _memberColors.length];
+                    final ci = member.agendaColorIndex ?? idx;
+                    final color = _memberColors[ci % _memberColors.length];
                     final apptCount = _appointmentsForMember(member.id).length;
                     return SizedBox(
                       width: _memberColumnWidth,
@@ -636,7 +670,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                       final member = entry.value;
                       return _buildMemberColumn(
                         member.id,
-                        idx,
+                        member.agendaColorIndex ?? idx,
                         _appointmentsForMember(member.id),
                       );
                     }),
@@ -912,6 +946,31 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                 ),
               ],
             ),
+            if (appt.selectedOptions != null && appt.selectedOptions!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: appt.selectedOptions!
+                    .map((opt) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.brand50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.brand200),
+                          ),
+                          child: Text(
+                            opt,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.brand700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ],
             const SizedBox(height: 16),
             // Details
             if (appt.clientName != null) ...[
@@ -919,7 +978,19 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
               const SizedBox(height: 8),
             ],
             if (phone != null && phone.isNotEmpty) ...[
-              _detailRow(Icons.phone_outlined, phone),
+              Builder(builder: (_) {
+                final wa = phone!;
+                return InkWell(
+                  onTap: () {
+                    final digits = wa.replaceAll(RegExp(r'\D'), '');
+                    launchUrl(
+                      Uri.parse('https://wa.me/$digits'),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                  child: _detailRow(FontAwesomeIcons.whatsapp, wa),
+                );
+              }),
               const SizedBox(height: 8),
             ],
             _detailRow(Icons.calendar_today_outlined, capitalDate),
@@ -935,7 +1006,7 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
             ],
             _detailRow(
               Icons.monetization_on_outlined,
-              CurrencyHelper.format(appt.price),
+              CurrencyHelper.format(appt.price, widget.currency),
             ),
             const SizedBox(height: 8),
             _detailRow(

@@ -22,9 +22,35 @@ class OwnerOnboardingStep5Screen extends StatefulWidget {
 class _OwnerOnboardingStep5ScreenState
     extends State<OwnerOnboardingStep5Screen> {
   final List<TeamMemberModel> _members = [];
+  bool _loading = true;
 
   String get _salonId =>
       (widget.salonData['ownerId'] as String?) ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingMembers();
+  }
+
+  Future<void> _loadExistingMembers() async {
+    try {
+      if (_salonId.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final existing = await DatabaseService().getTeamMembers(_salonId).first;
+      if (mounted) {
+        setState(() {
+          _members.clear();
+          _members.addAll(existing);
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   void _goToServices() {
     if (_members.isEmpty) {
@@ -155,7 +181,12 @@ class _OwnerOnboardingStep5ScreenState
                     const SizedBox(height: 28),
 
                     // Members list
-                    if (_members.isEmpty)
+                    if (_loading)
+                      const Center(child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(color: AppColors.brand600),
+                      ))
+                    else if (_members.isEmpty)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(

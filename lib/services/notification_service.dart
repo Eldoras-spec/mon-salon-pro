@@ -2,7 +2,6 @@ import 'dart:io' show Platform;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'database_service.dart';
@@ -22,6 +21,12 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final DatabaseService _databaseService = DatabaseService();
+
+  /// Conversation the user is actively viewing. When a push arrives with a
+  /// matching `conversationId` in its data payload, the foreground banner is
+  /// suppressed (the user is already reading the conversation live).
+  /// Set from [ChatScreen] in initState / resume and cleared in dispose / pause.
+  static String? activeConversationId;
 
   // Android notification channel
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -131,7 +136,19 @@ class NotificationService {
   }
 
   /// Handle a message received while the app is in the foreground.
+  /// The Firestore notification doc was already created by the Cloud Function
+  /// that triggered this push — do NOT re-save it (would cause an infinite
+  /// loop with onNewNotification).
   void _handleForegroundMessage(RemoteMessage message) {
+    // Skip the banner when the user is already in the matching conversation —
+    // live stream already renders the new message, the banner would be noise.
+    final incomingConvId = message.data['conversationId'];
+    if (incomingConvId != null &&
+        activeConversationId != null &&
+        incomingConvId == activeConversationId) {
+      return;
+    }
+
     final notification = message.notification;
     if (notification != null) {
       showLocalNotification(
@@ -139,38 +156,6 @@ class NotificationService {
         body: notification.body ?? '',
         payload: message.data['route'] ?? '',
       );
-      // Also persist in Firestore so it appears in the notifications screen
-      _saveToFirestore(
-        title: notification.title ?? 'Mon Salon',
-        body: notification.body ?? '',
-        type: message.data['type'] ?? 'general',
-      );
-    }
-  }
-
-  /// Persist a received FCM notification to Firestore for the current user.
-  /// Skips types that are saved by Cloud Functions for a different user.
-  Future<void> _saveToFirestore({
-    required String title,
-    required String body,
-    required String type,
-  }) async {
-    // These notification types are created by Cloud Functions for the
-    // correct recipient — don't duplicate them for the currently logged-in user.
-    const cloudFunctionTypes = {'new_appointment'};
-    if (cloudFunctionTypes.contains(type)) return;
-
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-      await _databaseService.saveNotification(
-        userId: uid,
-        title: title,
-        body: body,
-        type: type,
-      );
-    } catch (e) {
-      debugPrint('🔔 Error saving notification to Firestore: $e');
     }
   }
 

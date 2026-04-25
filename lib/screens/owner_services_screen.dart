@@ -92,6 +92,14 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
         createdAt: salon.createdAt,
         socialLinks: salon.socialLinks,
         slug: salon.slug,
+        currency: salon.currency,
+        rewardPointsEnabled: salon.rewardPointsEnabled,
+        aiPromosEnabled: salon.aiPromosEnabled,
+        aiPromoConfig: salon.aiPromoConfig,
+        googleReviewReward: salon.googleReviewReward,
+        isPremium: salon.isPremium,
+        galleryStorageUsed: salon.galleryStorageUsed,
+        salonType: salon.salonType,
       );
       await DatabaseService().saveSalon(updated);
 
@@ -315,7 +323,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
                             ],
                             Text('$duration min', style: const TextStyle(fontSize: 12, color: AppColors.secondary400)),
                             const SizedBox(width: 8),
-                            Text(CurrencyHelper.format(price), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.brand600)),
+                            Text(CurrencyHelper.format(price, salon.currency), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.brand600)),
                           ],
                         ),
                       ],
@@ -400,8 +408,10 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
           assignedMembers: currentAssigned,
           teamMembers: teamMembers,
           salonId: salon.id,
+          salonType: salon.salonType,
           isPremium: salon.isPremium,
           galleryStorageUsed: salon.galleryStorageUsed,
+          currency: salon.currency,
           onSave: (entry) {
             setState(() {
               if (isNew) {
@@ -531,11 +541,11 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
               Row(
                 children: [
                   if (discount > 0) ...[
-                    Text(CurrencyHelper.format(originalPrice),
+                    Text(CurrencyHelper.format(originalPrice, salon.currency),
                         style: const TextStyle(fontSize: 12, decoration: TextDecoration.lineThrough, color: AppColors.secondary400)),
                     const SizedBox(width: 6),
                   ],
-                  Text(CurrencyHelper.format(price),
+                  Text(CurrencyHelper.format(price, salon.currency),
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.brand600)),
                   if (discount > 0) ...[
                     const SizedBox(width: 6),
@@ -727,6 +737,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
       builder: (_) => _PackFormDialog(
         existing: existing,
         availableServices: _services,
+        currency: salon.currency,
         onSave: (entry) {
           setState(() {
             if (isNew) {
@@ -749,10 +760,12 @@ class _PackFormDialog extends StatefulWidget {
     this.existing,
     required this.availableServices,
     required this.onSave,
+    required this.currency,
   });
   final Map<String, dynamic>? existing;
   final List<Map<String, dynamic>> availableServices;
   final void Function(Map<String, dynamic>) onSave;
+  final String currency;
 
   @override
   State<_PackFormDialog> createState() => _PackFormDialogState();
@@ -891,12 +904,12 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     if (_selectedServices.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '${l?.tr('pack_original_price') ?? 'Prix original'} : ${CurrencyHelper.format(_originalPrice)}',
+                        '${l?.tr('pack_original_price') ?? 'Prix original'} : ${CurrencyHelper.format(_originalPrice, widget.currency)}',
                         style: const TextStyle(fontSize: 12, color: AppColors.secondary400),
                       ),
                     ],
                     const SizedBox(height: 14),
-                    _label(l?.tr('pack_price') ?? 'Prix du pack (MAD) *'),
+                    _label(l?.tr('pack_price') ?? 'Prix du pack (${CurrencyHelper.symbol(widget.currency)}) *'),
                     const SizedBox(height: 6),
                     _field(_priceCtrl, '0', keyboardType: TextInputType.number),
                     const SizedBox(height: 14),

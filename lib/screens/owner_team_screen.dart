@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
 import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
@@ -12,19 +13,42 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/database_service.dart';
+import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
+import 'owner_subscription_screen.dart';
 import '../utils/media_compressor.dart';
+import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
 
+// Agenda palette — kept in sync with `_memberColors` in owner_agenda_screen.dart.
+// All light pastels for readability.
+const _agendaPalette = [
+  Color(0xFFFDE68A), // amber
+  Color(0xFFA7F3D0), // emerald
+  Color(0xFFBFDBFE), // blue
+  Color(0xFFD9F99D), // lime
+  Color(0xFFC4B5FD), // violet
+  Color(0xFFFED7AA), // orange
+  Color(0xFF99F6E4), // teal
+  Color(0xFFFECDD3), // rose
+  Color(0xFFFBCFE8), // pink
+  Color(0xFFBAE6FD), // sky
+  Color(0xFFC7D2FE), // indigo
+  Color(0xFFF5D0FE), // fuchsia
+  Color(0xFFE2E8F0), // slate
+];
+
 class OwnerTeamScreen extends ConsumerStatefulWidget {
-  const OwnerTeamScreen({super.key});
+  const OwnerTeamScreen({super.key, this.initialShowByService = false});
+
+  final bool initialShowByService;
 
   @override
   ConsumerState<OwnerTeamScreen> createState() => _OwnerTeamScreenState();
 }
 
 class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
-  bool _showByService = false;
+  late bool _showByService = widget.initialShowByService;
   final _scrollController = ScrollController();
 
   @override
@@ -70,8 +94,9 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
                     icon: const Icon(Icons.person_add_outlined,
                         color: AppColors.brand600, size: 22),
                     onPressed: () => _showAddMemberSheet(
-                        context, ref, salonAsync.value?.id,
-                        salonAsync.value?.services ?? []),
+                        context, ref, salonAsync.value,
+                        salonAsync.value?.services ?? [],
+                        members.length),
                     tooltip: l?.tr('team_add_member') ?? 'Ajouter un membre',
                   ),
                   loading: () => const SizedBox(width: 48),
@@ -135,8 +160,9 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
                         showByService: _showByService,
                         onToggle: (v) => setState(() => _showByService = v),
                         onAddMember: () => _showAddMemberSheet(
-                            context, ref, salonAsync.value?.id,
-                            salonAsync.value?.services ?? []),
+                            context, ref, salonAsync.value,
+                            salonAsync.value?.services ?? [],
+                            members.length),
                         onEditMember: (m) => _showEditMemberSheet(
                             context, ref, m, salonAsync.value?.id,
                             salonAsync.value?.services ?? []),
@@ -156,15 +182,73 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
   }
 
   void _showAddMemberSheet(
-      BuildContext context, WidgetRef ref, String? salonId,
-      List<Map<String, dynamic>> services) {
-    if (salonId == null) return;
+      BuildContext context, WidgetRef ref, SalonModel? salon,
+      List<Map<String, dynamic>> services, int currentCount) {
+    if (salon == null) return;
+    // Free plan team cap: block at `freeTeamMemberCap` members, redirect
+    // to the subscription screen so owner can upgrade.
+    if (salon.isFree && currentCount >= PlanConfig.freeTeamMemberCap) {
+      _showTeamCapDialog(context);
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) =>
-          _MemberFormSheet(salonId: salonId, services: services),
+          _MemberFormSheet(salonId: salon.id, services: services),
+    );
+  }
+
+  void _showTeamCapDialog(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.group_add_outlined,
+              color: Colors.amber.shade800, size: 28),
+        ),
+        title: Text(
+          l?.tr('team_cap_title') ?? 'Limite du plan Free',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          l?.tr('team_cap_body') ??
+              'Le plan Free autorise jusqu\'à 2 employés. Passez au plan Essentiel pour une équipe illimitée (3 mois offerts).',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary600),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dCtx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OwnerSubscriptionScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand600,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(l?.tr('team_cap_upgrade_cta') ?? 'Passer en Essentiel'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -181,10 +265,60 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref,
-      TeamMemberModel member, String? salonId) {
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref,
+      TeamMemberModel member, String? salonId) async {
     if (salonId == null) return;
     final l = AppLocalizations.of(context);
+
+    // Show loading dialog while we check for active appointments
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.brand500),
+      ),
+    );
+
+    final upcoming = await DatabaseService()
+        .getUpcomingAppointmentsForMember(salonId, member.id);
+    final allMembers = ref.read(ownerTeamProvider).value ?? [];
+    final otherMembers =
+        allMembers.where((m) => m.id != member.id && m.isActive).toList();
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // close loading
+
+    // No active appointments → simple delete confirm
+    if (upcoming.isEmpty) {
+      _showSimpleDeleteConfirm(context, member, salonId, l);
+      return;
+    }
+
+    // Check for services this member is the only one assigned to (among RDV services)
+    final blockedAppointments = <AppointmentModel>[];
+    final blockedServices = <String>{};
+
+    for (final appt in upcoming) {
+      final eligible = otherMembers
+          .where((m) => (m.assignedServiceNames).contains(appt.serviceName))
+          .toList();
+      if (eligible.isEmpty) {
+        blockedAppointments.add(appt);
+        blockedServices.add(appt.serviceName);
+      }
+    }
+
+    if (blockedAppointments.isNotEmpty) {
+      _showBlockedDialog(context, member, blockedServices, blockedAppointments.length, l);
+      return;
+    }
+
+    _showReassignChoiceDialog(
+        context, ref, member, salonId, upcoming, otherMembers, l);
+  }
+
+  void _showSimpleDeleteConfirm(BuildContext context, TeamMemberModel member,
+      String salonId, AppLocalizations? l) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -227,6 +361,291 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
         ],
       ),
     );
+  }
+
+  void _showBlockedDialog(BuildContext context, TeamMemberModel member,
+      Set<String> blockedServices, int blockedCount, AppLocalizations? l) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l?.tr('team_delete_blocked_title') ?? 'Suppression impossible',
+                style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.bold, color: AppColors.brand950, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              (l?.tr('team_delete_blocked_message') ??
+                      '{name} a {count} rendez-vous pour des prestations dont il/elle est le/la seul·e à les pratiquer. Attribuez d\'abord ces prestations à un·e autre employé·e, puis revenez supprimer.')
+                  .replaceAll('{name}', member.name)
+                  .replaceAll('{count}', '$blockedCount'),
+              style: const TextStyle(color: AppColors.secondary600, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l?.tr('team_delete_blocked_services') ?? 'Prestations concernées :',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.brand950),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: blockedServices
+                  .map((s) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(s,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFDC2626))),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand600,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(l?.tr('common_understood') ?? 'Compris'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReassignChoiceDialog(
+      BuildContext context,
+      WidgetRef ref,
+      TeamMemberModel member,
+      String salonId,
+      List<AppointmentModel> upcoming,
+      List<TeamMemberModel> otherMembers,
+      AppLocalizations? l) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.event_busy_outlined, color: Color(0xFFEA580C), size: 24),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l?.tr('team_delete_reassign_title') ?? 'Rendez-vous actifs',
+                style: GoogleFonts.dmSans(
+                    fontWeight: FontWeight.bold, color: AppColors.brand950, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          (l?.tr('team_delete_reassign_message') ??
+                  '{name} a {count} rendez-vous à venir. Comment souhaitez-vous les réassigner avant la suppression ?')
+              .replaceAll('{name}', member.name)
+              .replaceAll('{count}', '${upcoming.length}'),
+          style: const TextStyle(color: AppColors.secondary600, fontSize: 14, height: 1.5),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actions: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _performAutoReassignAndDelete(
+                        context, ref, member, salonId, upcoming, otherMembers, l);
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: Text(l?.tr('team_delete_reassign_auto') ?? 'Réassigner automatiquement'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand600,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+                  label: Text(l?.tr('team_delete_reassign_manual') ?? 'Réassigner manuellement'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brand600,
+                    side: const BorderSide(color: AppColors.brand300),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(l?.tr('common_cancel') ?? 'Annuler',
+                    style: const TextStyle(color: AppColors.secondary500)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performAutoReassignAndDelete(
+      BuildContext context,
+      WidgetRef ref,
+      TeamMemberModel member,
+      String salonId,
+      List<AppointmentModel> upcoming,
+      List<TeamMemberModel> otherMembers,
+      AppLocalizations? l) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.brand500),
+      ),
+    );
+
+    try {
+      // Salon services (needed to read memberPriority per service)
+      final salon = ref.read(ownerSalonProvider).value;
+      final services = salon?.services ?? const <Map<String, dynamic>>[];
+
+      // All upcoming RDV for the salon, minus the ones being reassigned.
+      // Tracked as (start, end) ranges per member for conflict detection.
+      final allUpcoming = await DatabaseService()
+          .getUpcomingAppointmentsForSalon(salonId);
+      final reassigningIds = upcoming.map((a) => a.id).toSet();
+      final busyRanges = <String, List<List<DateTime>>>{};
+      for (final a in allUpcoming) {
+        if (reassigningIds.contains(a.id)) continue;
+        final mid = a.assignedMemberId;
+        if (mid == null || mid.isEmpty) continue;
+        final end = a.dateTime.add(Duration(minutes: a.durationMinutes));
+        busyRanges.putIfAbsent(mid, () => []).add([a.dateTime, end]);
+      }
+
+      bool conflicts(String memberId, DateTime start, int duration) {
+        final end = start.add(Duration(minutes: duration));
+        final list = busyRanges[memberId] ?? const [];
+        return list.any((r) => start.isBefore(r[1]) && end.isAfter(r[0]));
+      }
+
+      final Map<String, Map<String, String>> assignments = {};
+      // Process RDV in chronological order so earlier RDV get priority on busy slots.
+      upcoming.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+      for (final appt in upcoming) {
+        // Candidates = other members who can perform this service
+        var candidates = otherMembers
+            .where((m) => m.assignedServiceNames.contains(appt.serviceName))
+            .toList();
+        if (candidates.isEmpty) continue; // blocker — already filtered earlier
+
+        // Sort by memberPriority defined on the service
+        final svcData = services.firstWhere(
+          (s) => (s['name'] ?? s['title']) == appt.serviceName,
+          orElse: () => <String, dynamic>{},
+        );
+        final priority = List<String>.from(svcData['memberPriority'] ?? []);
+        if (priority.isNotEmpty) {
+          candidates.sort((a, b) {
+            final ai = priority.indexOf(a.id);
+            final bi = priority.indexOf(b.id);
+            if (ai >= 0 && bi >= 0) return ai.compareTo(bi);
+            if (ai >= 0) return -1;
+            if (bi >= 0) return 1;
+            return 0;
+          });
+        }
+
+        final duration = appt.durationMinutes;
+
+        // Pick first non-conflicting candidate; fall back to top priority if all busy.
+        TeamMemberModel picked = candidates.first;
+        for (final m in candidates) {
+          if (!conflicts(m.id, appt.dateTime, duration)) {
+            picked = m;
+            break;
+          }
+        }
+
+        // Track this assignment so the next RDV sees it as a conflict source
+        busyRanges
+            .putIfAbsent(picked.id, () => [])
+            .add([appt.dateTime, appt.dateTime.add(Duration(minutes: duration))]);
+
+        assignments[appt.id] = {
+          'memberId': picked.id,
+          'memberName': picked.name,
+        };
+      }
+
+      if (assignments.isNotEmpty) {
+        await DatabaseService().reassignAppointments(assignments);
+      }
+
+      await DatabaseService().deleteTeamMember(salonId, member.id);
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (l?.tr('team_delete_reassign_success') ??
+                    '{name} supprimé·e. {count} rendez-vous réassignés.')
+                .replaceAll('{name}', member.name)
+                .replaceAll('{count}', '${assignments.length}'),
+          ),
+          backgroundColor: AppColors.brand700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (l?.tr('team_delete_reassign_error') ?? 'Erreur : {error}')
+                .replaceAll('{error}', '$e'),
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
 
@@ -281,7 +700,10 @@ class _MemberCard extends StatelessWidget {
     try {
       final ref = FirebaseStorage.instance.ref()
           .child('salons/$salonId/team/${member.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(result.file);
+      await ref.putFile(
+        result.file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       final url = await ref.getDownloadURL();
 
       // Delete old photo if exists
@@ -324,13 +746,22 @@ class _MemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Container(
+    final isCapDeactivated = member.isDeactivatedByCap;
+    return Opacity(
+      opacity: isCapDeactivated ? 0.55 : 1.0,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCapDeactivated ? const Color(0xFFF9FAFB) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.secondary100),
-        boxShadow: [
+        border: Border.all(
+          color: isCapDeactivated
+              ? const Color(0xFFE5E7EB)
+              : AppColors.secondary100,
+        ),
+        boxShadow: isCapDeactivated
+            ? null
+            : [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
@@ -340,9 +771,9 @@ class _MemberCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Avatar with photo support
+          // Avatar with photo support (disabled when cap-deactivated)
           GestureDetector(
-            onTap: () => _pickMemberPhoto(context),
+            onTap: isCapDeactivated ? null : () => _pickMemberPhoto(context),
             child: Stack(
               children: [
                 MemberAvatar(
@@ -351,18 +782,19 @@ class _MemberCard extends StatelessWidget {
                   radius: 24,
                   backgroundColor: _roleBg,
                 ),
-                Positioned(
-                  bottom: 0, right: 0,
-                  child: Container(
-                    width: 18, height: 18,
-                    decoration: BoxDecoration(
-                      color: AppColors.brand600,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
+                if (!isCapDeactivated)
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: Container(
+                      width: 18, height: 18,
+                      decoration: BoxDecoration(
+                        color: AppColors.brand600,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
                     ),
-                    child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
                   ),
-                ),
               ],
             ),
           ),
@@ -371,13 +803,41 @@ class _MemberCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  member.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.brand950,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        member.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brand950,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isCapDeactivated) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Text(
+                          l?.tr('team_member_deactivated_badge') ??
+                              'Désactivé · Free',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF991B1B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -475,6 +935,7 @@ class _MemberCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }
@@ -581,6 +1042,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
   bool _showPinConfirm = false;
   late Set<String> _selectedServices;
   bool _servicesError = false;
+  int? _agendaColorIndex;
 
   bool get _isEditing => widget.existing != null;
 
@@ -594,6 +1056,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
     _pinConfirmCtrl = TextEditingController();
     _role = m?.role ?? 'member';
     _selectedServices = Set<String>.from(m?.assignedServiceNames ?? []);
+    _agendaColorIndex = m?.agendaColorIndex;
   }
 
   @override
@@ -623,6 +1086,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           'role': _role,
           'phone': _phoneCtrl.text.trim(),
           'assignedServiceNames': _selectedServices.toList(),
+          'agendaColorIndex': _agendaColorIndex,
         };
         // Only update pinHash for gérant if a new PIN was entered
         if (_role == 'gerant' && _pinCtrl.text.isNotEmpty) {
@@ -647,8 +1111,21 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           isActive: true,
           createdAt: DateTime.now(),
           assignedServiceNames: _selectedServices.toList(),
+          agendaColorIndex: _agendaColorIndex,
         );
-        await db.addTeamMember(member);
+        final created = await db.addTeamMember(member);
+
+        // Show the login code sheet so the owner can share it immediately.
+        if (mounted) {
+          Navigator.pop(context);
+          await showEmployeeCodeSheet(
+            context: context,
+            salonId: widget.salonId,
+            memberId: created.id,
+            memberName: created.name,
+          );
+          return;
+        }
       }
 
       if (mounted) Navigator.pop(context);
@@ -824,6 +1301,18 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                         ),
                     ],
                   ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      l?.tr('team_services_description') ??
+                          'Sélectionnez les services que ce membre peut réaliser. Ils lui seront automatiquement attribués lors des réservations clients.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondary400,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -885,6 +1374,68 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                   ),
                   const SizedBox(height: 16),
                 ],
+
+                // Agenda color — horizontal scrollable palette
+                _label(l?.tr('team_agenda_color_label') ?? 'Couleur agenda'),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.secondary200),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => setState(() => _agendaColorIndex = null),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.only(right: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _agendaColorIndex == null
+                                    ? AppColors.brand700
+                                    : AppColors.secondary200,
+                                width: _agendaColorIndex == null ? 3 : 1,
+                              ),
+                            ),
+                            child: const Icon(Icons.auto_awesome_rounded,
+                                size: 16, color: AppColors.secondary400),
+                          ),
+                        ),
+                        for (int i = 0; i < _agendaPalette.length; i++)
+                          GestureDetector(
+                            onTap: () => setState(() => _agendaColorIndex = i),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              margin: const EdgeInsets.only(right: 10),
+                              decoration: BoxDecoration(
+                                color: _agendaPalette[i],
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _agendaColorIndex == i
+                                      ? AppColors.brand700
+                                      : Colors.transparent,
+                                  width: 3,
+                                ),
+                              ),
+                              child: _agendaColorIndex == i
+                                  ? const Icon(Icons.check_rounded,
+                                      size: 18, color: Colors.black54)
+                                  : null,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 4),
 
                 SizedBox(

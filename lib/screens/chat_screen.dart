@@ -10,6 +10,7 @@ import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
+import '../services/notification_service.dart';
 import '../services/app_localizations.dart';
 import '../utils/currency_helper.dart';
 import '../widgets/member_avatar.dart';
@@ -58,6 +59,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Silence foreground push banners for the conversation being viewed.
+    NotificationService.activeConversationId = widget.conversationId;
     if (widget.isClient) {
       _svc.markReadByClient(widget.conversationId);
       _loadSalon();
@@ -105,6 +108,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    if (NotificationService.activeConversationId == widget.conversationId) {
+      NotificationService.activeConversationId = null;
+    }
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -689,7 +695,9 @@ class _MessageBubbleState extends State<_MessageBubble> {
         });
         await FirebaseFirestore.instance.collection('salons').doc(salonId).update({'services': services});
 
-        // Send in-app notification to the client
+        // Send in-app notification to the client.
+        // pushSent: false so the onNewNotification Cloud Function sends a FCM push
+        // to the client device (we want a real push here since the client isn't active).
         await FirebaseFirestore.instance.collection('notifications').add({
           'userId': clientId,
           'title': 'Demande acceptée ✅',
@@ -697,7 +705,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
           'type': 'custom_request_approved',
           'salonId': salonId,
           'createdAt': FieldValue.serverTimestamp(),
-          'read': false,
+          'isRead': false,
+          'pushSent': false,
         });
       }
     }

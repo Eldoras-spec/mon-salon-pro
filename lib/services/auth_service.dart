@@ -51,9 +51,10 @@ class AuthService {
       await _firestore.collection('users').doc(result.user!.uid).set({
         'email': email,
         'fullName': fullName,
-        'phone': phone,
+        'whatsapp': phone,
         'city': city,
         'userType': isClient ? 'client' : 'owner',
+        'whatsappVerified': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -108,20 +109,32 @@ class AuthService {
     if (user == null) throw Exception('Non connecté');
     final uid = user.uid;
 
-    // ── Firestore cleanup (multiple batches to stay under 500-op limit) ──
+    // ── Firestore cleanup (tolerant — errors don't block account deletion) ──
 
     Future<void> deleteQueryDocs(Query query) async {
-      final snap = await query.get();
-      if (snap.docs.isEmpty) return;
-      final batch = _firestore.batch();
-      for (final doc in snap.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
+      try {
+        final snap = await query.get();
+        if (snap.docs.isEmpty) return;
+        final batch = _firestore.batch();
+        for (final doc in snap.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      } catch (_) {}
+    }
+
+    Future<void> deleteSubcollection(DocumentReference parent, String name) async {
+      try {
+        final snap = await parent.collection(name).get();
+        if (snap.docs.isEmpty) return;
+        final b = _firestore.batch();
+        for (final doc in snap.docs) b.delete(doc.reference);
+        await b.commit();
+      } catch (_) {}
     }
 
     // User document
-    await _firestore.collection('users').doc(uid).delete();
+    try { await _firestore.collection('users').doc(uid).delete(); } catch (_) {}
 
     // Appointments (as client)
     await deleteQueryDocs(
@@ -139,94 +152,118 @@ class AuthService {
     );
 
     // If owner: delete salon + related data
-    final salonSnap = await _firestore
-        .collection('salons')
-        .where('ownerId', isEqualTo: uid)
-        .limit(1)
-        .get();
+    try {
+      final salonSnap = await _firestore
+          .collection('salons')
+          .where('ownerId', isEqualTo: uid)
+          .limit(1)
+          .get();
 
-    if (salonSnap.docs.isNotEmpty) {
-      final salonRef = salonSnap.docs.first.reference;
-      final salonId = salonSnap.docs.first.id;
+      if (salonSnap.docs.isNotEmpty) {
+        final salonRef = salonSnap.docs.first.reference;
+        final salonId = salonSnap.docs.first.id;
 
-      // Team members sub-collection
-      final team = await salonRef.collection('teamMembers').get();
-      if (team.docs.isNotEmpty) {
-        final b = _firestore.batch();
-        for (final doc in team.docs) b.delete(doc.reference);
-        await b.commit();
+        await deleteSubcollection(salonRef, 'teamMembers');
+        await deleteSubcollection(salonRef, 'beforeAfter');
+
+        await deleteQueryDocs(
+          _firestore.collection('appointments').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('promotions').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('charges').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('reviews').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('waitlist').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('inventory').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('products').where('salonId', isEqualTo: salonId),
+        );
+        await deleteQueryDocs(
+          _firestore.collection('orders').where('salonId', isEqualTo: salonId),
+        );
+
+        try { await salonRef.delete(); } catch (_) {}
       }
-
-      // Salon appointments
-      await deleteQueryDocs(
-        _firestore.collection('appointments').where('salonId', isEqualTo: salonId),
-      );
-
-      // Promotions
-      await deleteQueryDocs(
-        _firestore.collection('promotions').where('salonId', isEqualTo: salonId),
-      );
-
-      // Charges
-      await deleteQueryDocs(
-        _firestore.collection('charges').where('salonId', isEqualTo: salonId),
-      );
-
-      // Reviews
-      await deleteQueryDocs(
-        _firestore.collection('reviews').where('salonId', isEqualTo: salonId),
-      );
-
-      // Waitlist
-      await deleteQueryDocs(
-        _firestore.collection('waitlist').where('salonId', isEqualTo: salonId),
-      );
-
-      // Inventory sub-collection
-      final inventory = await salonRef.collection('inventory').get();
-      if (inventory.docs.isNotEmpty) {
-        final b = _firestore.batch();
-        for (final doc in inventory.docs) b.delete(doc.reference);
-        await b.commit();
-      }
-
-      // Salon document
-      await salonRef.delete();
-    }
+    } catch (_) {}
 
     // Conversations
-    final convos = await _firestore
-        .collection('conversations')
-        .where('participants', arrayContains: uid)
-        .get();
-    for (final doc in convos.docs) {
-      final msgs = await doc.reference.collection('messages').get();
-      if (msgs.docs.isNotEmpty) {
-        final b = _firestore.batch();
-        for (final m in msgs.docs) b.delete(m.reference);
-        await b.commit();
+    try {
+      final convos = await _firestore
+          .collection('conversations')
+          .where('participants', arrayContains: uid)
+          .get();
+      for (final doc in convos.docs) {
+        await deleteSubcollection(doc.reference, 'messages');
+        try { await doc.reference.delete(); } catch (_) {}
       }
-      await doc.reference.delete();
-    }
+    } catch (_) {}
 
     // ── Storage cleanup ──
     try {
       await _storage.ref().child('user_profiles').child('$uid.jpg').delete();
     } catch (_) {}
 
+    // ── Unlink phone provider to free the number immediately ──
+    try {
+      final hasPhone = user.providerData.any((p) => p.providerId == 'phone');
+      if (hasPhone) {
+        await user.unlink('phone');
+      }
+    } catch (_) { /* non-fatal */ }
+
     // ── Delete Firebase Auth account (must be last) ──
-    await user.delete();
+    try {
+      await user.delete();
+    } catch (_) {
+      // Fallback: force-delete via Admin SDK (Cloud Function)
+      try {
+        await _functions.httpsCallable('forceDeleteSelf').call();
+      } catch (_) { /* swallowed — caller will still be signed out */ }
+    }
   }
 
-  // Upload profile picture to Firebase Storage
+  // Upload profile picture to Firebase Storage.
+  // Versioned filename (timestamp) so the URL changes on each update —
+  // otherwise the 7-day Cache-Control would serve stale avatars to
+  // other clients who already fetched the previous version.
   Future<String> uploadProfilePicture(String uid, File imageFile) async {
     try {
-      final ref = _storage.ref().child('user_profiles').child('$uid.jpg');
-      await ref.putFile(imageFile);
-      return await ref.getDownloadURL();
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final ref = _storage.ref().child('user_profiles').child('${uid}_$ts.jpg');
+      await ref.putFile(
+        imageFile,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
+      final url = await ref.getDownloadURL();
+      // Best-effort cleanup of previous versions for this user so we
+      // don't accumulate storage over time.
+      _cleanupOldProfilePictures(uid, keepPath: ref.fullPath);
+      return url;
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<void> _cleanupOldProfilePictures(String uid,
+      {required String keepPath}) async {
+    try {
+      final listResult = await _storage.ref('user_profiles').listAll();
+      for (final item in listResult.items) {
+        if (item.fullPath == keepPath) continue;
+        if (item.name == '$uid.jpg' || item.name.startsWith('${uid}_')) {
+          try { await item.delete(); } catch (_) {}
+        }
+      }
+    } catch (_) { /* cleanup is best-effort */ }
   }
 
   // Update profile image URL in Firestore

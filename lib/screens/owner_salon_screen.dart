@@ -219,7 +219,7 @@ class _SalonBody extends StatelessWidget {
                 title: (l?.tr('salon_section_services') ?? 'Services ({count})').replaceAll('{count}', '${salon.services.length}'),
                 actionLabel: l?.tr('salon_manage') ?? 'Gérer',
                 onAction: () => _showServicesSheet(context, salon),
-                child: _ServicesPreview(services: salon.services),
+                child: _ServicesPreview(services: salon.services, currency: salon.currency),
               ),
 
               const SizedBox(height: 8),
@@ -229,7 +229,7 @@ class _SalonBody extends StatelessWidget {
                 title: (l?.tr('salon_section_packs') ?? 'Packs ({count})').replaceAll('{count}', '${salon.servicePacks.length}'),
                 actionLabel: l?.tr('salon_manage') ?? 'Gérer',
                 onAction: () => _showPacksSheet(context, salon),
-                child: _PacksPreview(packs: salon.servicePacks),
+                child: _PacksPreview(packs: salon.servicePacks, currency: salon.currency),
               ),
 
               const SizedBox(height: 32),
@@ -281,7 +281,10 @@ class _SalonBody extends StatelessWidget {
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('salons/${salon.id}/cover_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await storageRef.putFile(file);
+      await storageRef.putFile(
+        file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       final url = await storageRef.getDownloadURL();
 
       // Put new cover as first image, keep existing gallery images
@@ -667,8 +670,9 @@ class _HoursRows extends StatelessWidget {
 // ── Services preview ─────────────────────────────────────────────────────────
 
 class _ServicesPreview extends StatelessWidget {
-  const _ServicesPreview({required this.services});
+  const _ServicesPreview({required this.services, required this.currency});
   final List<Map<String, dynamic>> services;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -707,7 +711,7 @@ class _ServicesPreview extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0),
+                    CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0, currency),
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -935,6 +939,14 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         longitude: lng,
         createdAt: widget.salon.createdAt,
         socialLinks: widget.salon.socialLinks,
+        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
+        aiPromosEnabled: widget.salon.aiPromosEnabled,
+        aiPromoConfig: widget.salon.aiPromoConfig,
+        googleReviewReward: widget.salon.googleReviewReward,
+        slug: widget.salon.slug,
+        isPremium: widget.salon.isPremium,
+        galleryStorageUsed: widget.salon.galleryStorageUsed,
+        salonType: widget.salon.salonType,
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1170,6 +1182,16 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         latitude: widget.salon.latitude,
         longitude: widget.salon.longitude,
         createdAt: widget.salon.createdAt,
+        socialLinks: widget.salon.socialLinks,
+        currency: widget.salon.currency,
+        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
+        aiPromosEnabled: widget.salon.aiPromosEnabled,
+        aiPromoConfig: widget.salon.aiPromoConfig,
+        googleReviewReward: widget.salon.googleReviewReward,
+        slug: widget.salon.slug,
+        isPremium: widget.salon.isPremium,
+        galleryStorageUsed: widget.salon.galleryStorageUsed,
+        salonType: widget.salon.salonType,
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1389,6 +1411,16 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
         latitude: widget.salon.latitude,
         longitude: widget.salon.longitude,
         createdAt: widget.salon.createdAt,
+        socialLinks: widget.salon.socialLinks,
+        currency: widget.salon.currency,
+        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
+        aiPromosEnabled: widget.salon.aiPromosEnabled,
+        aiPromoConfig: widget.salon.aiPromoConfig,
+        googleReviewReward: widget.salon.googleReviewReward,
+        slug: widget.salon.slug,
+        isPremium: widget.salon.isPremium,
+        galleryStorageUsed: widget.salon.galleryStorageUsed,
+        salonType: widget.salon.salonType,
       );
       await DatabaseService().saveSalon(updated);
 
@@ -1505,8 +1537,10 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
           assignedMembers: currentAssigned,
           teamMembers: teamMembers,
           salonId: widget.salon.id,
+          salonType: widget.salon.salonType,
           isPremium: widget.salon.isPremium,
           galleryStorageUsed: widget.salon.galleryStorageUsed,
+          currency: widget.salon.currency,
           onSave: (entry) {
             setState(() {
               if (isNew) {
@@ -1656,7 +1690,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0),
+                                            CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0, widget.salon.currency),
                                             style: const TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 12,
@@ -1821,8 +1855,8 @@ class _GallerySectionState extends State<_GallerySection> {
   bool _uploading = false;
   double _uploadProgress = 0;
   int get _maxStorageBytes => widget.salon.isPremium
-      ? 20 * 1024 * 1024 * 1024   // 20 GB premium
-      :  3 * 1024 * 1024 * 1024;  //  3 GB standard
+      ?  5 * 1024 * 1024 * 1024   //  5 GB premium (images + videos)
+      :  3 * 1024 * 1024 * 1024;  //  3 GB standard (images only)
 
   bool get _isPremium => widget.salon.isPremium;
 
@@ -1850,7 +1884,7 @@ class _GallerySectionState extends State<_GallerySection> {
 
     if (video && !_isPremium) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l?.tr('gallery_premium_required') ?? 'Les vidéos sont disponibles avec l\'offre Premium')),
+        SnackBar(content: Text(l?.tr('gallery_premium_required') ?? 'Les vidéos sont disponibles avec le plan Business')),
       );
       return;
     }
@@ -1864,7 +1898,7 @@ class _GallerySectionState extends State<_GallerySection> {
           builder: (ctx) => AlertDialog(
             icon: const Icon(Icons.cloud_off_rounded, color: Colors.orange, size: 48),
             title: const Text('Stockage plein'),
-            content: Text('Vous avez atteint la limite de ${widget.salon.isPremium ? "20" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
+            content: Text('Vous avez atteint la limite de ${widget.salon.isPremium ? "5" : "3"} GB. Supprimez des fichiers pour en ajouter.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
             ],
@@ -1917,7 +1951,12 @@ class _GallerySectionState extends State<_GallerySection> {
           .ref()
           .child('salons/${widget.salon.id}/gallery_${DateTime.now().millisecondsSinceEpoch}.$ext');
 
-      final uploadTask = storageRef.putFile(file);
+      // Cache-Control: 7 days — clients revisiting the gallery reuse local cache
+      // instead of re-downloading the same videos/images (main egress saver).
+      final uploadTask = storageRef.putFile(
+        file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       uploadTask.snapshotEvents.listen((snap) {
         if (mounted) {
           setState(() => _uploadProgress = snap.bytesTransferred / snap.totalBytes);
@@ -2058,7 +2097,7 @@ class _GallerySectionState extends State<_GallerySection> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
-                              child: const Text('Premium', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFD97706))),
+                              child: const Text('Business', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFFD97706))),
                             ),
                           ],
                         ],
@@ -2248,14 +2287,20 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       final beforeRef = FirebaseStorage.instance
           .ref()
           .child('$storageBase/before_$ts.jpg');
-      await beforeRef.putFile(beforeResult.file);
+      await beforeRef.putFile(
+        beforeResult.file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       final beforeUrl = await beforeRef.getDownloadURL();
 
       // Upload after
       final afterRef = FirebaseStorage.instance
           .ref()
           .child('$storageBase/after_$ts.jpg');
-      await afterRef.putFile(afterResult.file);
+      await afterRef.putFile(
+        afterResult.file,
+        SettableMetadata(cacheControl: 'public, max-age=604800'),
+      );
       final afterUrl = await afterRef.getDownloadURL();
 
       await DatabaseService().addBeforeAfter(widget.salonId, {
@@ -2528,8 +2573,9 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _PacksPreview extends StatelessWidget {
-  const _PacksPreview({required this.packs});
+  const _PacksPreview({required this.packs, required this.currency});
   final List<Map<String, dynamic>> packs;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -2591,7 +2637,7 @@ class _PacksPreview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      CurrencyHelper.format(price),
+                      CurrencyHelper.format(price, currency),
                       style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -2677,6 +2723,7 @@ class _PacksSheetState extends State<_PacksSheet> {
       builder: (_) => _PackFormDialog(
         services: widget.salon.services,
         existing: existing,
+        currency: widget.salon.currency,
       ),
     );
     if (result == null) return;
@@ -2819,7 +2866,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                             Row(
                               children: [
                                 Text(
-                                  CurrencyHelper.format(price),
+                                  CurrencyHelper.format(price, widget.salon.currency),
                                   style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
@@ -2828,7 +2875,7 @@ class _PacksSheetState extends State<_PacksSheet> {
                                 if (discount > 0) ...[
                                   const SizedBox(width: 6),
                                   Text(
-                                    CurrencyHelper.format(originalPrice),
+                                    CurrencyHelper.format(originalPrice, widget.salon.currency),
                                     style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.secondary400,
@@ -2916,9 +2963,10 @@ class _PacksSheetState extends State<_PacksSheet> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _PackFormDialog extends StatefulWidget {
-  const _PackFormDialog({required this.services, this.existing});
+  const _PackFormDialog({required this.services, this.existing, required this.currency});
   final List<Map<String, dynamic>> services;
   final Map<String, dynamic>? existing;
+  final String currency;
 
   @override
   State<_PackFormDialog> createState() => _PackFormDialogState();
@@ -3096,7 +3144,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            CurrencyHelper.format(sPrice),
+                            CurrencyHelper.format(sPrice, widget.currency),
                             style: TextStyle(
                               fontSize: 11,
                               color: selected
@@ -3127,7 +3175,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price}').replaceAll('{price}', CurrencyHelper.format(_originalPrice)),
+                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price}').replaceAll('{price}', CurrencyHelper.format(_originalPrice, widget.currency)),
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.secondary500),
                       ),
@@ -3140,7 +3188,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
             const SizedBox(height: 16),
 
             // ── Pack price ──
-            _buildLabel(l?.tr('salon_pack_form_price') ?? 'Prix du pack (MAD)'),
+            _buildLabel(l?.tr('salon_pack_form_price') ?? 'Prix du pack (${CurrencyHelper.symbol(widget.currency)})'),
             const SizedBox(height: 6),
             TextField(
               controller: _priceCtrl,
