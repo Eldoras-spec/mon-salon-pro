@@ -625,12 +625,15 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     final isEdit = widget.product != null;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final screenHeight = MediaQuery.of(context).size.height;
-    // Shrink sheet when keyboard opens so the save button stays accessible.
-    final sheetHeight = (screenHeight * 0.92 - viewInsets).clamp(
-      screenHeight * 0.4,
-      screenHeight * 0.92,
-    );
-    return AnimatedContainer(
+    final sheetHeight = screenHeight * 0.92;
+    // Wrap in Padding(viewInsets) so the keyboard pushes the entire sheet
+    // up — keeps the save button visible. Earlier we tried shrinking the
+    // sheet height (sheetHeight - viewInsets) but that only resized the
+    // box without lifting it above the keyboard, so the bottom content
+    // still ended up hidden.
+    return Padding(
+      padding: EdgeInsets.only(bottom: viewInsets),
+      child: AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       height: sheetHeight,
       decoration: const BoxDecoration(
@@ -857,6 +860,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

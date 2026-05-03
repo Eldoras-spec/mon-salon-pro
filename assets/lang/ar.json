@@ -1383,6 +1383,7 @@
   "upgrade.confirm": "تأكيد الترقية",
   "upgrade.cancel_anytime": "يمكن الإلغاء في أي وقت من اشتراكي.",
   "upgrade.success": "تم تفعيل الباقة 🎉",
+  "upgrade.pending": "جاري التحقق من الشراء — ستُفعّل باقتك خلال ثوانٍ.",
   "upgrade.secure_note": "دفع آمن تتم إدارته بواسطة Apple. ستؤكد عبر Face ID / Touch ID.",
   "upgrade.offering_load_failed": "تعذر تحميل العرض. تحقق من اتصالك.",
   "upgrade.restore": "استعادة مشترياتي",

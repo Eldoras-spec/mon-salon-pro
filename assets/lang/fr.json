@@ -1380,6 +1380,7 @@
   "upgrade.confirm": "Confirmer l'upgrade",
   "upgrade.cancel_anytime": "Résiliable à tout moment depuis Mon abonnement.",
   "upgrade.success": "Plan activé 🎉",
+  "upgrade.pending": "Achat en cours de validation — votre plan sera actif dans quelques instants.",
   "upgrade.secure_note": "Paiement sécurisé géré par Apple. Vous confirmerez avec Face ID / Touch ID.",
   "upgrade.offering_load_failed": "Impossible de charger l'offre. Vérifiez votre connexion.",
   "upgrade.restore": "Restaurer mes achats",

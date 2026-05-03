@@ -49,6 +49,7 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
   Future<void> _loadPackage() async {
     try {
       final offerings = await Purchases.getOfferings();
+      if (!mounted) return;
       final current = offerings.current ??
           offerings.all[RevenueCatService.defaultOfferingId];
       if (current == null) {
@@ -71,6 +72,7 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         _loadingOffering = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadingOffering = false;
         _loadError = e.toString();
