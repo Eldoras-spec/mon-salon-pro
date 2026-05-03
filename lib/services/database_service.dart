@@ -122,7 +122,6 @@ class DatabaseService {
       'trialEndsAt',
       'freeCapGraceEndsAt',
       'paidPlanEverActivated',
-      'suspectedTrialReuse',
       'lastRevenueCatEventType',
       'lastRevenueCatEventAt',
       'rating',
