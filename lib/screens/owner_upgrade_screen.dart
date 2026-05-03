@@ -84,6 +84,14 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
     final pkg = _package;
     if (pkg == null) return;
     final l = AppLocalizations.of(context);
+    final salon = ref.read(ownerSalonProvider).value;
+    const planRank = {
+      PlanConfig.planFree: 0,
+      PlanConfig.planEssentiel: 1,
+      PlanConfig.planBusiness: 2,
+    };
+    final isDowngrade = (planRank[widget.targetPlan] ?? 0) <
+        (planRank[salon?.plan] ?? 0);
     setState(() => _purchasing = true);
     try {
       final customerInfo = await Purchases.purchasePackage(pkg);
@@ -102,11 +110,18 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         Navigator.pop(context);
       } else {
         // Purchase accepted by Apple but entitlement not yet present in
-        // CustomerInfo (rare — webhook race). Tell the owner the plan
-        // will activate shortly.
+        // CustomerInfo. For an upgrade this is a rare RC webhook race —
+        // resolves in seconds. For a downgrade Business→Essentiel this
+        // is the normal Apple deferred path: the new tier kicks in only
+        // at the end of the current billing cycle. Different copy avoids
+        // misleading the owner about timing.
+        final pendingMsg = isDowngrade
+            ? (l?.tr('upgrade.pending_downgrade') ??
+                'Le changement de plan prendra effet à la fin de votre cycle de facturation actuel.')
+            : (l?.tr('upgrade.pending') ??
+                'Achat en cours de validation — votre plan sera actif dans quelques instants.');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l?.tr('upgrade.pending') ??
-              'Achat en cours de validation — votre plan sera actif dans quelques instants.'),
+          content: Text(pendingMsg),
         ));
         Navigator.pop(context);
       }
@@ -207,6 +222,19 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
             salon != null &&
             salon.isTrialEligible;
 
+    // Direction-aware copy: Business owner picking Essentiel = downgrade
+    // (Apple defers it to end of cycle). Free / Essentiel → Business and
+    // Free → Essentiel = upgrade. We use this to swap the title + CTA
+    // wording so the user isn't told they're "upgrading" to a lower tier.
+    const planRank = {
+      PlanConfig.planFree: 0,
+      PlanConfig.planEssentiel: 1,
+      PlanConfig.planBusiness: 2,
+    };
+    final currentRank = planRank[salon?.plan] ?? 0;
+    final targetRank = planRank[widget.targetPlan] ?? 0;
+    final isDowngrade = targetRank < currentRank;
+
     // Apple-localized price (e.g. "22,99 €" in FR, "$19.99" in US).
     final localizedPrice =
         _package?.storeProduct.priceString ?? '—';
@@ -223,7 +251,9 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          l?.tr('upgrade.title') ?? 'Finaliser l\'upgrade',
+          isDowngrade
+              ? (l?.tr('upgrade.title_downgrade') ?? 'Changer de plan')
+              : (l?.tr('upgrade.title') ?? 'Finaliser l\'upgrade'),
           style: GoogleFonts.dmSans(
               fontWeight: FontWeight.bold,
               color: AppColors.brand950,
@@ -390,8 +420,11 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
                         isEssentielWithTrial
                             ? (l?.tr('upgrade.start_trial') ??
                                 'Démarrer le trial gratuit')
-                            : (l?.tr('upgrade.confirm') ??
-                                'Confirmer l\'upgrade'),
+                            : isDowngrade
+                                ? (l?.tr('upgrade.confirm_downgrade') ??
+                                    'Confirmer le changement de plan')
+                                : (l?.tr('upgrade.confirm') ??
+                                    'Confirmer l\'upgrade'),
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
