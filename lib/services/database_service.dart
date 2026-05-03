@@ -115,11 +115,16 @@ class DatabaseService {
     final fullMap = updatedSalon.toMap();
     const serverControlled = {
       'plan',
+      'pendingPlan',
+      'pendingPlanSetAt',
       'isPremium',
       'subscriptionTier',
       'trialEndsAt',
       'freeCapGraceEndsAt',
       'paidPlanEverActivated',
+      'suspectedTrialReuse',
+      'lastRevenueCatEventType',
+      'lastRevenueCatEventAt',
       'rating',
       'reviewCount',
       'botStatus',
