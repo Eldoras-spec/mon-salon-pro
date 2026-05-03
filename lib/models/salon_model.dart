@@ -34,6 +34,13 @@ class SalonModel {
   final String currency; // ISO code: MAD, EUR, USD, XOF, etc.
   final String salonType; // 'femme', 'homme', 'mixte'
   final List<String> dismissedSetupTasks; // keys of setup tasks owner has manually hidden
+  // IANA timezone (e.g. "Africa/Casablanca", "Europe/Paris").
+  // Used by Zayna's getAvailability and reminders to interpret the
+  // owner-typed working hours as wall-clock local. Captured at onboarding
+  // (auto-detected from the device, picker override) and editable via the
+  // settings sheet later. Default kept for legacy salons created before
+  // this field existed.
+  final String timezone;
 
   // ── Subscription plan (source of truth) ────────────────────────────────
   // 'free'      → team capped at 2 members (owner + 1), no videos
@@ -82,6 +89,8 @@ class SalonModel {
       'winBackWeeks': 3,
       'loyalPercent': 15,
       'loyalMinVisits': 10,
+      'birthdayEnabled': true,
+      'birthdayPercent': 20,
     },
     this.googleReviewReward = const {
       'enabled': false,
@@ -98,6 +107,7 @@ class SalonModel {
     this.trialEndsAt,
     this.freeCapGraceEndsAt,
     this.paidPlanEverActivated = false,
+    this.timezone = 'Africa/Casablanca',
   });
 
   /// Client-side predictor of whether this salon would get the 3-month
@@ -154,6 +164,8 @@ class SalonModel {
         'winBackWeeks': 3,
         'loyalPercent': 15,
         'loyalMinVisits': 10,
+        'birthdayEnabled': true,
+        'birthdayPercent': 20,
       }),
       googleReviewReward: Map<String, dynamic>.from(data['googleReviewReward'] ?? {
         'enabled': false,
@@ -180,6 +192,9 @@ class SalonModel {
           ? (data['freeCapGraceEndsAt'] as Timestamp).toDate()
           : null,
       paidPlanEverActivated: data['paidPlanEverActivated'] == true,
+      timezone: (data['timezone'] as String?)?.trim().isNotEmpty == true
+          ? data['timezone'] as String
+          : 'Africa/Casablanca',
     );
   }
 
@@ -212,6 +227,7 @@ class SalonModel {
       'currency': currency,
       'salonType': salonType,
       'plan': plan,
+      'timezone': timezone,
     };
   }
 }

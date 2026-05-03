@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -132,11 +133,36 @@ void _showShareDialog(BuildContext context, PromotionModel promo, String? slug) 
   );
 }
 
-class OwnerPromotionsScreen extends ConsumerWidget {
+class OwnerPromotionsScreen extends ConsumerStatefulWidget {
   const OwnerPromotionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OwnerPromotionsScreen> createState() =>
+      _OwnerPromotionsScreenState();
+}
+
+class _OwnerPromotionsScreenState
+    extends ConsumerState<OwnerPromotionsScreen> {
+  // Default: both groups collapsed (show only headers + counts).
+  // Drill-down = tap to expand inline.
+  final Set<String> _expandedGroups = {};
+  // Default: hide expired/inactive. Toggle reveals them.
+  bool _showInactive = false;
+
+  bool _isExpanded(String key) => _expandedGroups.contains(key);
+
+  void _toggleGroup(String key) {
+    setState(() {
+      if (_expandedGroups.contains(key)) {
+        _expandedGroups.remove(key);
+      } else {
+        _expandedGroups.add(key);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final salonAsync = ref.watch(ownerSalonProvider);
     final promosAsync = ref.watch(ownerPromotionsProvider);
@@ -283,41 +309,131 @@ class OwnerPromotionsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 28),
 
-                      // Promotions list
-                      Text(
-                        l?.tr('promotions_my_promotions') ?? 'Mes promotions',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.brand950,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      // Promotions list — grouped by source (AI vs manual)
+                      // with inline drill-down (tap header to expand).
+                      // Inactive/expired hidden behind a toggle.
+                      Builder(builder: (_) {
+                        // Apply the active-only filter unless user opted in.
+                        final visible = _showInactive
+                            ? promos
+                            : promos
+                                .where((p) => p.isActive && !p.isExpired)
+                                .toList();
+                        final aiPromos =
+                            visible.where((p) => p.isAiGenerated).toList();
+                        final manualPromos =
+                            visible.where((p) => !p.isAiGenerated).toList();
+                        final hiddenCount = promos.length - visible.length;
 
-                      if (promos.isEmpty)
-                        _EmptyPromos(
-                          onAdd: () {
-                            final salon = salonAsync.value;
-                            if (salon != null) {
-                              _showAddPromoSheet(context, salon.id,
-                                  services: salon.services,
-                                  slug: salon.slug);
-                            }
-                          },
-                        )
-                      else
-                        ...promos.map((p) => Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: 10),
-                              child: _PromoTile(
-                                promo: p,
-                                slug: salonAsync.value?.slug,
-                                onToggle: (val) =>
-                                    _db.togglePromotionActive(p.id, val),
-                                onDelete: () =>
-                                    _confirmDelete(context, p.id),
-                              ),
-                            )),
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  l?.tr('promotions_my_promotions') ??
+                                      'Mes promotions',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brand950,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (hiddenCount > 0 || _showInactive)
+                                  TextButton.icon(
+                                    onPressed: () => setState(() {
+                                      _showInactive = !_showInactive;
+                                    }),
+                                    icon: Icon(
+                                      _showInactive
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      size: 16,
+                                      color: AppColors.secondary500,
+                                    ),
+                                    label: Text(
+                                      _showInactive
+                                          ? (l?.tr('promotions_hide_inactive') ??
+                                              'Masquer inactives')
+                                          : (l?.tr('promotions_show_inactive') ??
+                                                  'Voir inactives ({n})')
+                                              .replaceAll(
+                                                  '{n}', '$hiddenCount'),
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        color: AppColors.secondary500,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            if (visible.isEmpty)
+                              _EmptyPromos(
+                                onAdd: () {
+                                  final salon = salonAsync.value;
+                                  if (salon != null) {
+                                    _showAddPromoSheet(context, salon.id,
+                                        services: salon.services,
+                                        slug: salon.slug);
+                                  }
+                                },
+                              )
+                            else ...[
+                              // Only render the AI promos block when the
+                              // master switch (`salon.aiPromosEnabled`) is
+                              // ON. The 4 rule cards are children of the
+                              // master toggle in the user mental model,
+                              // not an independent feature.
+                              if (aiPromos.isNotEmpty &&
+                                  salonAsync.value?.aiPromosEnabled == true) ...[
+                                _PromoGroupSection(
+                                  icon: Icons.auto_awesome_rounded,
+                                  iconBg: AppColors.brand50,
+                                  iconColor: AppColors.brand600,
+                                  label: l?.tr('promotions_group_ai') ??
+                                      'Promotions IA',
+                                  count: aiPromos.length,
+                                  expanded: _isExpanded('ai'),
+                                  onToggle: () => _toggleGroup('ai'),
+                                  promos: aiPromos,
+                                  slug: salonAsync.value?.slug,
+                                  onPromoToggle: (id, val) =>
+                                      _db.togglePromotionActive(id, val),
+                                  onPromoDelete: (id) =>
+                                      _confirmDelete(context, id),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              if (manualPromos.isNotEmpty)
+                                _PromoGroupSection(
+                                  icon: Icons.person_outline_rounded,
+                                  iconBg: const Color(0xFFEFF6FF),
+                                  iconColor: const Color(0xFF2563EB),
+                                  label: l?.tr('promotions_group_manual') ??
+                                      'Promotions manuelles',
+                                  count: manualPromos.length,
+                                  expanded: _isExpanded('manual'),
+                                  onToggle: () => _toggleGroup('manual'),
+                                  promos: manualPromos,
+                                  slug: salonAsync.value?.slug,
+                                  onPromoToggle: (id, val) =>
+                                      _db.togglePromotionActive(id, val),
+                                  onPromoDelete: (id) =>
+                                      _confirmDelete(context, id),
+                                ),
+                            ],
+                          ],
+                        );
+                      }),
                       const SizedBox(height: 28),
 
                       // ── Paramètres fidélité & IA ────────────────────────
@@ -487,22 +603,57 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
     if (picked != null) setState(() => _expiresAt = picked);
   }
 
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: const Color(0xFFDC2626),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _save() async {
+    final l = AppLocalizations.of(context);
     final title = _titleCtrl.text.trim();
     final desc = _descCtrl.text.trim();
-    if (title.isEmpty || desc.isEmpty) return;
+    // Title is required; description is optional. We give explicit
+    // SnackBar feedback for every failure path so the "Publier" button
+    // never silently no-ops (was: title.isEmpty || desc.isEmpty → return,
+    // which left the user staring at an unresponsive button).
+    if (title.isEmpty) {
+      _showError(l?.tr('promotions_error_title_required') ??
+          'Veuillez saisir un titre pour la promotion.');
+      return;
+    }
 
     double? percent;
     if (_type == 'percent' || _type == 'conditional') {
       percent = double.tryParse(
           _percentCtrl.text.replaceAll(',', '.'));
-      if (percent == null || percent <= 0 || percent > 100) return;
+      if (percent == null || percent <= 0 || percent > 100) {
+        _showError(l?.tr('promotions_error_percent_invalid') ??
+            'Le pourcentage doit être un nombre entre 1 et 100.');
+        return;
+      }
     }
 
     String? code;
     if (_type == 'code') {
       code = _codeCtrl.text.trim().toUpperCase();
-      if (code.isEmpty) return;
+      if (code.isEmpty) {
+        _showError(l?.tr('promotions_error_code_required') ??
+            'Veuillez saisir un code promo.');
+        return;
+      }
+    }
+
+    if ((_type == 'percent' || _type == 'conditional') &&
+        !_allServices && _selectedServices.isEmpty) {
+      _showError(l?.tr('promotions_error_services_required') ??
+          'Sélectionnez au moins un service ou choisissez « Tous les services ».');
+      return;
     }
 
     setState(() => _saving = true);
@@ -608,10 +759,11 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
             ),
             const SizedBox(height: 16),
 
-            _PromoField(label: l?.tr('promotions_field_title') ?? 'Titre', controller: _titleCtrl),
+            _PromoField(label: l?.tr('promotions_field_title') ?? 'Titre *', controller: _titleCtrl),
             const SizedBox(height: 12),
             _PromoField(
-                label: l?.tr('promotions_field_description') ?? 'Description',
+                label: l?.tr('promotions_field_description_optional') ??
+                    'Description (optionnel)',
                 controller: _descCtrl,
                 maxLines: 2),
             const SizedBox(height: 12),
@@ -652,47 +804,16 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
               ),
               if (!_allServices && widget.services.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: widget.services.map((s) {
-                    final name = (s['name'] ?? s['title'] ?? '') as String;
-                    final isSelected = _selectedServices.contains(name);
-                    return GestureDetector(
-                      onTap: () => setState(() {
-                        if (isSelected) {
-                          _selectedServices.remove(name);
-                        } else {
-                          _selectedServices.add(name);
-                        }
+                _ServicesMultiSelect(
+                  l: l,
+                  services: widget.services,
+                  selected: _selectedServices,
+                  onChanged: (next) =>
+                      setState(() {
+                        _selectedServices
+                          ..clear()
+                          ..addAll(next);
                       }),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.brand700
-                              : AppColors.secondary50,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.brand700
-                                : AppColors.secondary200,
-                          ),
-                        ),
-                        child: Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.brand950,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
                 ),
               ],
               if (!_allServices && widget.services.isEmpty)
@@ -972,6 +1093,127 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
 // ── Promo Tile ───────────────────────────────────────────────────────────────
 
+class _PromoGroupSection extends StatelessWidget {
+  const _PromoGroupSection({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.label,
+    required this.count,
+    required this.expanded,
+    required this.onToggle,
+    required this.promos,
+    required this.slug,
+    required this.onPromoToggle,
+    required this.onPromoDelete,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String label;
+  final int count;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final List<PromotionModel> promos;
+  final String? slug;
+  final void Function(String id, bool value) onPromoToggle;
+  final void Function(String id) onPromoDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.secondary100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brand950,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.secondary400,
+                      size: 22,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded) ...[
+            const Divider(height: 1, color: AppColors.secondary100),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Column(
+                children: [
+                  for (var i = 0; i < promos.length; i++) ...[
+                    _PromoTile(
+                      promo: promos[i],
+                      slug: slug,
+                      onToggle: (val) =>
+                          onPromoToggle(promos[i].id, val),
+                      onDelete: () => onPromoDelete(promos[i].id),
+                    ),
+                    if (i < promos.length - 1) const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _PromoTile extends StatelessWidget {
   const _PromoTile({
     required this.promo,
@@ -1070,13 +1312,61 @@ class _PromoTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text(promo.description,
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.secondary400),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                if (promo.targetedClientName != null) ...[
+                if (promo.isAiRuleBased)
+                  // Rule-based AI promo (1 doc per aiReason, applies to
+                  // every eligible client). The per-instance description
+                  // / client name / expiry don't make sense here — show a
+                  // redemption counter instead. Backend increments
+                  // `redemptionCount` atomically at each redemption.
+                  Row(
+                    children: [
+                      const Icon(Icons.people_outline_rounded,
+                          size: 12, color: AppColors.brand500),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          () {
+                            final n = promo.redemptionCount;
+                            if (n == 0) {
+                              return l?.tr('promotions_ai_no_redemptions') ??
+                                  'Aucune utilisation pour le moment';
+                            }
+                            // FR/EN/ES split on n==1; AR's plural rules
+                            // are richer but the _other variant is OK
+                            // for 2+ in this UX (avoids dual/few/many).
+                            final key = n == 1
+                                ? 'promotions_ai_redemption_count_one'
+                                : 'promotions_ai_redemption_count_other';
+                            final fallback = n == 1
+                                ? '1 personne a profité de cette offre'
+                                : '$n personnes ont profité de cette offre';
+                            return (l?.tr(key) ?? fallback)
+                                .replaceAll('{n}', '$n');
+                          }(),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.brand500,
+                              fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(promo.description,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.secondary400),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                // Show "Pour {name}" only when the promo actually targets
+                // ONE specific client (manual targeted, or transitional
+                // old per-client AI doc still in flight). Rule-based AI
+                // promos have `targetedClientId == null` so they fall
+                // through naturally.
+                if (promo.targetedClientId != null &&
+                    promo.targetedClientName != null) ...[
                   const SizedBox(height: 3),
                   Row(
                     children: [
@@ -1110,7 +1400,13 @@ class _PromoTile extends StatelessWidget {
                             letterSpacing: 1.2)),
                   ),
                 ],
-                if (promo.expiresAt != null && !isExpired) ...[
+                // Rule-based AI promos have no per-instance expiry
+                // (they stay live as long as the rule is enabled). Old
+                // per-client AI docs still carry a +7d expiry — show it
+                // for those, hide for rule-based.
+                if (promo.expiresAt != null &&
+                    !isExpired &&
+                    !promo.isAiRuleBased) ...[
                   const SizedBox(height: 3),
                   Text(
                     (l?.tr('promotions_expiry_label') ?? 'Expire le {date}').replaceAll('{date}', '${promo.expiresAt!.day}/${promo.expiresAt!.month}/${promo.expiresAt!.year}'),
@@ -1135,29 +1431,39 @@ class _PromoTile extends StatelessWidget {
                   materialTapTargetSize:
                       MaterialTapTargetSize.shrinkWrap,
                 ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.share_rounded,
-                        size: 17, color: AppColors.brand400),
-                    onPressed: () => _sharePromo(promo, slug, l),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 17, color: AppColors.secondary300),
-                    onPressed: onDelete,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                  ),
-                ],
-              ),
+              // AI promos can only be enabled/disabled (the switch
+              // above). The pre-Zayna cron `generateSmartPromotions`
+              // already pushes a per-client notification on creation,
+              // so manual share is redundant. Delete is suppressed too:
+              // each AI promo expires on its own in 7 days, and removing
+              // one mid-window can leave a client looking for an offer
+              // they were already notified about. Owner just toggles
+              // on/off — set-and-forget.
+              if (!promo.isAiGenerated) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.share_rounded,
+                          size: 17, color: AppColors.brand400),
+                      onPressed: () => _sharePromo(promo, slug, l),
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          size: 17, color: AppColors.secondary300),
+                      onPressed: onDelete,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ],
@@ -2257,6 +2563,24 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
         'aiPromosEnabled',
         value,
       );
+      // Cascade isActive on existing AI rule docs so the section above
+      // (Promotions IA cards) reflects the master state immediately.
+      // Without this, flipping the master OFF leaves the 4 rule cards
+      // showing "Active" until the next sync cron pass.
+      await DatabaseService().setAiPromotionsActive(widget.salon.id, value);
+      // When flipping ON, also trigger the on-demand sync — covers the
+      // first-time-enable case where no AI rule docs exist yet (cascade
+      // alone wouldn't create them; we'd have to wait for the daily
+      // 08:00 Paris cron).
+      if (value) {
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('syncAiPromosNow')
+              .call();
+        } catch (_) {
+          // Non-fatal — daily cron will catch up.
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _enabled = !value);
@@ -2276,6 +2600,8 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
     int winBackWeeks = config['winBackWeeks'] ?? 3;
     int loyalPercent = config['loyalPercent'] ?? 15;
     int loyalMinVisits = config['loyalMinVisits'] ?? 10;
+    bool birthdayEnabled = config['birthdayEnabled'] ?? true;
+    int birthdayPercent = config['birthdayPercent'] ?? 20;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -2360,6 +2686,46 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                     30,
                     (v) => setDialogState(() => loyalMinVisits = v),
                   ),
+                  const Divider(height: 24),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Promo anniversaire',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.brand950)),
+                            Text(
+                                'Envoyer un message + offrir une réduction le jour J',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.secondary400)),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: birthdayEnabled,
+                        activeTrackColor: AppColors.brand600,
+                        onChanged: (v) =>
+                            setDialogState(() => birthdayEnabled = v),
+                      ),
+                    ],
+                  ),
+                  if (birthdayEnabled) ...[
+                    const SizedBox(height: 8),
+                    _configRow(
+                      'Réduction anniversaire',
+                      'Offre envoyée le jour de l\'anniversaire',
+                      '$birthdayPercent%',
+                      birthdayPercent,
+                      5,
+                      50,
+                      (v) => setDialogState(() => birthdayPercent = v),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2376,6 +2742,8 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                 config['winBackWeeks'] = winBackWeeks;
                 config['loyalPercent'] = loyalPercent;
                 config['loyalMinVisits'] = loyalMinVisits;
+                config['birthdayEnabled'] = birthdayEnabled;
+                config['birthdayPercent'] = birthdayPercent;
                 Navigator.pop(ctx, true);
               },
               style: ElevatedButton.styleFrom(
@@ -2398,6 +2766,16 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
           'aiPromoConfig',
           config,
         );
+        // Trigger immediate sync of the AI rule promo docs so the new
+        // percentages land before the next 08:00 Paris cron pass. CF is
+        // a no-op when the master switch is OFF — safe to call always.
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('syncAiPromosNow')
+              .call();
+        } catch (_) {
+          // Non-fatal — daily cron will catch up. Don't block the UX.
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2571,3 +2949,147 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
     );
   }
 }
+
+/// Multi-select for "Services spécifiques" on the promotion form.
+/// Shows a dropdown-style button with the current count + a list expander.
+/// Was previously a Wrap of chips that took the full screen width when
+/// the salon had many services — moved to an explicit pop-out list per
+/// owner request.
+class _ServicesMultiSelect extends StatefulWidget {
+  final AppLocalizations? l;
+  final List<Map<String, dynamic>> services;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+  const _ServicesMultiSelect({
+    required this.l,
+    required this.services,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ServicesMultiSelect> createState() => _ServicesMultiSelectState();
+}
+
+class _ServicesMultiSelectState extends State<_ServicesMultiSelect> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.selected.length;
+    final label = count == 0
+        ? (widget.l?.tr('promotions_select_services') ??
+            'Sélectionner les services')
+        : (widget.l?.tr('promotions_selected_services_count') ??
+                '{count} service(s) sélectionné(s)')
+            .replaceAll('{count}', '$count');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => setState(() => _open = !_open),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.secondary50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.secondary200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.checklist_rounded,
+                    size: 18, color: AppColors.brand700),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: count > 0 ? FontWeight.w600 : FontWeight.w400,
+                      color: count > 0
+                          ? AppColors.brand950
+                          : AppColors.secondary500,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _open
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 22,
+                  color: AppColors.secondary500,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_open) ...[
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 240),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.secondary200),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: widget.services.length,
+              separatorBuilder: (_, __) => const Divider(
+                height: 1,
+                color: AppColors.secondary100,
+              ),
+              itemBuilder: (_, i) {
+                final s = widget.services[i];
+                final name = (s['name'] ?? s['title'] ?? '') as String;
+                final isSelected = widget.selected.contains(name);
+                return InkWell(
+                  onTap: () {
+                    final next = Set<String>.from(widget.selected);
+                    if (isSelected) {
+                      next.remove(name);
+                    } else {
+                      next.add(name);
+                    }
+                    widget.onChanged(next);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          size: 20,
+                          color: isSelected
+                              ? AppColors.brand600
+                              : AppColors.secondary400,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.brand950,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+

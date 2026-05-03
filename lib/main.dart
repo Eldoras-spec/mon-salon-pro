@@ -191,7 +191,11 @@ class MonSalonProApp extends ConsumerWidget {
           return userModelAsync.when(
             data: (model) {
               if (model == null) {
-                Future.delayed(const Duration(seconds: 3), () {
+                // Orphan auth user — `users/{uid}` doesn't exist after the
+                // 3-retry / 9s wait inside userModelProvider. Sign out
+                // immediately so the user lands cleanly on the login screen
+                // instead of staring at "Profil introuvable" for 3 more secs.
+                Future.microtask(() {
                   if (ref.read(authStateProvider).value != null) {
                     ref.read(authServiceProvider).signOut();
                     ref.invalidate(authStateProvider);
@@ -232,16 +236,23 @@ class MonSalonProApp extends ConsumerWidget {
               // Save FCM token for push notifications
               NotificationService().saveTokenForUser(user.uid);
 
-              // New owners must validate WhatsApp via OTP at onboarding step 1
-              // before reaching the dashboard. Only enforced when the user
-              // hasn't already onboarded — the presence of a salon doc means
-              // they completed onboarding in the past (legacy users who
-              // predate the OTP requirement) and must not be blocked.
-              if (model.userType == UserType.owner && !model.whatsappVerified) {
+              // Owners always need a salon doc to access the dashboard.
+              // If `salons/{uid}` is missing, route to the onboarding flow
+              // — covers both fresh signups AND the edge case where a
+              // user's salon doc was deleted manually but `users/{uid}`
+              // remained (orphan state). Whatsapp-verified status only
+              // controls *which* onboarding step we land on, not whether
+              // we route at all.
+              if (model.userType == UserType.owner) {
                 final salonAsync = ref.watch(ownerSalonProvider);
                 return salonAsync.when(
                   data: (salon) {
-                    if (salon == null) return const OwnerOnboardingStep1Screen();
+                    if (salon == null) {
+                      // No salon → resume onboarding from step 1. The screen
+                      // handles already-verified-WhatsApp by skipping the OTP
+                      // check, so it works for both fresh and orphan users.
+                      return const OwnerOnboardingStep1Screen();
+                    }
                     return _buildOwnerHome(context, ref, model);
                   },
                   loading: () => const Scaffold(

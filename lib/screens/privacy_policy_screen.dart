@@ -34,7 +34,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Dernière mise à jour : 1er mars 2026',
+              'Dernière mise à jour : 27 avril 2026',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 color: AppColors.secondary400,
@@ -66,8 +66,23 @@ class PrivacyPolicyScreen extends StatelessWidget {
             _buildSection(
               '4. Partage des données',
               '• Avec les salons : votre nom et téléphone sont partagés avec le salon lors d\'une réservation pour permettre la prestation.\n\n'
+                  '• Avec nos prestataires techniques : Google Firebase (hébergement, base de données), Google Cloud (modèle d\'IA Gemini pour l\'assistante WhatsApp Zayna), Stripe Inc. (traitement des paiements et abonnements), Infobip (envoi des messages WhatsApp d\'OTP et de Zayna), Meta WhatsApp Business (canal de communication WhatsApp).\n\n'
                   '• Nous ne vendons jamais vos données à des tiers.\n\n'
                   '• Nous pouvons partager des données anonymisées à des fins statistiques.',
+            ),
+            _buildSection(
+              '4 bis. Paiements en ligne — Stripe Connect',
+              '• Lorsqu\'un salon active les paiements en ligne, il connecte son propre compte Stripe via Stripe Connect Express.\n\n'
+                  '• Vos informations bancaires (numéro de carte, CVC, etc.) sont collectées et stockées exclusivement par Stripe (PCI-DSS Level 1). Mon Salon ne stocke aucune donnée bancaire.\n\n'
+                  '• Lors d\'un paiement, Stripe transmet à Mon Salon uniquement : montant, devise, identifiant de transaction, statut. Ces données sont liées à votre rendez-vous ou commande boutique.\n\n'
+                  '• Politique de confidentialité Stripe : https://stripe.com/privacy',
+            ),
+            _buildSection(
+              '4 ter. Assistante WhatsApp Zayna',
+              '• Si le salon où vous réservez est en plan Business et a activé l\'assistante Zayna, vos messages WhatsApp avec ce salon sont traités par notre assistante IA basée sur Google Gemini.\n\n'
+                  '• Les conversations sont stockées de manière sécurisée pour permettre la continuité du dialogue. Elles ne sont pas utilisées à d\'autres fins.\n\n'
+                  '• Si vous nous envoyez un message vocal, il est transcrit par Gemini en texte (audio non conservé après transcription) puis traité comme un message texte.\n\n'
+                  '• Vous pouvez à tout moment demander à parler avec une personne du salon via la commande "humain" ou "agent".',
             ),
             _buildSection(
               '5. Stockage et sécurité',

@@ -23,6 +23,7 @@ import '../services/locale_service.dart';
 import '../utils/media_compressor.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'login_screen.dart';
+import 'owner_bot_settings_screen.dart';
 import 'owner_subscription_screen.dart';
 
 String _hashPin(String pin) {
@@ -812,8 +813,6 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
   late final TextEditingController _instagramCtrl;
   late final TextEditingController _facebookCtrl;
   late final TextEditingController _tiktokCtrl;
-  String _whatsappInitial = ''; // raw value from Firestore (used as initial for the picker)
-  String? _whatsappE164; // current edited value
   bool _initialized = false;
 
   void _initControllers(Map<String, String> links, String country) {
@@ -821,8 +820,6 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
     _instagramCtrl = TextEditingController(text: links['instagram'] ?? '');
     _facebookCtrl = TextEditingController(text: links['facebook'] ?? '');
     _tiktokCtrl = TextEditingController(text: links['tiktok'] ?? '');
-    _whatsappInitial = links['whatsapp'] ?? '';
-    _whatsappE164 = _whatsappInitial.isEmpty ? null : _whatsappInitial;
     _initialized = true;
   }
 
@@ -839,12 +836,19 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
   Future<void> _save(String salonId) async {
     setState(() => _saving = true);
     try {
+      // Mirror the owner's verified `users.whatsapp` into the salon's
+      // socialLinks.whatsapp so the public view (client app + website)
+      // keeps showing a working WhatsApp without the owner managing two
+      // values. user.whatsapp stays the SoT (OTP-verified, used by bot,
+      // alerts, etc.) — the social-links copy is a denormalised read.
+      final ownerWhatsapp =
+          ref.read(userStreamProvider).value?.whatsapp ?? '';
       await FirebaseFirestore.instance.collection('salons').doc(salonId).update({
         'socialLinks': {
           'instagram': _instagramCtrl.text.trim().replaceAll('@', ''),
           'facebook': _facebookCtrl.text.trim().replaceAll('@', ''),
           'tiktok': _tiktokCtrl.text.trim().replaceAll('@', ''),
-          'whatsapp': _whatsappE164 ?? '',
+          'whatsapp': ownerWhatsapp,
         },
       });
       ref.invalidate(ownerSalonProvider);
@@ -929,7 +933,13 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
             controller: _tiktokCtrl,
             hint: 'nom_utilisateur',
           ),
-          _whatsappRow(),
+          // WhatsApp row removed — the OTP-verified number stored in
+          // `users/{uid}.whatsapp` is the single source of truth (used
+          // by OTP, the bot's owner identification, quota alerts, etc.).
+          // We auto-mirror it into `salon.socialLinks.whatsapp` on save
+          // so the public salon view (which reads socialLinks.whatsapp)
+          // keeps the same value without the owner having to enter it
+          // twice.
         ],
       ),
     );
@@ -995,43 +1005,9 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
     );
   }
 
-  Widget _whatsappRow() {
-    final displayValue = _whatsappE164 ?? _whatsappInitial;
-    final hasValue = displayValue.trim().isNotEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _editing
-                ? CountryPhoneField(
-                    initialE164: _whatsappInitial,
-                    onChanged: (v) => _whatsappE164 = v,
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('WhatsApp',
-                          style: const TextStyle(fontSize: 11, color: AppColors.secondary400)),
-                      const SizedBox(height: 2),
-                      Text(
-                        hasValue ? displayValue : (AppLocalizations.of(context)?.tr('profile_social_not_set') ?? 'Non renseigné'),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: hasValue ? AppColors.brand950 : AppColors.secondary300,
-                          fontStyle: hasValue ? FontStyle.normal : FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
+  // _whatsappRow() removed — see comment in build(). The WhatsApp number
+  // displayed publicly on the salon page is auto-mirrored from the
+  // owner's verified `users/{uid}.whatsapp` (set during signup OTP).
 }
 
 class _SalonStat extends StatelessWidget {
@@ -1202,6 +1178,21 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => const OwnerSubscriptionScreen(),
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 46),
+
+            // ── Assistant BOT (propriétaire uniquement, gate Business in-screen) ─
+            _SettingsRow(
+              icon: Icons.smart_toy_outlined,
+              iconColor: const Color(0xFF15803D),
+              iconBg: const Color(0xFFE7F8EE),
+              label: l?.tr('menu_bot_settings') ?? 'Assistant BOT',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OwnerBotSettingsScreen(),
                 ),
               ),
             ),

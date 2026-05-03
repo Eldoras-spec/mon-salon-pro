@@ -33,10 +33,45 @@ final ownerSalonProvider = StreamProvider<SalonModel?>((ref) {
 
 /// Live stream of all appointments booked at the owner's salon.
 /// Returns an empty list until the salon document is loaded.
+///
+/// ⚠️ This provider is capped at 100 docs (server-side `.limit(100)`)
+/// without ordering, so for big salons it returns an arbitrary 100
+/// appointments. Prefer the bounded providers below for new code:
+///   - [ownerHomeAppointmentsProvider] — last 7d + next 7d (home dashboard)
+///   - [ownerNoShowWindowAppointmentsProvider] — last 6 months (no-show risk)
+///   - [ownerAppointmentsRangeProvider] — period-selector driven (RDV list)
 final ownerAppointmentsProvider = StreamProvider<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getSalonAppointments(salon.id);
+});
+
+/// Live stream of appointments around "now" (last 7 days + next 7 days).
+/// This is the cheap window the home dashboard needs: today's RDV + current
+/// week stats + a recent-5 fallback. Uses a server-side `dateTime` filter
+/// so reads scale with current activity, not lifetime salon history.
+final ownerHomeAppointmentsProvider =
+    StreamProvider<List<AppointmentModel>>((ref) {
+  final salon = ref.watch(ownerSalonProvider).value;
+  if (salon == null) return Stream.value([]);
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, now.day - 7);
+  final end = DateTime(now.year, now.month, now.day + 8);
+  return _db.streamSalonAppointmentsForRange(salon.id, start, end);
+});
+
+/// Live stream of the last 6 months of appointments — used by the
+/// no-show-risk derivation. Cancellation patterns are visible inside
+/// 6 months for most clients, so this trades a bit of accuracy on
+/// long-time clients for bounded reads (no full-history scan).
+final ownerNoShowWindowAppointmentsProvider =
+    StreamProvider<List<AppointmentModel>>((ref) {
+  final salon = ref.watch(ownerSalonProvider).value;
+  if (salon == null) return Stream.value([]);
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month - 6, now.day);
+  final end = DateTime(now.year, now.month, now.day + 1);
+  return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
 /// Live stream of inventory items for the owner's salon.

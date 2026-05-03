@@ -100,6 +100,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
         isPremium: salon.isPremium,
         galleryStorageUsed: salon.galleryStorageUsed,
         salonType: salon.salonType,
+        timezone: salon.timezone,
       );
       await DatabaseService().saveSalon(updated);
 
@@ -427,7 +428,38 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
     );
   }
 
-  void _deleteService(int index, AppLocalizations? l, [SalonModel? salon]) {
+  /// Generic confirm dialog used before any destructive item removal
+  /// (service or pack). Returns true when the user explicitly accepts.
+  Future<bool> _confirmDelete(
+    AppLocalizations? l, {
+    required String title,
+    required String message,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: Text(l?.tr('common_delete') ?? 'Supprimer',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _deleteService(int index, AppLocalizations? l, [SalonModel? salon]) async {
     final serviceName = _services[index]['name'] as String? ?? '';
     final packUsingService = _packs.where((pack) {
       final packServices = List<String>.from(pack['services'] ?? []);
@@ -449,6 +481,17 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
       );
       return;
     }
+
+    final confirmed = await _confirmDelete(
+      l,
+      title: l?.tr('salon_service_delete_title') ?? 'Supprimer ce service ?',
+      message: (l?.tr('salon_service_delete_message') ??
+              'Vous êtes sur le point de supprimer « {name} ». Cette action est définitive.')
+          .replaceAll('{name}', serviceName),
+    );
+    if (!confirmed) return;
+    if (!mounted) return;
+
     // Clean up gallery files from Storage
     final service = _services[index];
     if (service['isComplex'] == true && service['options'] != null) {
@@ -531,7 +574,18 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
-                    onPressed: () { setState(() => _packs.removeAt(i)); _save(salon); },
+                    onPressed: () async {
+                      final confirmed = await _confirmDelete(
+                        l,
+                        title: l?.tr('salon_pack_delete_title') ?? 'Supprimer ce pack ?',
+                        message: (l?.tr('salon_pack_delete_message') ??
+                                'Vous êtes sur le point de supprimer « {name} ». Cette action est définitive.')
+                            .replaceAll('{name}', '$name'),
+                      );
+                      if (!confirmed || !mounted) return;
+                      setState(() => _packs.removeAt(i));
+                      _save(salon);
+                    },
                   ),
                 ],
               ),

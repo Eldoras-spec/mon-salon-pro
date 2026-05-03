@@ -103,6 +103,7 @@ class DatabaseService {
       galleryStorageUsed: salon.galleryStorageUsed,
       salonType: salon.salonType,
       plan: salon.plan,
+      timezone: salon.timezone,
     );
 
     await _firestore
@@ -707,6 +708,25 @@ class DatabaseService {
         .update({'isActive': isActive});
   }
 
+  /// Cascades isActive to every AI-generated promo of the salon. Called
+  /// when the owner flips the master `aiPromosEnabled` switch so the
+  /// existing rule docs (anniversaire/top client/fidèle/absent) reflect
+  /// the new master state immediately, without waiting for the daily
+  /// `generateSmartPromotions` cron pass.
+  Future<void> setAiPromotionsActive(String salonId, bool isActive) async {
+    final snap = await _firestore
+        .collection('promotions')
+        .where('salonId', isEqualTo: salonId)
+        .where('isAiGenerated', isEqualTo: true)
+        .get();
+    if (snap.docs.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final d in snap.docs) {
+      batch.update(d.reference, {'isActive': isActive});
+    }
+    await batch.commit();
+  }
+
   Future<void> deletePromotion(String id) async {
     await _firestore.collection('promotions').doc(id).delete();
   }
@@ -866,6 +886,24 @@ class DatabaseService {
     await _firestore.collection('appointments').doc(appointmentId).update({
       'assignedMemberId': memberId,
       'assignedMemberName': memberName,
+    });
+  }
+
+  /// Reschedule an existing appointment to a new wall-clock UTC date+time.
+  /// Wall-clock UTC = the local date+time the user picked, stored without
+  /// timezone conversion (matches how the rest of the system stores
+  /// appointments, cf project memory).
+  Future<void> rescheduleAppointment(
+      String appointmentId, DateTime newDateTime) async {
+    final wallClockUtc = DateTime.utc(
+      newDateTime.year,
+      newDateTime.month,
+      newDateTime.day,
+      newDateTime.hour,
+      newDateTime.minute,
+    );
+    await _firestore.collection('appointments').doc(appointmentId).update({
+      'dateTime': Timestamp.fromDate(wallClockUtc),
     });
   }
 

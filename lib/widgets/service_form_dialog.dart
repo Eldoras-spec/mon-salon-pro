@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -65,6 +66,12 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   bool _showLongPressHint = false;
   static const _hintKey = 'hasSeenLongPressHint';
 
+  // ── Online card payment (Stripe Connect) ──
+  /// 'none' | 'full' | 'percentage' | 'fixed_above'
+  String _paymentMode = 'none';
+  late final TextEditingController _paymentValueCtrl;
+  late final TextEditingController _paymentThresholdCtrl;
+
   @override
   void initState() {
     super.initState();
@@ -90,6 +97,15 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         (e!['options'] as List).map((o) => Map<String, dynamic>.from(o as Map)),
       );
     }
+    _paymentMode = (e?['paymentMode'] as String?) ?? 'none';
+    final pv = e?['paymentValue'];
+    _paymentValueCtrl = TextEditingController(
+      text: pv is num && pv > 0 ? pv.toStringAsFixed(0) : '',
+    );
+    final pt = e?['paymentThreshold'];
+    _paymentThresholdCtrl = TextEditingController(
+      text: pt is num && pt > 0 ? pt.toStringAsFixed(0) : '',
+    );
   }
 
   @override
@@ -111,6 +127,8 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _nameCtrl.dispose();
     _priceCtrl.dispose();
     _descCtrl.dispose();
+    _paymentValueCtrl.dispose();
+    _paymentThresholdCtrl.dispose();
     super.dispose();
   }
 
@@ -134,6 +152,13 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       'duration': _duration,
       'assignedMembers': _selectedMembers.toList(),
       'isComplex': _isComplex,
+      'paymentMode': _paymentMode,
+      if (_paymentMode == 'percentage' || _paymentMode == 'fixed_above')
+        'paymentValue':
+            double.tryParse(_paymentValueCtrl.text.trim()) ?? 0.0,
+      if (_paymentMode == 'fixed_above')
+        'paymentThreshold':
+            double.tryParse(_paymentThresholdCtrl.text.trim()) ?? 0.0,
     };
     if (_isComplex && _optionSteps.isNotEmpty) {
       entry['options'] = _optionSteps.map((step) {
@@ -237,7 +262,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                   child: DropdownButton<int>(
                                     isExpanded: true,
                                     value: _duration,
-                                    items: const [15, 30, 45, 60, 90, 120]
+                                    items: const [15, 30, 45, 60, 90, 120, 150, 180, 240]
                                         .map((d) => DropdownMenuItem(value: d, child: Text('$d min')))
                                         .toList(),
                                     onChanged: (val) {
@@ -269,6 +294,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     const SizedBox(height: 6),
                     _field(_descCtrl, l?.tr('salon_service_form_description_hint') ?? 'Description optionnelle…', maxLines: 2),
                     const SizedBox(height: 14),
+
+                    // Online card payment (Stripe Connect) — visible only
+                    // when the salon has an active connected account.
+                    _buildPaymentSection(l),
 
                     // Complex service toggle
                     Container(
@@ -464,6 +493,168 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
             ),
           ],
         ),
+    );
+  }
+
+  // ── Online card payment section (Stripe Connect) ───────────────
+
+  Widget _buildPaymentSection(AppLocalizations? l) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.salonId)
+          .snapshots(),
+      builder: (context, snap) {
+        final data = snap.data?.data() ?? {};
+        final raw = data['stripeConnect'];
+        final connect = raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{};
+        final chargesEnabled = connect['chargesEnabled'] == true;
+        if (!chargesEnabled) {
+          // No connect account → don't expose the payment options at all.
+          return const SizedBox.shrink();
+        }
+        final symbol = CurrencyHelper.symbol(widget.currency);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _label(l?.tr('payment.section_label') ?? 'Paiement en ligne'),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.secondary200),
+                borderRadius: BorderRadius.circular(10),
+                color: Colors.white,
+              ),
+              child: Column(
+                children: [
+                  _paymentRadio(
+                    value: 'none',
+                    title: l?.tr('payment.mode_none') ?? 'Aucun',
+                    subtitle: l?.tr('payment.mode_none_desc') ??
+                        'Le client paie en salon',
+                  ),
+                  _paymentRadio(
+                    value: 'full',
+                    title: l?.tr('payment.mode_full') ?? 'Paiement intégral',
+                    subtitle: l?.tr('payment.mode_full_desc') ??
+                        'Le client paie 100% à la réservation',
+                  ),
+                  _paymentRadio(
+                    value: 'percentage',
+                    title: l?.tr('payment.mode_percentage') ??
+                        'Acompte en pourcentage',
+                    subtitle: l?.tr('payment.mode_percentage_desc') ??
+                        'Le client paie un % du prix à la réservation',
+                  ),
+                  _paymentRadio(
+                    value: 'fixed_above',
+                    title: l?.tr('payment.mode_fixed_above') ??
+                        'Acompte fixe au-delà d\'un montant',
+                    subtitle: l?.tr('payment.mode_fixed_above_desc') ??
+                        'Acompte fixe demandé si le prix dépasse un seuil',
+                  ),
+                ],
+              ),
+            ),
+            if (_paymentMode == 'percentage') ...[
+              const SizedBox(height: 10),
+              _label(l?.tr('payment.percentage_label') ?? 'Pourcentage (%)'),
+              const SizedBox(height: 6),
+              _field(_paymentValueCtrl, '20',
+                  keyboardType: TextInputType.number),
+            ],
+            if (_paymentMode == 'fixed_above') ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label((l?.tr('payment.fixed_amount_label') ??
+                                'Acompte ({symbol})')
+                            .replaceAll('{symbol}', symbol)),
+                        const SizedBox(height: 6),
+                        _field(_paymentValueCtrl, '100',
+                            keyboardType: TextInputType.number),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label((l?.tr('payment.threshold_label') ??
+                                'Seuil ({symbol})')
+                            .replaceAll('{symbol}', symbol)),
+                        const SizedBox(height: 6),
+                        _field(_paymentThresholdCtrl, '500',
+                            keyboardType: TextInputType.number),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _paymentRadio({
+    required String value,
+    required String title,
+    required String subtitle,
+  }) {
+    final selected = _paymentMode == value;
+    return InkWell(
+      onTap: () => setState(() => _paymentMode = value),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Row(
+          children: [
+            Radio<String>(
+              value: value,
+              groupValue: _paymentMode,
+              onChanged: (v) =>
+                  setState(() => _paymentMode = v ?? 'none'),
+              activeColor: AppColors.brand600,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

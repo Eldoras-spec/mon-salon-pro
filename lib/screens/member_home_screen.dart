@@ -14,6 +14,7 @@ import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/reschedule_appointment_sheet.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
 
@@ -423,7 +424,7 @@ class _AllAppointmentsTab extends ConsumerWidget {
 
 // ─── Appointment Card ─────────────────────────────────────────────────────────
 
-class _MemberAppointmentCard extends StatefulWidget {
+class _MemberAppointmentCard extends ConsumerStatefulWidget {
   const _MemberAppointmentCard({
     required this.appointment,
     this.member,
@@ -434,11 +435,11 @@ class _MemberAppointmentCard extends StatefulWidget {
   final VoidCallback? onSelfAssign;
 
   @override
-  State<_MemberAppointmentCard> createState() =>
+  ConsumerState<_MemberAppointmentCard> createState() =>
       _MemberAppointmentCardState();
 }
 
-class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
+class _MemberAppointmentCardState extends ConsumerState<_MemberAppointmentCard> {
   String _clientName = '…';
   bool _assigning = false;
 
@@ -458,6 +459,73 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
     DatabaseService().getClientName(a.clientId).then((name) {
       if (mounted) setState(() => _clientName = name);
     });
+  }
+
+  void _openActionSheet() {
+    final l = AppLocalizations.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.secondary200,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                widget.appointment.serviceName,
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brand950,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.schedule_rounded,
+                    color: AppColors.brand600, size: 20),
+              ),
+              title: Text(
+                  l?.tr('appointments_reschedule') ?? 'Modifier l\'horaire',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () async {
+                Navigator.pop(sheetCtx);
+                final salon = ref.read(ownerSalonProvider).value;
+                final members = ref.read(ownerTeamProvider).value ?? [];
+                if (salon == null) return;
+                await showRescheduleAppointmentSheet(
+                  context: context,
+                  appointment: widget.appointment,
+                  salon: salon,
+                  teamMembers: members,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _selfAssign() async {
@@ -506,10 +574,10 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
     final canAssign = widget.member != null &&
         a.status == 'upcoming' &&
         a.assignedMemberId == null;
+    final canReschedule = a.status == 'upcoming';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -522,7 +590,15 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
           ),
         ],
       ),
-      child: Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: canReschedule ? _openActionSheet : null,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
         children: [
           // Time column
           Column(
@@ -663,6 +739,9 @@ class _MemberAppointmentCardState extends State<_MemberAppointmentCard> {
             ],
           ),
         ],
+            ),
+          ),
+        ),
       ),
     );
   }

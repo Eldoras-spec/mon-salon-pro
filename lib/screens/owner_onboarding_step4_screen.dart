@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../models/team_member_model.dart';
 import '../theme/app_colors.dart';
 import '../services/database_service.dart';
+import '../services/plan_config.dart';
+import '../services/revenue_cat_service.dart';
 import '../models/salon_model.dart';
 import '../widgets/custom_button.dart';
 import 'registration_success_screen.dart';
@@ -54,6 +58,100 @@ class _OwnerOnboardingStep4ScreenState
   bool _isLoading = false;
   final _databaseService = DatabaseService();
   final List<ServiceEntry> _services = [];
+
+  // ── Apple / Play purchase triggered right after salon creation when
+  // the owner picked Essentiel or Business at the plan screen.
+  //
+  // The salon doc is already in Firestore at this point so the
+  // `onRevenueCatEvent` webhook can stamp `plan` once Apple confirms.
+  // We never block the redirect to the success screen — if the user
+  // cancels or the purchase fails, they keep the Free plan and we tell
+  // them they can upgrade later from "Mon abonnement".
+  Future<void> _triggerOnboardingPurchase(String chosenPlan) async {
+    final l = AppLocalizations.of(context);
+    try {
+      final offerings = await Purchases.getOfferings();
+      final offering = offerings.current;
+      if (offering == null) {
+        debugPrint('Onboarding purchase: no current RC offering — skipping.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l?.tr('onboarding_purchase_unavailable') ??
+                'Activation de l\'abonnement temporairement indisponible. Vous démarrez en Free, vous pourrez activer votre plan depuis Mon abonnement.'),
+            duration: const Duration(seconds: 5),
+          ));
+        }
+        return;
+      }
+      final packageId = chosenPlan == PlanConfig.planBusiness
+          ? RevenueCatService.packageBusinessMonthly
+          : RevenueCatService.packageEssentielMonthly;
+      Package? pkg;
+      for (final p in offering.availablePackages) {
+        if (p.identifier == packageId) {
+          pkg = p;
+          break;
+        }
+      }
+      if (pkg == null) {
+        debugPrint('Onboarding purchase: package "$packageId" not found in offering.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l?.tr('onboarding_purchase_unavailable') ??
+                'Activation de l\'abonnement temporairement indisponible. Vous démarrez en Free, vous pourrez activer votre plan depuis Mon abonnement.'),
+            duration: const Duration(seconds: 5),
+          ));
+        }
+        return;
+      }
+      final customerInfo = await Purchases.purchasePackage(pkg);
+      final entitlementKey = chosenPlan == PlanConfig.planBusiness
+          ? RevenueCatService.entitlementBusiness
+          : RevenueCatService.entitlementEssentiel;
+      final active =
+          customerInfo.entitlements.active.containsKey(entitlementKey);
+      if (!mounted) return;
+      if (active) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
+          backgroundColor: Colors.green.shade600,
+        ));
+      } else {
+        // Apple accepted the purchase but entitlement isn't reflected
+        // in CustomerInfo yet — webhook race. Plan will be activated
+        // server-side within seconds.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l?.tr('upgrade.pending') ??
+              'Achat en cours de validation — votre plan sera actif dans quelques instants.'),
+        ));
+      }
+    } on PlatformException catch (e) {
+      final code = PurchasesErrorHelper.getErrorCode(e);
+      if (code == PurchasesErrorCode.purchaseCancelledError) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l?.tr('onboarding_purchase_cancelled') ??
+                'Vous démarrez en Free. Vous pourrez activer votre plan depuis Mon abonnement.'),
+            duration: const Duration(seconds: 5),
+          ));
+        }
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : ${e.message ?? code.name}'),
+          backgroundColor: Colors.red.shade600,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e'),
+          backgroundColor: Colors.red.shade600,
+        ));
+      }
+    }
+  }
 
   // ── Finish setup ─────────────────────────────────────────────────────────────
 
@@ -135,10 +233,18 @@ class _OwnerOnboardingStep4ScreenState
             : {},
         currency: finalSalonData['currency'] as String? ?? 'MAD',
         salonType: finalSalonData['salonType'] as String? ?? 'femme',
-        // Plan chosen at the onboarding plan-selection screen. Defaults to
-        // Essentiel if the field is missing (shouldn't happen — plan screen
-        // is mandatory between step 1 and step 2).
-        plan: finalSalonData['plan'] as String? ?? 'essentiel',
+        // Always create the salon as Free at signup, even if the owner
+        // selected Essentiel / Business at the plan screen. The actual
+        // upgrade happens via Apple / Play Billing right after — the RC
+        // webhook (`onRevenueCatEvent`) flips `salon.plan` once Apple
+        // confirms. Creating the doc first guarantees the webhook has
+        // something to update and avoids the race condition where the
+        // webhook fires before the doc exists.
+        plan: PlanConfig.planFree,
+        timezone: (finalSalonData['timezone'] as String?)?.trim().isNotEmpty ==
+                true
+            ? finalSalonData['timezone'] as String
+            : 'Africa/Casablanca',
       );
 
       await _databaseService.saveSalon(salon);
@@ -155,6 +261,18 @@ class _OwnerOnboardingStep4ScreenState
           member.id,
           {'assignedServiceNames': assignedServices},
         );
+      }
+
+      // ── Trigger Apple / Play Billing if the owner chose a paid plan ──
+      // Salon doc now exists in Firestore so the RC webhook will be
+      // able to update its `plan` field once Apple confirms. On cancel
+      // or error, we keep the salon at `free` and surface a snackbar
+      // pointing to the upgrade screen.
+      final chosenPlan =
+          (finalSalonData['plan'] as String?) ?? PlanConfig.planFree;
+      if (chosenPlan == PlanConfig.planEssentiel ||
+          chosenPlan == PlanConfig.planBusiness) {
+        await _triggerOnboardingPurchase(chosenPlan);
       }
 
       if (mounted) {

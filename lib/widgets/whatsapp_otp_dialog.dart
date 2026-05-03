@@ -29,6 +29,7 @@ class WhatsappOtpDialog extends StatefulWidget {
     required this.whatsapp,
     this.salonId,
     this.claim = false,
+    this.skipInitialSend = false,
   });
   final String whatsapp;
   final String? salonId;
@@ -39,6 +40,13 @@ class WhatsappOtpDialog extends StatefulWidget {
   /// appointments, and writes the WA on the caller's user doc.
   /// Requires the user to be authenticated.
   final bool claim;
+
+  /// When true, the dialog assumes the OTP was already triggered by
+  /// the caller via a direct `requestWhatsappOtp` call — skips the
+  /// initial send and goes straight to the code input UI. Used by the
+  /// walk-in flow which pre-checks Business plan eligibility before
+  /// opening the dialog (avoids flashing a dialog on Free salons).
+  final bool skipInitialSend;
 
   static Future<WhatsappOtpResult?> show(
     BuildContext context,
@@ -70,6 +78,54 @@ class WhatsappOtpDialog extends StatefulWidget {
     );
   }
 
+  /// Walk-in flow with pre-check. Calls `requestWhatsappOtp` directly
+  /// first; if the CF returns `sent: false` (Free salon, salon cap
+  /// reached, or salon unreachable), returns a synthetic success
+  /// WITHOUT showing any dialog — the caller proceeds without OTP.
+  /// If `sent: true`, opens the dialog in skip-initial-send mode.
+  static Future<WhatsappOtpResult?> showForWalkIn(
+    BuildContext context,
+    String whatsapp,
+    String salonId,
+  ) async {
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('requestWhatsappOtp')
+          .call({'whatsapp': whatsapp, 'salonId': salonId});
+      final data = res.data is Map ? Map<String, dynamic>.from(res.data) : {};
+      if (data['sent'] == false) {
+        // Free salon / cap / unreachable — skip OTP entirely.
+        return WhatsappOtpResult(whatsapp: whatsapp);
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (!context.mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.message ?? 'Erreur lors de l\'envoi du code WhatsApp.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return null;
+    } catch (e) {
+      if (!context.mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Erreur: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return null;
+    }
+
+    if (!context.mounted) return null;
+    return showDialog<WhatsappOtpResult>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black87,
+      builder: (_) => WhatsappOtpDialog._(
+        whatsapp: whatsapp,
+        salonId: salonId,
+        skipInitialSend: true,
+      ),
+    );
+  }
+
   @override
   State<WhatsappOtpDialog> createState() => _WhatsappOtpDialogState();
 }
@@ -91,7 +147,17 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
   @override
   void initState() {
     super.initState();
-    _sendCode();
+    if (widget.skipInitialSend) {
+      // OTP already sent by the caller (walk-in pre-check path) — go
+      // straight to code input.
+      _sending = false;
+      _startCooldown();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _inputFocusNodes[0].requestFocus();
+      });
+    } else {
+      _sendCode();
+    }
   }
 
   @override

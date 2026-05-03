@@ -17,6 +17,7 @@ import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
 import 'owner_subscription_screen.dart';
 import '../utils/media_compressor.dart';
+import '../widgets/country_phone_field.dart';
 import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
 
@@ -1033,9 +1034,11 @@ class _MemberFormSheet extends StatefulWidget {
 class _MemberFormSheetState extends State<_MemberFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _phoneCtrl;
   late final TextEditingController _pinCtrl;
   late final TextEditingController _pinConfirmCtrl;
+  /// E.164 phone emitted by [CountryPhoneField] (e.g. "+212612345678").
+  /// `null` when the local part is empty — saved as null on the doc.
+  String? _phoneE164;
   String _role = 'member';
   bool _saving = false;
   bool _showPin = false;
@@ -1051,7 +1054,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
     super.initState();
     final m = widget.existing;
     _nameCtrl = TextEditingController(text: m?.name ?? '');
-    _phoneCtrl = TextEditingController(text: m?.phone ?? '');
+    _phoneE164 = (m?.phone != null && m!.phone!.trim().isNotEmpty)
+        ? m.phone!.trim()
+        : null;
     _pinCtrl = TextEditingController();
     _pinConfirmCtrl = TextEditingController();
     _role = m?.role ?? 'member';
@@ -1062,7 +1067,6 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _pinCtrl.dispose();
     _pinConfirmCtrl.dispose();
     super.dispose();
@@ -1075,6 +1079,19 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
       setState(() => _servicesError = true);
       return;
     }
+    // WhatsApp number is mandatory when CREATING a member (so we can
+    // send them their login code via wa.me on the spot). Editing keeps
+    // the field optional — legacy members may not have one yet, and
+    // forcing it would block name/role updates for them.
+    if (!_isEditing && (_phoneE164 == null || _phoneE164!.length < 6)) {
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l?.tr('team_phone_required') ??
+            'Le numéro WhatsApp est obligatoire pour envoyer le code de connexion à l\'employé.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
     setState(() => _saving = true);
 
     try {
@@ -1084,7 +1101,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
         final updates = <String, dynamic>{
           'name': _nameCtrl.text.trim(),
           'role': _role,
-          'phone': _phoneCtrl.text.trim(),
+          'phone': _phoneE164 ?? '',
           'assignedServiceNames': _selectedServices.toList(),
           'agendaColorIndex': _agendaColorIndex,
         };
@@ -1105,9 +1122,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           pinHash: _role == 'gerant'
               ? hashPin(_pinCtrl.text.trim())
               : '', // employees have no PIN
-          phone: _phoneCtrl.text.trim().isEmpty
-              ? null
-              : _phoneCtrl.text.trim(),
+          phone: _phoneE164,
           isActive: true,
           createdAt: DateTime.now(),
           assignedServiceNames: _selectedServices.toList(),
@@ -1116,6 +1131,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
         final created = await db.addTeamMember(member);
 
         // Show the login code sheet so the owner can share it immediately.
+        // The employee's WhatsApp is now mandatory at creation, so we
+        // also auto-launch wa.me with the code pre-filled — owner just
+        // hits Send.
         if (mounted) {
           Navigator.pop(context);
           await showEmployeeCodeSheet(
@@ -1123,6 +1141,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
             salonId: widget.salonId,
             memberId: created.id,
             memberName: created.name,
+            employeeWhatsapp: _phoneE164,
           );
           return;
         }
@@ -1212,13 +1231,31 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                 ),
                 const SizedBox(height: 16),
 
-                // Phone
-                _label(l?.tr('team_phone_label') ?? 'Téléphone (optionnel)'),
-                TextFormField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: _inputDeco('Ex: 06 12 34 56 78'),
+                // Phone — uses the same country-code picker widget as the
+                // owner's WhatsApp signup so the saved value is always
+                // E.164 ("+212612345678"), regardless of how the owner
+                // typed it. Required at creation (used to wa.me the
+                // login code), optional on edit.
+                _label(_isEditing
+                    ? (l?.tr('team_phone_label_edit') ?? 'Téléphone WhatsApp (optionnel)')
+                    : (l?.tr('team_phone_label_create') ?? 'Téléphone WhatsApp *')),
+                CountryPhoneField(
+                  initialE164: _phoneE164,
+                  hintText: '612345678',
+                  onChanged: (e164) => setState(() => _phoneE164 = e164),
                 ),
+                if (!_isEditing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      l?.tr('team_phone_helper_create') ??
+                          'On enverra automatiquement le code de connexion par WhatsApp.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        color: AppColors.secondary500,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 16),
 
                 // PIN — only for gérant

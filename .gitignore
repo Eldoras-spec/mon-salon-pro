@@ -53,3 +53,9 @@ functions/node_modules/
 
 # Claude Code
 .claude/
+
+# Service account credentials (NEVER commit)
+*-sa.json
+*-firebase-adminsdk-*.json
+.firebase-creds/
+monsalon-test-sa.json

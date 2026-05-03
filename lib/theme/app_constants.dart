@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   static const List<Map<String, dynamic>> femmeCategories = [
+    {'name': 'Coupe', 'icon': Icons.content_cut},
     {'name': 'Coiffure', 'icon': Icons.cut},
     {'name': 'Cils & Sourcils', 'icon': Icons.visibility},
     {'name': 'Ongles', 'icon': Icons.back_hand},
@@ -15,6 +16,7 @@ class AppConstants {
   ];
 
   static const List<Map<String, dynamic>> hommeCategories = [
+    {'name': 'Coupe', 'icon': Icons.content_cut},
     {'name': 'Coiffure', 'icon': Icons.cut},
     {'name': 'Barbe', 'icon': Icons.face_retouching_natural},
     {'name': 'Hammam & Spa', 'icon': Icons.hot_tub},

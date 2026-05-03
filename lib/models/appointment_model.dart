@@ -22,6 +22,16 @@ class AppointmentModel {
   final String? selectedDesignThumbnail; // video thumbnail URL
   final bool? selectedDesignIsVideo;
   final String? managementToken; // walk-in management token
+  // Stripe Connect card-payment fields. `paymentStatus` drives:
+  //   - whether the booking shows up in the no-show risk list
+  //   - which badge appears in the appointment cards
+  // Values: 'not_required' | 'pending' | 'paid' | 'deposit_paid' |
+  //         'failed' | 'refunded' | 'partial_refund'
+  final String? paymentStatus;
+  final String? paymentIntentId;
+  final double? paymentAmount;
+  final String? paymentCurrency;
+  final String? paymentChargedKind; // 'full' | 'deposit'
 
   AppointmentModel({
     required this.id,
@@ -45,6 +55,11 @@ class AppointmentModel {
     this.selectedDesignThumbnail,
     this.selectedDesignIsVideo,
     this.managementToken,
+    this.paymentStatus,
+    this.paymentIntentId,
+    this.paymentAmount,
+    this.paymentCurrency,
+    this.paymentChargedKind,
   });
 
   factory AppointmentModel.fromFirestore(DocumentSnapshot doc) {
@@ -71,6 +86,12 @@ class AppointmentModel {
       selectedDesignThumbnail: data['selectedDesignThumbnail'],
       selectedDesignIsVideo: data['selectedDesignIsVideo'],
       managementToken: data['managementToken'],
+      paymentStatus: data['paymentStatus'],
+      paymentIntentId: data['paymentIntentId'],
+      paymentAmount: data['paymentAmount'] != null
+          ? (data['paymentAmount'] as num).toDouble() : null,
+      paymentCurrency: data['paymentCurrency'],
+      paymentChargedKind: data['paymentChargedKind'],
     );
   }
 

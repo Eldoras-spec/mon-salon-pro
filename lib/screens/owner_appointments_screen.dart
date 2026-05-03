@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
+import '../models/promotion_model.dart';
 import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
@@ -15,6 +16,7 @@ import '../services/database_service.dart';
 import '../utils/currency_helper.dart';
 import '../widgets/country_phone_field.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/reschedule_appointment_sheet.dart';
 import '../widgets/whatsapp_otp_dialog.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
@@ -696,6 +698,32 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.schedule_rounded,
+                    color: AppColors.brand600, size: 20),
+              ),
+              title: Text(l?.tr('appointments_reschedule') ?? 'Modifier l\'horaire',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () async {
+                Navigator.pop(context);
+                final salon = ref.read(ownerSalonProvider).value;
+                if (salon == null) return;
+                final ok = await showRescheduleAppointmentSheet(
+                  context: context,
+                  appointment: widget.appointment,
+                  salon: salon,
+                  teamMembers: members,
+                );
+                if (ok == true) widget.onStatusChanged();
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
                   color: const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -985,6 +1013,17 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
   List<AppointmentModel> _existingAppointments = [];
+
+  // Auto-apply manual promotions on owner/employee-created appointments.
+  // Mirrors the client app's `_autoApplySalonPromo` (cf
+  // mon_salon/lib/screens/client_booking_flow_screen.dart:_autoApplySalonPromo)
+  // so the price quoted to the walk-in matches what they'd see on the
+  // app/website. Excludes AI rule-based promos (per-client eligibility,
+  // applied via redeemAiPromo) and code-required promos (those need a
+  // code field which the manual sheet doesn't expose).
+  List<PromotionModel> _activePromos = [];
+  PromotionModel? _appliedPromo;
+  double _promoDiscount = 0.0;
   // Service picker UX (matches client app pattern)
   String? _activeServiceCategory;
   bool _showAllServices = false;
@@ -1057,6 +1096,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       _selectedService = _selectedServices.isNotEmpty ? _selectedServices.first : null;
       _selectedMember = null;
     });
+    _recomputeAppliedPromo();
   }
 
   @override
@@ -1064,6 +1104,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     super.initState();
     _snapTimeToOpenHours();
     _loadAppointments();
+    _loadActivePromos();
   }
 
   Future<void> _loadAppointments() async {
@@ -1073,6 +1114,122 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       if (mounted) setState(() => _existingAppointments = appts);
     } catch (e) {
       debugPrint('Error loading appointments: $e');
+    }
+  }
+
+  Future<void> _loadActivePromos() async {
+    try {
+      final promos = await DatabaseService()
+          .getActivePromotions(widget.salon.id, clientId: null)
+          .first;
+      if (!mounted) return;
+      setState(() {
+        _activePromos = promos.where((p) {
+          // Owner sheet auto-applies only manual non-code promos.
+          // - AI rule-based promos belong to the client-eligibility
+          //   pipeline (`redeemAiPromo`); not auto-applicable here.
+          // - Code-required promos need a manual code entry — the sheet
+          //   has no code field today.
+          if (p.isAiGenerated) return false;
+          if (p.targetedClientId != null) return false;
+          if (p.promoCode != null && p.promoCode!.isNotEmpty) return false;
+          if (p.discountPercent == null || p.discountPercent! <= 0) {
+            return false;
+          }
+          return true;
+        }).toList();
+      });
+      _recomputeAppliedPromo();
+    } catch (e) {
+      debugPrint('Error loading promos: $e');
+    }
+  }
+
+  /// Validates a promo against the booking's date/time/services/subtotal.
+  /// Mirrors `_validatePromoForBooking` in `appmonsalon/assets/js/booking.js`
+  /// and the CF `_evaluateAiRuleEligibility`-adjacent checks so prices
+  /// match across surfaces.
+  bool _isPromoApplicableForBooking(
+    PromotionModel promo,
+    DateTime bookingDateTime,
+    double subtotal,
+    List<String> selectedServiceNames,
+  ) {
+    // Service applicability — null/empty = all services.
+    final allow = promo.applicableServiceNames;
+    if (allow != null && allow.isNotEmpty) {
+      final allowNorm = allow.map((s) => s.toLowerCase().trim()).toList();
+      final matchesService = selectedServiceNames.any(
+        (n) => allowNorm.contains(n.toLowerCase().trim()),
+      );
+      if (!matchesService) return false;
+    }
+    // Day-of-week — same key set as the salon's workingHours.
+    final validDays = promo.validDays;
+    if (validDays != null && validDays.isNotEmpty) {
+      final dayKey = _dayKeys[bookingDateTime.weekday - 1];
+      if (!validDays.contains(dayKey)) return false;
+    }
+    // Time window (both bounds required).
+    final hStart = promo.validHoursStart;
+    final hEnd = promo.validHoursEnd;
+    if (hStart != null && hStart.isNotEmpty
+        && hEnd != null && hEnd.isNotEmpty) {
+      int toMin(String s) {
+        final p = s.split(':').map(int.parse).toList();
+        return p[0] * 60 + (p.length > 1 ? p[1] : 0);
+      }
+      final startMin = toMin(hStart);
+      final endMin = toMin(hEnd);
+      // bookingDateTime is wall-clock UTC (cf DateTime.utc convention),
+      // hours/minutes carry the salon-local clock the owner picked.
+      final slotMin = bookingDateTime.hour * 60 + bookingDateTime.minute;
+      if (slotMin < startMin || slotMin >= endMin) return false;
+    }
+    // Minimum amount.
+    final minAmount = promo.minAmount ?? 0;
+    if (minAmount > 0 && subtotal < minAmount) return false;
+    return true;
+  }
+
+  /// Picks the best applicable manual promo for the current selection
+  /// and refreshes `_appliedPromo` + `_promoDiscount`. Called whenever
+  /// the services / date / time / pack changes.
+  void _recomputeAppliedPromo() {
+    if (_activePromos.isEmpty || _selectedServices.isEmpty
+        || _selectedPack != null) {
+      // Pack mode: pack price is already the deal — no auto-promo on top.
+      if (_appliedPromo != null || _promoDiscount != 0.0) {
+        setState(() {
+          _appliedPromo = null;
+          _promoDiscount = 0.0;
+        });
+      }
+      return;
+    }
+    final dt = DateTime.utc(
+      _selectedDate.year, _selectedDate.month, _selectedDate.day,
+      _selectedTime.hour, _selectedTime.minute,
+    );
+    final subtotal = _totalPrice;
+    final names = _selectedServices
+        .map((s) => (s['name'] ?? s['title'] ?? '').toString())
+        .toList();
+    PromotionModel? best;
+    for (final p in _activePromos) {
+      if (!_isPromoApplicableForBooking(p, dt, subtotal, names)) continue;
+      if (best == null || (p.discountPercent ?? 0) > (best.discountPercent ?? 0)) {
+        best = p;
+      }
+    }
+    final discount = best != null
+        ? subtotal * ((best.discountPercent ?? 0) / 100.0)
+        : 0.0;
+    if (best != _appliedPromo || (discount - _promoDiscount).abs() > 0.001) {
+      setState(() {
+        _appliedPromo = best;
+        _promoDiscount = discount;
+      });
     }
   }
 
@@ -1146,6 +1303,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
         _snapTimeToOpenHours();
       });
       _loadAppointments();
+      _recomputeAppliedPromo();
     }
   }
 
@@ -1363,16 +1521,26 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       }
 
       final clientWhatsapp = _clientWhatsappE164;
+      // Distribute the promo discount proportionally across each
+      // service-line appointment so the per-row prices sum back to the
+      // total quoted to the walk-in. `_recomputeAppliedPromo` already
+      // computed `_promoDiscount` against `_totalPrice`.
+      final subtotal = _totalPrice;
       for (final b in bookings) {
         final svc = b['service'] as Map<String, dynamic>;
         final member = b['member'] as TeamMemberModel?;
+        final svcPrice = (svc['price'] as num?)?.toDouble() ?? 0.0;
+        final share = (subtotal > 0 && _promoDiscount > 0)
+            ? _promoDiscount * (svcPrice / subtotal)
+            : 0.0;
+        final finalPrice = (svcPrice - share).clamp(0.0, svcPrice);
         final appointment = AppointmentModel(
           id: const Uuid().v4(),
           clientId: 'walk-in',
           salonId: widget.salon.id,
           salonName: widget.salon.name,
           serviceName: svc['name'] as String? ?? 'Service',
-          price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+          price: finalPrice,
           dateTime: DateTime.utc(
             (b['start'] as DateTime).year,
             (b['start'] as DateTime).month,
@@ -1534,15 +1702,15 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       return;
     }
 
-    // WhatsApp OTP verification (Business plan only — CF gates server-side).
-    // Free/Essentiel salons short-circuit and proceed without OTP. Optional
-    // field: skip entirely if no WA number was entered.
+    // WhatsApp OTP verification — pre-check Business plan server-side.
+    // Free/Essentiel salons short-circuit silently (no dialog opens).
+    // Business salons get the dialog after OTP has been sent. Field is
+    // optional: skip entirely if no WA number was entered.
     final whatsapp = _clientWhatsappE164;
     if (whatsapp != null && whatsapp.isNotEmpty &&
         _verifiedWalkInWhatsapp != whatsapp) {
-      final result = await WhatsappOtpDialog.show(
-        context, whatsapp,
-        salonId: widget.salon.id,
+      final result = await WhatsappOtpDialog.showForWalkIn(
+        context, whatsapp, widget.salon.id,
       );
       if (!mounted) return;
       if (result == null) {
@@ -1608,9 +1776,12 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       final serviceName = _selectedPack != null
           ? 'Pack: ${_selectedPack!['name'] ?? 'Pack'}'
           : (_selectedService!['name'] as String? ?? 'Service');
-      final price = _selectedPack != null
+      final basePrice = _selectedPack != null
           ? (_selectedPack!['price'] as num?)?.toDouble() ?? 0.0
           : (_selectedService!['price'] as num?)?.toDouble() ?? 0.0;
+      // Apply the auto-promo discount when one is currently applicable
+      // (`_recomputeAppliedPromo` already vetted day/time/min/services).
+      final price = (basePrice - _promoDiscount).clamp(0.0, basePrice);
 
       // Double-booking check
       final existing = await DatabaseService()
@@ -1913,6 +2084,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
             }
             _selectedMember = null;
           });
+          _recomputeAppliedPromo();
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -2257,6 +2429,17 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                       style: const TextStyle(
                           fontSize: 13, color: AppColors.brand950),
                     ),
+                    if (_appliedPromo != null && _promoDiscount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_appliedPromo!.title} (-${_appliedPromo!.discountPercent!.toStringAsFixed(0)}%) → ${CurrencyHelper.format((_totalPrice - _promoDiscount).clamp(0.0, _totalPrice), widget.salon.currency)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brand700,
+                        ),
+                      ),
+                    ],
                     if (_selectedMember != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -2368,6 +2551,7 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
                         hour: int.parse(parts[0]),
                         minute: int.parse(parts[1]),
                       ));
+                  _recomputeAppliedPromo();
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),

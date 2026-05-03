@@ -19,6 +19,7 @@ import '../utils/media_compressor.dart';
 import '../widgets/service_form_dialog.dart';
 import 'owner_onboarding_step1_screen.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,14 @@ class _SalonBody extends StatelessWidget {
   final SalonModel salon;
   final WidgetRef ref;
 
-  void _invalidate() => ref.invalidate(ownerSalonProvider);
+  void _invalidate() {
+    try {
+      ref.invalidate(ownerSalonProvider);
+    } catch (_) {
+      // Widget rebuilt during async save — the Firestore StreamProvider
+      // will pick up the change on its own.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -295,7 +303,7 @@ class _SalonBody extends StatelessWidget {
         updatedImages.insert(0, url);
       }
       await DatabaseService().updateSalonImages(salon.id, updatedImages);
-      ref.invalidate(ownerSalonProvider);
+      _invalidate();
 
       if (context.mounted) {
         final l = AppLocalizations.of(context);
@@ -947,6 +955,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         isPremium: widget.salon.isPremium,
         galleryStorageUsed: widget.salon.galleryStorageUsed,
         salonType: widget.salon.salonType,
+        timezone: widget.salon.timezone,
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1130,6 +1139,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
   static const _dayFallbacks = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
   late Map<String, Map<String, dynamic>> _hours;
+  late String _timezone;
   bool _loading = false;
 
   @override
@@ -1144,6 +1154,13 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         'close': data?['close'] ?? '18:00',
       };
     }
+    // Pre-fill with the salon's stored timezone — fall back to default if
+    // the stored value isn't in the curated list (defensive: keeps the
+    // dropdown happy even for unusual TZs typed in by hand).
+    final stored = widget.salon.timezone;
+    final isCurated = TimezoneHelper.commonTimezones
+        .any((t) => t.iana == stored);
+    _timezone = isCurated ? stored : TimezoneHelper.defaultTimezone;
   }
 
   Future<void> _pickTime(String day, String field) async {
@@ -1192,6 +1209,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         isPremium: widget.salon.isPremium,
         galleryStorageUsed: widget.salon.galleryStorageUsed,
         salonType: widget.salon.salonType,
+        timezone: _timezone,
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1253,7 +1271,79 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
             child: ListView(
               controller: controller,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              children: List.generate(_dayKeys.length, (i) {
+              children: [
+                // Timezone picker — drives how working hours are interpreted
+                // by Zayna's availability and the reminders. Same field is
+                // captured at onboarding step1; this is the in-app override.
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l?.tr('salon_edit_hours_timezone') ?? 'Fuseau horaire',
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.brand950),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        l?.tr('salon_edit_hours_timezone_hint') ??
+                            'Vos horaires ci-dessous sont enregistrés dans ce fuseau.',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.secondary400),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _timezone,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.public,
+                              size: 18, color: AppColors.secondary400),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: AppColors.secondary200),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: AppColors.secondary200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: AppColors.brand400, width: 2),
+                          ),
+                        ),
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.secondary800),
+                        dropdownColor: Colors.white,
+                        items: TimezoneHelper.commonTimezones
+                            .map((t) => DropdownMenuItem<String>(
+                                  value: t.iana,
+                                  child: Text(
+                                    t.label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _timezone = val);
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                  ),
+                ),
+                const Divider(height: 16),
+                ...List.generate(_dayKeys.length, (i) {
                 final dayKey = _dayKeys[i];
                 final dayLabel = l?.tr(_dayTrKeys[i]) ?? _dayFallbacks[i];
                 final data = _hours[dayKey]!;
@@ -1305,6 +1395,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                   ],
                 );
               }),
+              ],
             ),
           ),
         ],
@@ -1421,6 +1512,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
         isPremium: widget.salon.isPremium,
         galleryStorageUsed: widget.salon.galleryStorageUsed,
         salonType: widget.salon.salonType,
+        timezone: widget.salon.timezone,
       );
       await DatabaseService().saveSalon(updated);
 

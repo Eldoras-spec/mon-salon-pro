@@ -70,7 +70,10 @@ class OwnerHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(userModelProvider);
     final salonAsync = ref.watch(ownerSalonProvider);
-    final appointmentsAsync = ref.watch(ownerAppointmentsProvider);
+    // Bounded last-7d + next-7d window — covers today's RDV, current
+    // week stats and the recent-5 widget without scanning lifetime
+    // appointments (saves N reads per dashboard open).
+    final appointmentsAsync = ref.watch(ownerHomeAppointmentsProvider);
     final activeMember = ref.watch(activeTeamMemberProvider);
 
     return Scaffold(
@@ -119,7 +122,7 @@ class OwnerHomeScreen extends ConsumerWidget {
             color: AppColors.brand600,
             onRefresh: () async {
               ref.invalidate(ownerSalonProvider);
-              ref.invalidate(ownerAppointmentsProvider);
+              ref.invalidate(ownerHomeAppointmentsProvider);
               await Future.delayed(const Duration(milliseconds: 500));
             },
             child: CustomScrollView(

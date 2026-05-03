@@ -7,6 +7,8 @@ import '../providers/team_providers.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import '../services/app_localizations.dart';
+import '../widgets/country_phone_field.dart';
+import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
 import 'owner_onboarding_step4_screen.dart';
 
@@ -352,9 +354,9 @@ class _OnboardingMemberSheet extends StatefulWidget {
 class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
   final _pinConfirmCtrl = TextEditingController();
+  String? _phoneE164;
   String _role = 'member';
   bool _saving = false;
   bool _showPin = false;
@@ -364,7 +366,6 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _pinCtrl.dispose();
     _pinConfirmCtrl.dispose();
     super.dispose();
@@ -372,6 +373,17 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    // WhatsApp number is mandatory at creation — we use it to wa.me the
+    // login code immediately after the member is saved.
+    if (_phoneE164 == null || _phoneE164!.length < 6) {
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l?.tr('team_phone_required') ??
+            'Le numéro WhatsApp est obligatoire pour envoyer le code de connexion à l\'employé.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
     setState(() => _saving = true);
     try {
       final draft = TeamMemberModel(
@@ -380,14 +392,26 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
         name: _nameCtrl.text.trim(),
         role: _role,
         pinHash: _needsPin ? hashPin(_pinCtrl.text.trim()) : '',
-        phone: _phoneCtrl.text.trim().isEmpty
-            ? null
-            : _phoneCtrl.text.trim(),
+        phone: _phoneE164,
         isActive: true,
         createdAt: DateTime.now(),
       );
       final saved = await DatabaseService().addTeamMember(draft);
       widget.onAdded(saved);
+      // Auto-launch WhatsApp with the login code pre-filled. Owner
+      // just hits Send. Best-effort: if the platform refuses to launch
+      // wa.me (e.g. WhatsApp not installed on a tablet), the owner can
+      // still copy/share the code via the existing UI from the team
+      // screen. We don't block onboarding flow.
+      if (mounted) {
+        await showEmployeeCodeSheet(
+          context: context,
+          salonId: widget.salonId,
+          memberId: saved.id,
+          memberName: saved.name,
+          employeeWhatsapp: _phoneE164,
+        );
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -470,11 +494,22 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                   }),
                 ),
                 const SizedBox(height: 14),
-                _label(l?.tr('team_phone_label') ?? 'Téléphone (optionnel)'),
-                TextFormField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: _inputDeco('Ex: 06 12 34 56 78'),
+                _label(l?.tr('team_phone_label_create') ?? 'Téléphone WhatsApp *'),
+                CountryPhoneField(
+                  initialE164: _phoneE164,
+                  hintText: '612345678',
+                  onChanged: (e164) => setState(() => _phoneE164 = e164),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    l?.tr('team_phone_helper_create') ??
+                        'On enverra automatiquement le code de connexion par WhatsApp.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      color: AppColors.secondary500,
+                    ),
+                  ),
                 ),
                 // PIN fields only for gérant
                 if (_needsPin) ...[

@@ -17,6 +17,17 @@ class PromotionModel {
   final String? aiReason; // e.g. 'top_client', 'win_back', 'loyal'
   final String? targetedClientId;
   final String? targetedClientName;
+  // Total redemptions across all eligible clients for this rule-based
+  // AI promo (used to display "{n} personnes ont profité" on the owner
+  // card). Incremented atomically by the backend at each redemption.
+  //
+  // Per-client eligibility resets on use: e.g. for the `loyal` rule with
+  // `loyalMinVisits=10`, a client redeems at visit 10, then their next
+  // eligibility window opens at visit 20 — tracked per-(client, aiReason)
+  // outside this doc (planned: `users/{uid}/aiPromoState/{aiReason}`).
+  // This counter is only the cumulative total — eligibility logic lives
+  // in the backend.
+  final int redemptionCount;
   // Conditional promo fields
   final double? minAmount; // minimum spend to activate
   final List<String>? validDays; // e.g. ['lundi', 'mardi'] — null = every day
@@ -39,6 +50,7 @@ class PromotionModel {
     this.aiReason,
     this.targetedClientId,
     this.targetedClientName,
+    this.redemptionCount = 0,
     this.minAmount,
     this.validDays,
     this.validHoursStart,
@@ -47,6 +59,13 @@ class PromotionModel {
 
   bool get isExpired =>
       expiresAt != null && expiresAt!.isBefore(DateTime.now());
+
+  /// True when this AI promo is the rule-based variant (1 doc per
+  /// `aiReason`, applies to every eligible client). Old per-client AI
+  /// promos (`targetedClientId != null`) are transitional and expire
+  /// naturally — distinguishing them lets the UI show the appropriate
+  /// per-instance vs aggregate info during the migration window.
+  bool get isAiRuleBased => isAiGenerated && targetedClientId == null;
 
   bool get isVisibleToClient => isActive && !isExpired && targetedClientId == null;
 
@@ -80,6 +99,7 @@ class PromotionModel {
       aiReason: d['aiReason'] as String?,
       targetedClientId: d['targetedClientId'] as String?,
       targetedClientName: d['targetedClientName'] as String?,
+      redemptionCount: (d['redemptionCount'] as num?)?.toInt() ?? 0,
       minAmount: d['minAmount'] != null ? (d['minAmount'] as num).toDouble() : null,
       validDays: d['validDays'] != null ? List<String>.from(d['validDays']) : null,
       validHoursStart: d['validHoursStart'] as String?,
@@ -103,6 +123,7 @@ class PromotionModel {
         if (aiReason != null) 'aiReason': aiReason,
         if (targetedClientId != null) 'targetedClientId': targetedClientId,
         if (targetedClientName != null) 'targetedClientName': targetedClientName,
+        'redemptionCount': redemptionCount,
         if (minAmount != null) 'minAmount': minAmount,
         if (validDays != null) 'validDays': validDays,
         if (validHoursStart != null) 'validHoursStart': validHoursStart,

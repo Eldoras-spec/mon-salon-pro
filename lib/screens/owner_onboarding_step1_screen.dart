@@ -21,6 +21,7 @@ import '../widgets/whatsapp_otp_dialog.dart';
 import '../services/app_localizations.dart';
 import '../services/plan_config.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 import 'owner_onboarding_plan_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
@@ -55,6 +56,7 @@ class _OwnerOnboardingStep1ScreenState
   bool _isGettingLocation = false;
   String _selectedCurrency = 'MAD';
   String _selectedSalonType = 'femme';
+  String _selectedTimezone = TimezoneHelper.defaultTimezone;
 
   @override
   void initState() {
@@ -67,6 +69,10 @@ class _OwnerOnboardingStep1ScreenState
     // Auto-detect currency via GeoJS (IP geolocation). The user can still
     // override manually via the dropdown — we only prime the default.
     _autoDetectCurrency();
+    // Pick up the device's IANA timezone for the same reason — owners are
+    // typically onboarding from inside their salon, so their device's TZ
+    // matches the salon's TZ. Picker below allows manual override.
+    _selectedTimezone = TimezoneHelper.detectDeviceTimezone();
   }
 
   Future<void> _autoDetectCurrency() async {
@@ -168,6 +174,7 @@ class _OwnerOnboardingStep1ScreenState
     if (user == null) return false;
 
     // Pre-check: same WhatsApp + same userType already exists?
+    bool needsClaim = false;
     try {
       final res = await FirebaseFunctions.instance
           .httpsCallable('checkWhatsappAvailable')
@@ -175,16 +182,45 @@ class _OwnerOnboardingStep1ScreenState
       final available = (res.data is Map) && res.data['available'] == true;
       if (!available) {
         if (!mounted) return false;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Ce numéro WhatsApp est déjà utilisé pour un compte pro.'),
-            backgroundColor: Colors.redAccent,
+        // Number is already linked to another pro account — offer the
+        // claim flow: send an OTP, on success the CF transfers the WA
+        // from the old user doc to the current one atomically.
+        final l = AppLocalizations.of(context);
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(l?.tr('onboarding_whatsapp_claim_title') ??
+                'Numéro déjà utilisé'),
+            content: Text(l?.tr('onboarding_whatsapp_claim_message') ??
+                'Ce numéro WhatsApp est associé à un autre compte pro. Si vous en êtes le propriétaire, nous vous enverrons un code pour le rattacher à votre compte. L\'autre compte perdra l\'accès à ce numéro.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l?.tr('onboarding_whatsapp_claim_cta') ??
+                    'Recevoir le code'),
+              ),
+            ],
           ),
         );
-        return false;
+        if (confirmed != true) return false;
+        if (!mounted) return false;
+        needsClaim = true;
       }
     } catch (_) { /* non-fatal — proceed to OTP */ }
+
+    if (needsClaim) {
+      // Claim flow: CF claimWhatsappOwnership atomically verifies the
+      // OTP, releases the WA from the previous user doc, and writes it
+      // on the current auth user's doc — no separate write needed.
+      final result = await WhatsappOtpDialog.showForClaim(context, whatsapp);
+      if (result == null) return false;
+      _verifiedWhatsappE164 = whatsapp;
+      return true;
+    }
 
     final result = await WhatsappOtpDialog.show(context, whatsapp);
     if (result == null) return false; // user cancelled or OTP failed
@@ -305,6 +341,7 @@ class _OwnerOnboardingStep1ScreenState
       'category': 'Beauté',
       'currency': _selectedCurrency,
       'salonType': _selectedSalonType,
+      'timezone': _selectedTimezone,
       'latitude': lat,
       'longitude': lng,
       'socialLinks': {
@@ -466,11 +503,16 @@ class _OwnerOnboardingStep1ScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Nav Row
+                // Nav Row — "Retour" at this stage means cancelling the
+                // signup: the user only has a Firebase Auth account, no
+                // salon yet, and the previous screens were pushed with
+                // pushReplacement so a plain Navigator.pop lands on a
+                // black screen. Trigger the same flow as the explicit
+                // "Annuler mon inscription" button (delete user + go home).
                 Row(
                   children: [
                     TextButton.icon(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _handleCancelSignup,
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -818,6 +860,101 @@ class _OwnerOnboardingStep1ScreenState
                         onChanged: (val) {
                           if (val != null) {
                             setState(() => _selectedCurrency = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Timezone — auto-detected from device, owner can override
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l?.tr('onboarding_timezone') ?? 'Fuseau horaire',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l?.tr('onboarding_timezone_hint') ??
+                          'Utilisé pour vos horaires d\'ouverture et les rappels.',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.secondary400,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedTimezone,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.schedule,
+                              size: 18, color: AppColors.secondary400),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                                color: AppColors.secondary200),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                                color: AppColors.secondary200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                                color: AppColors.brand400, width: 2),
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.secondary800,
+                        ),
+                        dropdownColor: Colors.white,
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: AppColors.secondary400),
+                        items: TimezoneHelper.commonTimezones
+                            .map((t) => DropdownMenuItem<String>(
+                                  value: t.iana,
+                                  child: Text(
+                                    t.label,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: t.iana == _selectedTimezone
+                                          ? AppColors.brand600
+                                          : AppColors.secondary800,
+                                      fontWeight: t.iana == _selectedTimezone
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedTimezone = val);
                           }
                         },
                       ),

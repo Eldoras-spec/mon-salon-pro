@@ -34,7 +34,7 @@ class TermsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Dernière mise à jour : 1er mars 2026',
+              'Dernière mise à jour : 27 avril 2026',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 color: AppColors.secondary400,
@@ -84,6 +84,21 @@ class TermsScreen extends StatelessWidget {
               '7. Codes promotionnels',
               '• Les codes promotionnels sont soumis à des conditions spécifiques (durée de validité, utilisation unique, etc.).\n\n'
                   '• Mon Salon se réserve le droit de modifier ou supprimer une offre promotionnelle à tout moment.',
+            ),
+            _buildSection(
+              '7 bis. Abonnements et paiements',
+              '• Mon Salon propose trois plans : Free (gratuit, équipe limitée à 2 membres), Essentiel (équipe illimitée + rappels WhatsApp + paiements par carte à commission réduite), Business (Essentiel + assistante WhatsApp Zayna 1000 messages/mois inclus + paiements par carte à commission minimale + vidéos premium).\n\n'
+                  '• Les abonnements Essentiel et Business sont facturés mensuellement via Apple In-App Purchase, Google Play Billing ou Stripe selon la plateforme.\n\n'
+                  '• Vous pouvez annuler votre abonnement à tout moment ; il reste actif jusqu\'à la fin de la période payée.',
+            ),
+            _buildSection(
+              '7 ter. Paiements en ligne via Stripe Connect',
+              '• Tous les plans (Free, Essentiel, Business) peuvent activer les paiements par carte bancaire (incluant Apple Pay et Google Pay) pour leurs prestations et leurs produits boutique, via Stripe Connect Express.\n\n'
+                  '• Le salon connecte son propre compte Stripe et est le « merchant of record » pour toutes les transactions effectuées via son compte. Il est responsable de l\'exécution des prestations, de la TVA, des litiges et des chargebacks.\n\n'
+                  '• Pour chaque prestation, le salon peut configurer : aucun paiement, paiement intégral, acompte en pourcentage, ou acompte fixe au-delà d\'un seuil.\n\n'
+                  '• Mon Salon prélève une commission de plateforme variable selon le plan : 5% pour Free, 3% pour Essentiel, 1% pour Business. Les frais Stripe (~2,9% + 0,30 USD selon les pays) sont indépendants et déduits par Stripe.\n\n'
+                  '• Mon Salon ne stocke aucune donnée bancaire ; toutes les informations de carte transitent par les systèmes PCI-DSS Level 1 de Stripe.\n\n'
+                  '• Les salons en plan Business bénéficient également de l\'assistante WhatsApp IA Zayna avec 1000 messages/mois inclus ; au-delà, des packs bonus sont disponibles via Stripe.',
             ),
             _buildSection(
               '8. Propriété intellectuelle',
