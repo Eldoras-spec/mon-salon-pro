@@ -106,10 +106,36 @@ class DatabaseService {
       timezone: salon.timezone,
     );
 
+    // Build the write map manually so we never overwrite server-controlled
+    // fields with the locally-cached value. Plan, isPremium, trial flags,
+    // rating / reviewCount, and bot lifecycle fields are written by Cloud
+    // Functions only (RC webhook, onReviewWrite, onSalonPlanChange). If we
+    // include them in saveSalon's merge write, a stale local SalonModel
+    // will silently revert any server-side change between fetch and save.
+    final fullMap = updatedSalon.toMap();
+    const serverControlled = {
+      'plan',
+      'isPremium',
+      'subscriptionTier',
+      'trialEndsAt',
+      'freeCapGraceEndsAt',
+      'paidPlanEverActivated',
+      'rating',
+      'reviewCount',
+      'botStatus',
+      'botWhatsapp',
+      'botSetupComplete',
+      'botFirstMsgSent',
+    };
+    final clientMap = <String, dynamic>{
+      for (final entry in fullMap.entries)
+        if (!serverControlled.contains(entry.key)) entry.key: entry.value,
+    };
+
     await _firestore
         .collection('salons')
         .doc(updatedSalon.id)
-        .set(updatedSalon.toMap(), SetOptions(merge: true));
+        .set(clientMap, SetOptions(merge: true));
   }
 
   // Get all salons (Stream)
