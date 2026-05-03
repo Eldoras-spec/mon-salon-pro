@@ -46,14 +46,14 @@ class PlanConfig {
     },
     planBusiness: {
       'MAD': 499,
-      'EUR': 44.99,
+      'EUR': 59.99,
       'USD': 53.99,
       'XOF': 32900,
       'TND': 169,
       'DZD': 7499,
-      'GBP': 39.99,
+      'GBP': 49.99,
       'CAD': 64.99,
-      'CHF': 45,
+      'CHF': 60,
     },
   };
 
