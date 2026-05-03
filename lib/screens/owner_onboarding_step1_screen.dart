@@ -1233,15 +1233,41 @@ class _OwnerOnboardingStep1ScreenState
     if (confirm != true) return;
 
     final user = FirebaseAuth.instance.currentUser;
+    bool deleted = false;
     try {
       await user?.delete();
+      deleted = true;
     } catch (_) {
       try {
         await FirebaseFunctions.instance.httpsCallable('forceDeleteSelf').call();
-      } catch (_) { /* swallowed */ }
+        deleted = true;
+      } catch (_) { /* swallowed — fall through to signOut so the auth
+                        state still clears and the user lands on the login
+                        screen instead of being stuck on the orphan
+                        onboarding step. */ }
     }
 
+    // Force-clear the local auth session even when the server-side delete
+    // failed. Without this, currentUser stays alive, the auth listener
+    // re-routes to OwnerOnboardingStep1Screen (labelled "Étape 2 sur 6")
+    // and the owner is stuck. signOut() triggers authStateChanges() so
+    // main.dart's StreamProvider rebuilds → LoginScreen.
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) { /* non-fatal */ }
+
     if (!mounted) return;
+    if (!deleted) {
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l?.tr('profile_delete_error') ??
+              'La suppression a partiellement échoué — veuillez vous reconnecter pour réessayer.'),
+          backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
     Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
   }
 
