@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
@@ -102,7 +102,7 @@ class _Body extends StatelessWidget {
                   'Passer au plan Free',
               subtitle: l?.tr('subscription.downgrade_free_desc') ??
                   'Gratuit, équipe limitée à 2 membres',
-              onTap: () => _confirmDowngrade(context, salon, 'free'),
+              onTap: () => _confirmCancelToFree(context),
             ),
           if (!salon.isEssentiel)
             _ActionTile(
@@ -127,13 +127,7 @@ class _Body extends StatelessWidget {
                           'Équipe illimitée')),
               trailing: _priceChip(
                 context, PlanConfig.planEssentiel, salon.currency),
-              onTap: () {
-                if (salon.isBusiness) {
-                  _confirmDowngrade(context, salon, PlanConfig.planEssentiel);
-                } else {
-                  _goToUpgrade(context, PlanConfig.planEssentiel);
-                }
-              },
+              onTap: () => _goToUpgrade(context, PlanConfig.planEssentiel),
             ),
           if (!salon.isBusiness)
             _ActionTile(
@@ -249,16 +243,15 @@ class _Body extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmDowngrade(
-      BuildContext context, SalonModel salon, String targetPlan) async {
+  Future<void> _confirmCancelToFree(BuildContext context) async {
     final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        title: Text(l?.tr('subscription.downgrade_confirm_title') ??
+        title: Text(l?.tr('subscription.cancel_to_free_title') ??
             'Passer au plan Free ?'),
-        content: Text(l?.tr('subscription.downgrade_confirm_body') ??
-            'Vous perdrez les avantages de votre plan actuel. Votre équipe sera limitée à 2 membres.'),
+        content: Text(l?.tr('subscription.cancel_to_free_body') ??
+            'Pour passer au plan Free, résiliez votre abonnement via Réglages → Apple ID → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
@@ -267,8 +260,8 @@ class _Body extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(dCtx, true),
             child: Text(
-              l?.tr('subscription.downgrade_confirm_ok') ?? 'Confirmer',
-              style: const TextStyle(color: Colors.redAccent),
+              l?.tr('subscription.cancel_to_free_open_settings') ??
+                  'Ouvrir Réglages',
             ),
           ),
         ],
@@ -276,23 +269,22 @@ class _Body extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
+    final uri = Uri.parse('https://apps.apple.com/account/subscriptions');
     try {
-      await FirebaseFirestore.instance
-          .collection('salons')
-          .doc(salon.id)
-          .update({'plan': targetPlan});
-      if (context.mounted) {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(
-            l?.tr('subscription.downgrade_done') ??
-                'Votre plan a été mis à jour.',
+            l?.tr('subscription.cancel_to_free_open_failed') ??
+                'Impossible d\'ouvrir Réglages. Allez manuellement dans Réglages → Apple ID → Abonnements.',
           )),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
+          SnackBar(content: Text(
+              '${l?.tr('common_error_short') ?? 'Erreur'} : $e')),
         );
       }
     }
