@@ -1383,6 +1383,7 @@
   "upgrade.confirm": "Confirmar actualización",
   "upgrade.cancel_anytime": "Cancelable en cualquier momento desde Mi suscripción.",
   "upgrade.success": "¡Plan activado! 🎉",
+  "upgrade.pending": "Compra en validación — tu plan estará activo en unos segundos.",
   "upgrade.secure_note": "Pago seguro gestionado por Apple. Confirmarás con Face ID / Touch ID.",
   "upgrade.offering_load_failed": "No se pudo cargar la oferta. Revisa tu conexión.",
   "upgrade.restore": "Restaurar mis compras",
