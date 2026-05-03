@@ -213,6 +213,13 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
     final activeMember = ref.read(activeTeamMemberProvider);
     final isGerant = activeMember?.role == 'gerant';
     final l = AppLocalizations.of(context);
+    // Capture the NavigatorState once. The onTap closures below run after
+    // the user lands back here from another screen (e.g. Mon Abonnement
+    // → upgrade), at which point this State may have been rebuilt by a
+    // provider stream (salon plan change) and accessing `State.context`
+    // throws "widget unmounted". `navigator` doesn't depend on the State
+    // staying mounted — the NavigatorState lives at the MaterialApp root.
+    final navigator = Navigator.of(context);
 
     showModalBottomSheet(
       context: context,
@@ -263,8 +270,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       label: l?.tr('menu_agenda') ?? 'Agenda',
                       sub: l?.tr('menu_team_planning') ?? 'Planning de l\'équipe',
                       onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(context).pushSlide(
+                        navigator.pop();
+                        navigator.pushSlide(
                           OwnerAgendaScreen(salonId: widget.userModel.id, currency: ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
                         );
                       },
@@ -274,14 +281,20 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       iconBg: const Color(0xFFEFF6FF), iconColor: const Color(0xFF2563EB),
                       label: l?.tr('menu_today_appointments') ?? 'Rendez-vous du jour',
                       sub: l?.tr('menu_today_appointments_desc') ?? 'Voir les réservations d\'aujourd\'hui',
-                      onTap: () { Navigator.pop(context); setState(() => _currentIndex = 1); },
+                      onTap: () {
+                        navigator.pop();
+                        if (mounted) setState(() => _currentIndex = 1);
+                      },
                     ),
                     _buildMenuTile(
                       icon: Icons.content_cut_outlined,
                       iconBg: const Color(0xFFF0FDF4), iconColor: const Color(0xFF16A34A),
                       label: l?.tr('menu_manage_services') ?? 'Gérer les services',
                       sub: l?.tr('menu_manage_services_desc') ?? 'Ajouter ou modifier vos services',
-                      onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const OwnerServicesScreen())); },
+                      onTap: () {
+                        navigator.pop();
+                        navigator.push(MaterialPageRoute(builder: (_) => const OwnerServicesScreen()));
+                      },
                     ),
                     Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1, color: AppColors.secondary100)),
                     _buildMenuTile(
@@ -290,8 +303,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       label: l?.tr('menu_messages') ?? 'Messages',
                       sub: l?.tr('menu_messages_desc') ?? 'Conversations avec les clients',
                       onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => ConversationsScreen(currentUserId: widget.userModel.id, isClient: false, salonId: widget.userModel.id)));
+                        navigator.pop();
+                        navigator.push(MaterialPageRoute(builder: (_) => ConversationsScreen(currentUserId: widget.userModel.id, isClient: false, salonId: widget.userModel.id)));
                       },
                     ),
                     _buildMenuTile(
@@ -299,14 +312,14 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       iconBg: const Color(0xFFFFF7ED), iconColor: const Color(0xFFEA580C),
                       label: l?.tr('menu_inventory') ?? 'Stock & Produits',
                       sub: l?.tr('menu_inventory_desc') ?? 'Gérez vos produits et consommables',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerInventoryScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerInventoryScreen()); },
                     ),
                     _buildMenuTile(
                       icon: Icons.account_balance_wallet_outlined,
                       iconBg: const Color(0xFFF0FDF4), iconColor: const Color(0xFF059669),
                       label: l?.tr('menu_finances') ?? 'Finances',
                       sub: l?.tr('menu_finances_desc') ?? 'Charges, revenus et bénéfice net',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerFinancesScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerFinancesScreen()); },
                     ),
                     // Promotions — visible to owner AND gerant (gerant needs
                     // it to validate Google review rewards).
@@ -315,14 +328,14 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       iconBg: const Color(0xFFFDF4FF), iconColor: const Color(0xFF9333EA),
                       label: l?.tr('menu_promotions') ?? 'Offres & Promotions',
                       sub: l?.tr('menu_promotions_desc') ?? 'Réductions, codes promo et offres spéciales',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerPromotionsScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerPromotionsScreen()); },
                     ),
                     _buildMenuTile(
                       icon: Icons.storefront_outlined,
                       iconBg: const Color(0xFFFFF7ED), iconColor: const Color(0xFFEA580C),
                       label: l?.tr('menu_boutique') ?? 'Boutique',
                       sub: l?.tr('menu_boutique_desc') ?? 'Produits, commandes et livraisons',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerBoutiqueScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerBoutiqueScreen()); },
                     ),
                     if (!isGerant)
                       _buildMenuTile(
@@ -330,21 +343,21 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                         iconBg: const Color(0xFFEFF6FF), iconColor: const Color(0xFF2563EB),
                         label: l?.tr('menu_team') ?? 'Mon Équipe',
                         sub: l?.tr('menu_team_desc') ?? 'Membres, rôles et disponibilités',
-                        onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerTeamScreen()); },
+                        onTap: () { navigator.pop(); navigator.pushSlide(const OwnerTeamScreen()); },
                       ),
                     _buildMenuTile(
                       icon: Icons.people_outline,
                       iconBg: const Color(0xFFFFF1F2), iconColor: const Color(0xFFE11D48),
                       label: l?.tr('menu_clients') ?? 'Mes clients',
                       sub: l?.tr('menu_clients_desc') ?? 'Historique, contacts et fidélité',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerClientsScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerClientsScreen()); },
                     ),
                     _buildMenuTile(
                       icon: Icons.bar_chart_rounded,
                       iconBg: const Color(0xFFF0F9FF), iconColor: const Color(0xFF0284C7),
                       label: l?.tr('menu_statistics') ?? 'Statistiques',
                       sub: l?.tr('menu_statistics_desc') ?? 'Analyses détaillées et performances',
-                      onTap: () { Navigator.pop(context); Navigator.of(context).pushSlide(const OwnerStatisticsScreen()); },
+                      onTap: () { navigator.pop(); navigator.pushSlide(const OwnerStatisticsScreen()); },
                     ),
                     // Subscription management — owner only (not gérant);
                     // gérant shouldn't be able to change the salon's plan.
@@ -357,8 +370,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                         sub: l?.tr('menu_subscription_desc') ??
                             'Plan, trial, paiement',
                         onTap: () {
-                          Navigator.pop(context);
-                          Navigator.of(context).pushSlide(
+                          navigator.pop();
+                          navigator.pushSlide(
                               const OwnerSubscriptionScreen());
                         },
                       ),
