@@ -115,9 +115,16 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   }
 
   /// One-shot members load + ensure month subscription is active.
-  /// Called from initState and as the RefreshIndicator no-op handler.
+  /// Called from initState and as the RefreshIndicator handler.
+  ///
+  /// `_loading` starts true via the field default and is flipped to false
+  /// by the stream listener on its first emission. We DON'T re-toggle
+  /// `_loading` here on refresh: the subscription is already live so
+  /// `_ensureSelectedMonthSubscription` no-ops, the listener doesn't
+  /// re-fire, and `_loading=true` would otherwise stay forever and
+  /// freeze the UI in a permanent spinner (RefreshIndicator handles
+  /// its own pull-to-refresh spinner separately).
   Future<void> _loadData() async {
-    setState(() => _loading = true);
     try {
       final members = await _db.getTeamMembersOnce(widget.salonId);
       if (!mounted) return;
