@@ -15,9 +15,8 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 /// Entitlement checks and purchase flows live in the UI (OwnerUpgradeScreen).
 class RevenueCatService {
   // Public SDK keys — safe to ship in the app binary.
-  // Android key will be added when we wire Google Play Billing.
   static const String _iosApiKey = 'appl_fwZVnJtEfBKIBQADmepumjRAGkl';
-  static const String _androidApiKey = '';
+  static const String _androidApiKey = 'goog_DKRzvSIIlnmXYGHJOAqlirAZwvz';
 
   /// RevenueCat entitlement identifiers — must match those defined in the
   /// RevenueCat dashboard (Product catalog → Entitlements).
