@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:linked_scroll_controller/linked_scroll_controller.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/owner_tasks_provider.dart';
@@ -89,31 +90,18 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   static const double _memberColumnWidth = 120.0;
 
   final ScrollController _verticalController = ScrollController();
-  final ScrollController _headerScrollController = ScrollController();
-  final ScrollController _gridScrollController = ScrollController();
+  // LinkedScrollControllerGroup keeps the header row and the grid row
+  // horizontally in sync without manual jumpTo cascades. Drag in either
+  // surface drives both — fixes the iOS overscroll-induced freeze that
+  // the previous setState/listener pattern produced.
+  final LinkedScrollControllerGroup _hScrollGroup = LinkedScrollControllerGroup();
+  late final ScrollController _headerScrollController = _hScrollGroup.addAndGet();
+  late final ScrollController _gridScrollController = _hScrollGroup.addAndGet();
 
   @override
   void initState() {
     super.initState();
     _loadData();
-    // Sync horizontal scroll between header and grid
-    bool _syncing = false;
-    _headerScrollController.addListener(() {
-      if (_syncing) return;
-      _syncing = true;
-      if (_gridScrollController.hasClients) {
-        _gridScrollController.jumpTo(_headerScrollController.offset);
-      }
-      _syncing = false;
-    });
-    _gridScrollController.addListener(() {
-      if (_syncing) return;
-      _syncing = true;
-      if (_headerScrollController.hasClients) {
-        _headerScrollController.jumpTo(_gridScrollController.offset);
-      }
-      _syncing = false;
-    });
   }
 
   @override
