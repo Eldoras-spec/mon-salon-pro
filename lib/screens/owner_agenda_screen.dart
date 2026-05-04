@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,9 +66,20 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   bool _calendarOpen = false;
   List<TeamMemberModel> _members = [];
   List<AppointmentModel> _appointments = [];
+  // Full month of appointments around the selected date — used to filter
+  // [_appointments] in-memory on day swipe (no extra Firestore read).
+  List<AppointmentModel> _selectedMonthApts = [];
   // Monthly appointments cache for calendar dots: { "2026-04-14": [AppointmentModel, ...] }
   Map<String, List<AppointmentModel>> _monthAppointments = {};
   bool _loading = true;
+
+  // Live Firestore subscriptions — re-keyed when the month changes so
+  // we keep one listener per visible month at most. New RDV created
+  // anywhere will appear instantly without re-opening the screen.
+  StreamSubscription<List<AppointmentModel>>? _selectedMonthSub;
+  StreamSubscription<List<AppointmentModel>>? _calendarDotsSub;
+  String? _selectedMonthKey; // 'yyyy-M'
+  String? _calendarDotsKey;
 
   // Timeline config
   static const int _startHour = 8;
@@ -105,45 +118,102 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
 
   @override
   void dispose() {
+    _selectedMonthSub?.cancel();
+    _calendarDotsSub?.cancel();
     _verticalController.dispose();
     _headerScrollController.dispose();
     _gridScrollController.dispose();
     super.dispose();
   }
 
+  /// One-shot members load + ensure month subscription is active.
+  /// Called from initState and as the RefreshIndicator no-op handler.
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
       final members = await _db.getTeamMembersOnce(widget.salonId);
-      final appointments =
-          await _db.getSalonAppointmentsForDate(widget.salonId, _selectedDate);
-      if (mounted) {
-        setState(() {
-          _members = members.where((m) => m.isActive).toList();
-          _appointments = appointments;
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _members = members.where((m) => m.isActive).toList();
+      });
+      _ensureSelectedMonthSubscription(_selectedDate);
     } catch (e) {
       debugPrint('Agenda load error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadMonthAppointments() async {
-    try {
-      final start = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
-      final end = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0, 23, 59);
-      final appointments = await _db.getSalonAppointmentsForRange(widget.salonId, start, end);
+  /// Re-subscribe to the live appointments stream for the month
+  /// containing [forDate] if needed. Stream emissions update both the
+  /// full-month buffer (used to filter on day swipe in-memory) and
+  /// [_appointments] (the currently visible day). No-op if already
+  /// subscribed to the same month.
+  void _ensureSelectedMonthSubscription(DateTime forDate) {
+    final key = '${forDate.year}-${forDate.month}';
+    if (_selectedMonthKey == key && _selectedMonthSub != null) return;
+    _selectedMonthKey = key;
+    _selectedMonthSub?.cancel();
+
+    final start = DateTime(forDate.year, forDate.month, 1);
+    final end = DateTime(forDate.year, forDate.month + 1, 0, 23, 59);
+    _selectedMonthSub = _db
+        .streamSalonAppointmentsForRange(widget.salonId, start, end)
+        .listen((apts) {
+      if (!mounted) return;
+      setState(() {
+        _selectedMonthApts = apts;
+        _appointments = apts
+            .where((a) => DateUtils.isSameDay(a.dateTime, _selectedDate))
+            .toList();
+        _loading = false;
+      });
+    }, onError: (e) {
+      debugPrint('Selected-month stream error: $e');
+      if (mounted) setState(() => _loading = false);
+    });
+  }
+
+  /// Live subscription for the calendar overlay dots — separate from the
+  /// selected-date stream because the user can navigate the calendar
+  /// month without changing the visible day. When months coincide,
+  /// Firestore client dedupes the underlying network listener so this
+  /// is effectively free.
+  void _ensureCalendarDotsSubscription(DateTime forMonth) {
+    final key = '${forMonth.year}-${forMonth.month}';
+    if (_calendarDotsKey == key && _calendarDotsSub != null) return;
+    _calendarDotsKey = key;
+    _calendarDotsSub?.cancel();
+
+    final start = DateTime(forMonth.year, forMonth.month, 1);
+    final end = DateTime(forMonth.year, forMonth.month + 1, 0, 23, 59);
+    _calendarDotsSub = _db
+        .streamSalonAppointmentsForRange(widget.salonId, start, end)
+        .listen((apts) {
+      if (!mounted) return;
       final map = <String, List<AppointmentModel>>{};
-      for (final a in appointments) {
-        final key = DateFormat('yyyy-MM-dd').format(a.dateTime);
-        map.putIfAbsent(key, () => []).add(a);
+      for (final a in apts) {
+        final mapKey = DateFormat('yyyy-MM-dd').format(a.dateTime);
+        map.putIfAbsent(mapKey, () => []).add(a);
       }
-      if (mounted) setState(() => _monthAppointments = map);
-    } catch (e) {
-      debugPrint('Month appointments load error: $e');
-    }
+      setState(() => _monthAppointments = map);
+    }, onError: (e) {
+      debugPrint('Calendar dots stream error: $e');
+    });
+  }
+
+  /// Update [_selectedDate] and re-derive the visible day's appointments.
+  /// If the new date is in the same month as the current subscription,
+  /// the filter happens instantly from in-memory data (no network call).
+  /// If it's in a different month, we re-subscribe and the listener
+  /// updates [_appointments] on the first emission.
+  void _selectDate(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+      _appointments = _selectedMonthApts
+          .where((a) => DateUtils.isSameDay(a.dateTime, date))
+          .toList();
+    });
+    _ensureSelectedMonthSubscription(date);
   }
 
   // Total height of the timeline
@@ -253,7 +323,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
             GestureDetector(
               onTap: () {
                 setState(() => _calendarOpen = !_calendarOpen);
-                if (_calendarOpen) _loadMonthAppointments();
+                if (_calendarOpen) _ensureCalendarDotsSubscription(_calendarMonth);
               },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -358,7 +428,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                   setState(() {
                     _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1);
                   });
-                  _loadMonthAppointments();
+                  _ensureCalendarDotsSubscription(_calendarMonth);
                 },
               ),
               Text(
@@ -371,7 +441,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                   setState(() {
                     _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1);
                   });
-                  _loadMonthAppointments();
+                  _ensureCalendarDotsSubscription(_calendarMonth);
                 },
               ),
             ],
@@ -391,7 +461,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                     setState(() {
                       _calendarMonth = DateTime(_calendarMonth.year, i + 1);
                     });
-                    _loadMonthAppointments();
+                    _ensureCalendarDotsSubscription(_calendarMonth);
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -461,11 +531,8 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
 
               return GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _selectedDate = date;
-                    _calendarOpen = false;
-                  });
-                  _loadData();
+                  setState(() => _calendarOpen = false);
+                  _selectDate(date);
                 },
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
