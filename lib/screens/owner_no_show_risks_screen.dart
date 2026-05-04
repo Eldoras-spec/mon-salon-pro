@@ -14,7 +14,7 @@ class OwnerNoShowRisksScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
-    final clients = ref.watch(noShowRiskClientsProvider);
+    final clientsAsync = ref.watch(noShowRiskClientsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -34,21 +34,25 @@ class OwnerNoShowRisksScreen extends ConsumerWidget {
               color: AppColors.brand950),
         ),
       ),
-      body: clients.isEmpty
-          ? _buildEmpty(context, l)
-          : Column(
-              children: [
-                _buildInfoBanner(context, l),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: clients.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (_, i) => _RiskClientCard(client: clients[i]),
+      body: clientsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, __) => _buildEmpty(context, l),
+        data: (clients) => clients.isEmpty
+            ? _buildEmpty(context, l)
+            : Column(
+                children: [
+                  _buildInfoBanner(context, l),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: clients.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (_, i) => _RiskClientCard(client: clients[i]),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -223,6 +227,35 @@ class _RiskClientCard extends StatelessWidget {
               ),
             ],
           ),
+          if (client.isCrossSalon) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.travel_explore_rounded,
+                      size: 14, color: Color(0xFF1D4ED8)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l?.tr('noshow_cross_salon_hint') ??
+                          'Historique cumulé sur d\'autres salons (jamais venu chez vous)',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF1D4ED8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           // Stats row
           Container(
@@ -235,7 +268,9 @@ class _RiskClientCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _StatItem(
-                    label: l?.tr('noshow_past_total') ?? 'RDV passés',
+                    label: client.isCrossSalon
+                        ? (l?.tr('noshow_past_total_global') ?? 'RDV totaux')
+                        : (l?.tr('noshow_past_total') ?? 'RDV passés'),
                     value: '${client.totalPast}',
                   ),
                 ),

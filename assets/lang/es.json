@@ -267,6 +267,8 @@
   "noshow_empty_desc": "Todas tus citas de hoy son con clientes fiables.",
   "noshow_no_phone": "Sin teléfono",
   "noshow_past_total": "Citas pasadas",
+  "noshow_past_total_global": "Citas totales",
+  "noshow_cross_salon_hint": "Historial acumulado de otros salones (nunca te ha visitado)",
   "noshow_past_cancelled": "Canceladas",
   "noshow_today_time": "Hoy",
   "noshow_call": "Llamar",

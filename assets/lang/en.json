@@ -267,6 +267,8 @@
   "noshow_empty_desc": "All of today's appointments are with reliable clients.",
   "noshow_no_phone": "No phone number",
   "noshow_past_total": "Past appts",
+  "noshow_past_total_global": "Total appts",
+  "noshow_cross_salon_hint": "Cross-salon history (never visited you before)",
   "noshow_past_cancelled": "Cancelled",
   "noshow_today_time": "Today",
   "noshow_call": "Call",

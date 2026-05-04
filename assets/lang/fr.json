@@ -267,6 +267,8 @@
   "noshow_empty_desc": "Tous vos RDV d'aujourd'hui sont avec des clients fiables.",
   "noshow_no_phone": "Pas de téléphone",
   "noshow_past_total": "RDV passés",
+  "noshow_past_total_global": "RDV totaux",
+  "noshow_cross_salon_hint": "Historique cumulé sur d'autres salons (jamais venu chez vous)",
   "noshow_past_cancelled": "Annulés",
   "noshow_today_time": "Aujourd'hui",
   "noshow_call": "Appeler",

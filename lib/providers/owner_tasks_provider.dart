@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/appointment_model.dart';
@@ -26,6 +27,7 @@ class NoShowRiskClient {
     required this.cancelledPast,
     required this.rate,
     required this.todayAppt,
+    this.isCrossSalon = false,
   });
 
   final String clientId;
@@ -35,6 +37,13 @@ class NoShowRiskClient {
   final int cancelledPast;
   final int rate; // 0..100
   final AppointmentModel todayAppt;
+
+  /// True when the flag comes from the GLOBAL cross-salon reputation
+  /// (`clientReputation/{uid}`) rather than this salon's own history —
+  /// the client doesn't have enough cancellations on THIS salon but
+  /// has a high cancellation rate across other salons. The owner only
+  /// sees the aggregate rate, never which salons flagged the client.
+  final bool isCrossSalon;
 }
 
 class OwnerTask {
@@ -96,9 +105,20 @@ final lowStockCountProvider = Provider<int>((ref) {
   return inv.where((i) => i.isLow).length;
 });
 
-/// Clients with upcoming appointment TODAY who have a past cancellation
-/// rate ≥ 25% (minimum 2 past appointments).
-final noShowRiskClientsProvider = Provider<List<NoShowRiskClient>>((ref) {
+/// Clients with upcoming appointment TODAY who are flagged for no-show risk.
+///
+/// Two-tier evaluation:
+///   1. **Per-salon** (existing): cancellation rate ≥ 25% with min 2 past
+///      appointments on THIS salon.
+///   2. **Cross-salon** (new fallback): if no per-salon flag, query the
+///      global `clientReputation/{uid}` doc and flag if rate ≥ 30% with
+///      min 3 past appointments lifetime. The owner never sees the
+///      per-salon breakdown — only the aggregate rate, for privacy.
+///
+/// Async because the cross-salon check needs a Firestore read per
+/// upcoming-today client (bounded, typically < 20 reads per dashboard).
+final noShowRiskClientsProvider =
+    FutureProvider<List<NoShowRiskClient>>((ref) async {
   // 6-month window is enough to read a client's cancellation rate;
   // avoids the lifetime-history scan of `ownerAppointmentsProvider`.
   final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
@@ -127,25 +147,55 @@ final noShowRiskClientsProvider = Provider<List<NoShowRiskClient>>((ref) {
     if (seenClients.contains(appt.clientId)) continue;
     seenClients.add(appt.clientId);
 
-    // Client's past appointments (before today)
+    // ── Tier 1: per-salon history ───────────────────────────────────
     final past = appointments.where((a) =>
         a.clientId == appt.clientId &&
         a.dateTime.isBefore(todayStart)).toList();
-    if (past.length < 2) continue; // Not enough history
+    if (past.length >= 2) {
+      final cancelled = past.where((a) => a.status == 'cancelled').length;
+      final rate = ((cancelled / past.length) * 100).round();
+      if (rate >= 25) {
+        results.add(NoShowRiskClient(
+          clientId: appt.clientId,
+          clientName: appt.clientName ?? 'Client',
+          clientPhone: appt.clientPhone,
+          totalPast: past.length,
+          cancelledPast: cancelled,
+          rate: rate,
+          todayAppt: appt,
+          isCrossSalon: false,
+        ));
+        continue; // already flagged, skip cross-salon check
+      }
+    }
 
-    final cancelled = past.where((a) => a.status == 'cancelled').length;
-    final rate = ((cancelled / past.length) * 100).round();
-    if (rate < 25) continue;
-
-    results.add(NoShowRiskClient(
-      clientId: appt.clientId,
-      clientName: appt.clientName ?? 'Client',
-      clientPhone: appt.clientPhone,
-      totalPast: past.length,
-      cancelledPast: cancelled,
-      rate: rate,
-      todayAppt: appt,
-    ));
+    // ── Tier 2: cross-salon reputation ──────────────────────────────
+    try {
+      final repSnap = await FirebaseFirestore.instance
+          .collection('clientReputation')
+          .doc(appt.clientId)
+          .get();
+      if (!repSnap.exists) continue;
+      final data = repSnap.data();
+      if (data == null) continue;
+      final totalPastLifetime = (data['totalPast'] as num?)?.toInt() ?? 0;
+      final cancelledLifetime = (data['cancelledCount'] as num?)?.toInt() ?? 0;
+      final rateLifetime = (data['cancellationRate'] as num?)?.toInt() ?? 0;
+      if (totalPastLifetime < 3 || rateLifetime < 30) continue;
+      results.add(NoShowRiskClient(
+        clientId: appt.clientId,
+        clientName: appt.clientName ?? 'Client',
+        clientPhone: appt.clientPhone,
+        totalPast: totalPastLifetime,
+        cancelledPast: cancelledLifetime,
+        rate: rateLifetime,
+        todayAppt: appt,
+        isCrossSalon: true,
+      ));
+    } catch (_) {
+      // Best-effort: if rules block read or doc fetch fails,
+      // don't flag — better than a false positive.
+    }
   }
 
   results.sort((a, b) => b.rate.compareTo(a.rate));
@@ -154,7 +204,7 @@ final noShowRiskClientsProvider = Provider<List<NoShowRiskClient>>((ref) {
 
 /// Count of high-risk clients with appointment today.
 final noShowRiskCountProvider = Provider<int>((ref) {
-  return ref.watch(noShowRiskClientsProvider).length;
+  return ref.watch(noShowRiskClientsProvider).valueOrNull?.length ?? 0;
 });
 
 // ── Aggregator ───────────────────────────────────────────────────────────────
