@@ -308,6 +308,8 @@
   "agenda_no_team_members": "Sin miembros en el equipo",
   "agenda_add_members_hint": "Agrega miembros para ver la planificacion",
   "agenda_client": "Cliente",
+  "agenda_risk_pill": "Riesgo de no-show",
+  "agenda_risk_advice": "Consejo: llama al cliente para confirmar o pide un anticipo para asegurar la cita.",
 
   "appointments_title": "Citas",
   "appointments_add_tooltip": "Agregar una cita",

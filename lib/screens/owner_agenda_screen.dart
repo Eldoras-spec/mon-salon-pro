@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers/owner_tasks_provider.dart';
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
@@ -45,16 +47,16 @@ const _memberTextColors = [
   Color(0xFF475569), // slate dark
 ];
 
-class OwnerAgendaScreen extends StatefulWidget {
+class OwnerAgendaScreen extends ConsumerStatefulWidget {
   final String salonId;
   final String currency;
   const OwnerAgendaScreen({super.key, required this.salonId, this.currency = 'MAD'});
 
   @override
-  State<OwnerAgendaScreen> createState() => _OwnerAgendaScreenState();
+  ConsumerState<OwnerAgendaScreen> createState() => _OwnerAgendaScreenState();
 }
 
-class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
+class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   final _db = DatabaseService();
 
   DateTime _selectedDate = DateTime.now();
@@ -748,6 +750,9 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                 (appt.durationMinutes * _pixelsPerMinute).clamp(20.0, _timelineHeight + topPadding - top);
             final endTime =
                 appt.dateTime.add(Duration(minutes: appt.durationMinutes));
+            final risk = ref
+                .watch(agendaRiskClientsProvider)
+                .valueOrNull?[appt.clientId];
 
             return Positioned(
               top: top,
@@ -756,67 +761,94 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
               height: height,
               child: GestureDetector(
                 onTap: () => _showAppointmentDetails(appt, colorIndex),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: bgColor.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: bgColor,
-                      width: 1,
-                    ),
-                  ),
-                  clipBehavior: Clip.hardEdge,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${DateFormat('HH:mm').format(appt.dateTime)} - ${DateFormat('HH:mm').format(endTime)}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: bgColor.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: risk != null
+                              ? const Color(0xFFF59E0B)
+                              : bgColor,
+                          width: risk != null ? 1.5 : 1,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (height > 35 && appt.assignedMemberName != null)
-                        Text(
-                          appt.assignedMemberName!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: textColor,
+                      clipBehavior: Clip.hardEdge,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${DateFormat('HH:mm').format(appt.dateTime)} - ${DateFormat('HH:mm').format(endTime)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      if (height > 45)
-                        Text(
-                          appt.serviceName,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: textColor.withValues(alpha: 0.85),
+                          if (height > 35 && appt.assignedMemberName != null)
+                            Text(
+                              appt.assignedMemberName!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: textColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if (height > 45)
+                            Text(
+                              appt.serviceName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: textColor.withValues(alpha: 0.85),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if (height > 65 && appt.clientName != null)
+                            Text(
+                              appt.clientName!.length > 10
+                                  ? '${appt.clientName!.substring(0, 10)}…'
+                                  : appt.clientName!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: textColor.withValues(alpha: 0.7),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (risk != null)
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _showRiskStats(appt, risk),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF59E0B),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.white,
+                              size: 12,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      if (height > 65 && appt.clientName != null)
-                        Text(
-                          appt.clientName!.length > 10
-                              ? '${appt.clientName!.substring(0, 10)}…'
-                              : appt.clientName!,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: textColor.withValues(alpha: 0.7),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               ),
             );
@@ -971,6 +1003,52 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
                     .toList(),
               ),
             ],
+            // No-show risk pill (per-salon or cross-salon)
+            Builder(builder: (_) {
+              final risk = ref
+                  .read(agendaRiskClientsProvider)
+                  .valueOrNull?[appt.clientId];
+              if (risk == null) return const SizedBox.shrink();
+              final l = AppLocalizations.of(context);
+              return Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showRiskStats(appt, risk);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            size: 18, color: Color(0xFFD97706)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${l?.tr('agenda_risk_pill') ?? 'Risque de no-show'} · ${risk.rate}%',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF854D0E),
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded,
+                            size: 18, color: Color(0xFF854D0E)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
             const SizedBox(height: 16),
             // Details
             if (appt.clientName != null) ...[
@@ -1035,6 +1113,194 @@ class _OwnerAgendaScreenState extends State<OwnerAgendaScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showRiskStats(AppointmentModel appt, AgendaRiskInfo risk) {
+    final l = AppLocalizations.of(context);
+    final clientLabel = appt.clientName?.isNotEmpty == true
+        ? appt.clientName!
+        : (l?.tr('agenda_client') ?? 'Client');
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.secondary200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Color(0xFFD97706), size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l?.tr('agenda_risk_pill') ?? 'Risque de no-show',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brand950,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        clientLabel,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.secondary500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${risk.rate}%',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFDC2626),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (risk.isCrossSalon) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.travel_explore_rounded,
+                        size: 14, color: Color(0xFF1D4ED8)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        l?.tr('noshow_cross_salon_hint') ??
+                            'Historique cumulé sur d\'autres salons (jamais venu chez vous)',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF1D4ED8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.secondary50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          '${risk.totalPast}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brand950,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          risk.isCrossSalon
+                              ? (l?.tr('noshow_past_total_global') ??
+                                  'RDV totaux')
+                              : (l?.tr('noshow_past_total') ?? 'RDV passés'),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.secondary400),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                      width: 1, height: 30, color: AppColors.secondary200),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          '${risk.cancelledPast}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFDC2626),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          l?.tr('noshow_past_cancelled') ?? 'Annulés',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.secondary400),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l?.tr('agenda_risk_advice') ??
+                  'Conseil : appelez le client pour confirmer le RDV ou demandez une avance pour sécuriser sa venue.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.secondary500,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

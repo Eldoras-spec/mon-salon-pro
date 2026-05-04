@@ -60,17 +60,23 @@ final ownerHomeAppointmentsProvider =
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
-/// Live stream of the last 6 months of appointments — used by the
-/// no-show-risk derivation. Cancellation patterns are visible inside
-/// 6 months for most clients, so this trades a bit of accuracy on
-/// long-time clients for bounded reads (no full-history scan).
+/// Live stream of the last 6 months + next 7 days of appointments.
+/// Used by:
+///   - `noShowRiskClientsProvider` (today's upcoming + per-salon history)
+///   - `agendaRiskClientsProvider` (next 7 days upcoming + history for the
+///     agenda risk badges)
+///
+/// Cancellation patterns are visible inside 6 months for most clients,
+/// so this trades a bit of accuracy on long-time clients for bounded
+/// reads (no full-history scan). The +7d forward window costs ~3% extra
+/// reads vs today-only and is negligible.
 final ownerNoShowWindowAppointmentsProvider =
     StreamProvider<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final now = DateTime.now();
   final start = DateTime(now.year, now.month - 6, now.day);
-  final end = DateTime(now.year, now.month, now.day + 1);
+  final end = DateTime(now.year, now.month, now.day + 8);
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 

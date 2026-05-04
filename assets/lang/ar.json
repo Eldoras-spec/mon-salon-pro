@@ -308,6 +308,8 @@
   "agenda_no_team_members": "لا يوجد أعضاء في الفريق",
   "agenda_add_members_hint": "أضف أعضاء لعرض الجدول",
   "agenda_client": "العميل",
+  "agenda_risk_pill": "خطر عدم الحضور",
+  "agenda_risk_advice": "نصيحة: اتصل بالعميل لتأكيد الموعد أو اطلب دفعة مقدمة لضمان الحضور.",
 
   "appointments_title": "المواعيد",
   "appointments_add_tooltip": "إضافة موعد",

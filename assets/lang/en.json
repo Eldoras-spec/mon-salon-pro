@@ -308,6 +308,8 @@
   "agenda_no_team_members": "No team members",
   "agenda_add_members_hint": "Add members to view the planning",
   "agenda_client": "Client",
+  "agenda_risk_pill": "No-show risk",
+  "agenda_risk_advice": "Tip: call the client to confirm, or ask for a deposit to secure the booking.",
 
   "appointments_title": "Appointments",
   "appointments_add_tooltip": "Add an appointment",

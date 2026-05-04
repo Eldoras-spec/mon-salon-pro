@@ -308,6 +308,8 @@
   "agenda_no_team_members": "Aucun membre dans l'équipe",
   "agenda_add_members_hint": "Ajoutez des membres pour voir le planning",
   "agenda_client": "Client",
+  "agenda_risk_pill": "Risque de no-show",
+  "agenda_risk_advice": "Conseil : appelez le client pour confirmer le RDV ou demandez une avance pour sécuriser sa venue.",
 
   "appointments_title": "Rendez-vous",
   "appointments_add_tooltip": "Ajouter un rendez-vous",

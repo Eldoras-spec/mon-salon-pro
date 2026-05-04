@@ -207,6 +207,98 @@ final noShowRiskCountProvider = Provider<int>((ref) {
   return ref.watch(noShowRiskClientsProvider).valueOrNull?.length ?? 0;
 });
 
+/// Compact risk info shown next to a flagged client on the agenda card.
+class AgendaRiskInfo {
+  const AgendaRiskInfo({
+    required this.rate,
+    required this.totalPast,
+    required this.cancelledPast,
+    required this.isCrossSalon,
+  });
+
+  final int rate;
+  final int totalPast;
+  final int cancelledPast;
+  final bool isCrossSalon;
+}
+
+/// Map of clientId → risk info for clients with an upcoming RDV in the
+/// **next 7 days** on this salon. Lets the agenda screen lookup a client's
+/// risk status by clientId in O(1) without recomputing per card.
+///
+/// Same two-tier evaluation as `noShowRiskClientsProvider` (per-salon
+/// 25% / min 2, then cross-salon 30% / min 3 fallback) but the upcoming
+/// window is widened from "today" to "today + 7 days".
+final agendaRiskClientsProvider =
+    FutureProvider<Map<String, AgendaRiskInfo>>((ref) async {
+  final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
+  if (appointments.isEmpty) return {};
+
+  final now = DateTime.now();
+  final todayStart = DateTime(now.year, now.month, now.day);
+  final windowEnd = todayStart.add(const Duration(days: 8));
+
+  final upcoming = appointments.where((a) =>
+      a.status == 'upcoming' &&
+      !a.dateTime.isBefore(todayStart) &&
+      a.dateTime.isBefore(windowEnd) &&
+      a.clientId.isNotEmpty &&
+      a.clientId != 'walk-in' &&
+      a.paymentStatus != 'paid' &&
+      a.paymentStatus != 'deposit_paid').toList();
+
+  final results = <String, AgendaRiskInfo>{};
+  final processed = <String>{};
+
+  for (final appt in upcoming) {
+    if (processed.contains(appt.clientId)) continue;
+    processed.add(appt.clientId);
+
+    // Tier 1: per-salon history
+    final past = appointments.where((a) =>
+        a.clientId == appt.clientId &&
+        a.dateTime.isBefore(todayStart)).toList();
+    if (past.length >= 2) {
+      final cancelled = past.where((a) => a.status == 'cancelled').length;
+      final rate = ((cancelled / past.length) * 100).round();
+      if (rate >= 25) {
+        results[appt.clientId] = AgendaRiskInfo(
+          rate: rate,
+          totalPast: past.length,
+          cancelledPast: cancelled,
+          isCrossSalon: false,
+        );
+        continue;
+      }
+    }
+
+    // Tier 2: cross-salon reputation
+    try {
+      final repSnap = await FirebaseFirestore.instance
+          .collection('clientReputation')
+          .doc(appt.clientId)
+          .get();
+      if (!repSnap.exists) continue;
+      final data = repSnap.data();
+      if (data == null) continue;
+      final totalPastLifetime = (data['totalPast'] as num?)?.toInt() ?? 0;
+      final cancelledLifetime = (data['cancelledCount'] as num?)?.toInt() ?? 0;
+      final rateLifetime = (data['cancellationRate'] as num?)?.toInt() ?? 0;
+      if (totalPastLifetime < 3 || rateLifetime < 30) continue;
+      results[appt.clientId] = AgendaRiskInfo(
+        rate: rateLifetime,
+        totalPast: totalPastLifetime,
+        cancelledPast: cancelledLifetime,
+        isCrossSalon: true,
+      );
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  return results;
+});
+
 // ── Aggregator ───────────────────────────────────────────────────────────────
 
 /// Combined list of non-empty tasks, ordered by priority.
