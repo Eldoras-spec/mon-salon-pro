@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -94,7 +96,37 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         (planRank[salon?.plan] ?? 0);
     setState(() => _purchasing = true);
     try {
-      final customerInfo = await Purchases.purchasePackage(pkg);
+      // Android only: if the user already has an active paid sub on a
+      // different product, Google Play won't auto-replace it like Apple
+      // does — we'd end up with 2 active subs. Pass GoogleProductChangeInfo
+      // to instruct Play Billing to replace the old sub with the new one.
+      // iOS handles this natively via subscription groups.
+      GoogleProductChangeInfo? changeInfo;
+      if (Platform.isAndroid) {
+        try {
+          final info = await Purchases.getCustomerInfo();
+          for (final ent in info.entitlements.active.values) {
+            final oldProductId = ent.productIdentifier;
+            if (oldProductId.isNotEmpty &&
+                !pkg.storeProduct.identifier.startsWith(oldProductId)) {
+              changeInfo = GoogleProductChangeInfo(
+                oldProductId,
+                prorationMode: isDowngrade
+                    ? GoogleProrationMode.deferred
+                    : GoogleProrationMode.immediateWithTimeProration,
+              );
+              break;
+            }
+          }
+        } catch (_) {
+          // Detection failed — fall back to plain purchase.
+        }
+      }
+
+      final customerInfo = changeInfo != null
+          ? await Purchases.purchasePackage(pkg,
+              googleProductChangeInfo: changeInfo)
+          : await Purchases.purchasePackage(pkg);
       final entitlementKey =
           widget.targetPlan == PlanConfig.planBusiness
               ? RevenueCatService.entitlementBusiness

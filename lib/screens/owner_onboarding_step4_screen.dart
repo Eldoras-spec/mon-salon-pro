@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -104,7 +106,35 @@ class _OwnerOnboardingStep4ScreenState
         }
         return;
       }
-      final customerInfo = await Purchases.purchasePackage(pkg);
+      // Android only: defensive replacement-info if user already has an
+      // active sub on a different product (rare during onboarding but
+      // possible if account was deleted/recreated). iOS handles this
+      // natively via subscription groups.
+      GoogleProductChangeInfo? changeInfo;
+      if (Platform.isAndroid) {
+        try {
+          final info = await Purchases.getCustomerInfo();
+          for (final ent in info.entitlements.active.values) {
+            final oldProductId = ent.productIdentifier;
+            if (oldProductId.isNotEmpty &&
+                !pkg.storeProduct.identifier.startsWith(oldProductId)) {
+              changeInfo = GoogleProductChangeInfo(
+                oldProductId,
+                prorationMode:
+                    GoogleProrationMode.immediateWithTimeProration,
+              );
+              break;
+            }
+          }
+        } catch (_) {
+          // Detection failed — fall back to plain purchase.
+        }
+      }
+
+      final customerInfo = changeInfo != null
+          ? await Purchases.purchasePackage(pkg,
+              googleProductChangeInfo: changeInfo)
+          : await Purchases.purchasePackage(pkg);
       final entitlementKey = chosenPlan == PlanConfig.planBusiness
           ? RevenueCatService.entitlementBusiness
           : RevenueCatService.entitlementEssentiel;

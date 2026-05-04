@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -75,9 +77,13 @@ class _Body extends StatelessWidget {
         children: [
           _CurrentPlanCard(salon: salon),
           const SizedBox(height: 12),
-          if (salon.isEssentiel && salon.trialEndsAt != null)
+          if (salon.isEssentiel &&
+              salon.trialEndsAt != null &&
+              salon.trialEndsAt!.isAfter(DateTime.now()))
             _TrialCard(trialEndsAt: salon.trialEndsAt!),
-          if (salon.isEssentiel && salon.trialEndsAt != null)
+          if (salon.isEssentiel &&
+              salon.trialEndsAt != null &&
+              salon.trialEndsAt!.isAfter(DateTime.now()))
             const SizedBox(height: 12),
           _FeaturesCard(salon: salon),
           const SizedBox(height: 16),
@@ -245,13 +251,26 @@ class _Body extends StatelessWidget {
 
   Future<void> _confirmCancelToFree(BuildContext context) async {
     final l = AppLocalizations.of(context);
+    final isAndroid = Platform.isAndroid;
+    final bodyKey = isAndroid
+        ? 'subscription.cancel_to_free_body_android'
+        : 'subscription.cancel_to_free_body';
+    final failedKey = isAndroid
+        ? 'subscription.cancel_to_free_open_failed_android'
+        : 'subscription.cancel_to_free_open_failed';
+    final bodyFallback = isAndroid
+        ? 'Pour passer au plan Free, résiliez votre abonnement via Play Store → Profil → Paiements et abonnements → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.'
+        : 'Pour passer au plan Free, résiliez votre abonnement via Réglages → Apple ID → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.';
+    final failedFallback = isAndroid
+        ? 'Impossible d\'ouvrir Play Store. Allez manuellement dans Play Store → Profil → Paiements et abonnements → Abonnements.'
+        : 'Impossible d\'ouvrir Réglages. Allez manuellement dans Réglages → Apple ID → Abonnements.';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
         title: Text(l?.tr('subscription.cancel_to_free_title') ??
             'Passer au plan Free ?'),
-        content: Text(l?.tr('subscription.cancel_to_free_body') ??
-            'Pour passer au plan Free, résiliez votre abonnement via Réglages → Apple ID → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.'),
+        content: Text(l?.tr(bodyKey) ?? bodyFallback),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
@@ -269,15 +288,16 @@ class _Body extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
 
-    final uri = Uri.parse('https://apps.apple.com/account/subscriptions');
+    final uri = Uri.parse(
+      isAndroid
+          ? 'https://play.google.com/store/account/subscriptions'
+          : 'https://apps.apple.com/account/subscriptions',
+    );
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-            l?.tr('subscription.cancel_to_free_open_failed') ??
-                'Impossible d\'ouvrir Réglages. Allez manuellement dans Réglages → Apple ID → Abonnements.',
-          )),
+          SnackBar(content: Text(l?.tr(failedKey) ?? failedFallback)),
         );
       }
     } catch (e) {
