@@ -566,6 +566,9 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
   final Set<String> _validDays = {};
   String? _validHoursStart;
   String? _validHoursEnd;
+  // Inline error banner — bottom-sheet wizards hide global SnackBars, so
+  // validation messages used to silently disappear under the modal.
+  String? _errorMsg;
 
   static const _daysList = [
     'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
@@ -605,40 +608,19 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: const Color(0xFFDC2626),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    setState(() => _errorMsg = msg);
   }
 
   Future<void> _save() async {
     final l = AppLocalizations.of(context);
-    final title = _titleCtrl.text.trim();
+    setState(() => _errorMsg = null);
     final desc = _descCtrl.text.trim();
-    // Title is required; description is optional. We give explicit
-    // SnackBar feedback for every failure path so the "Publier" button
-    // never silently no-ops (was: title.isEmpty || desc.isEmpty → return,
-    // which left the user staring at an unresponsive button).
-    if (title.isEmpty) {
-      _showError(l?.tr('promotions_error_title_required') ??
-          'Veuillez saisir un titre pour la promotion.');
-      return;
-    }
 
-    double? percent;
-    if (_type == 'percent' || _type == 'conditional') {
-      percent = double.tryParse(
-          _percentCtrl.text.replaceAll(',', '.'));
-      if (percent == null || percent <= 0 || percent > 100) {
-        _showError(l?.tr('promotions_error_percent_invalid') ??
-            'Le pourcentage doit être un nombre entre 1 et 100.');
-        return;
-      }
-    }
-
+    // Title comes from a different field per type:
+    //   - code → the code itself doubles as the display title (no separate
+    //     title field shown — owners think of "PROMO10" as the promo's name).
+    //   - percent / conditional → free-form title above the % input.
+    String title;
     String? code;
     if (_type == 'code') {
       code = _codeCtrl.text.trim().toUpperCase();
@@ -647,6 +629,25 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
             'Veuillez saisir un code promo.');
         return;
       }
+      title = code;
+    } else {
+      title = _titleCtrl.text.trim();
+      if (title.isEmpty) {
+        _showError(l?.tr('promotions_error_title_required') ??
+            'Veuillez saisir un titre pour la promotion.');
+        return;
+      }
+    }
+
+    // Discount % is required for ALL types now — a code without a
+    // discount percent is useless (was previously skipped for `code`
+    // type, leaving promoCode docs with `discountPercent: undefined`
+    // and the website silently applying 0% off).
+    final percent = double.tryParse(_percentCtrl.text.replaceAll(',', '.'));
+    if (percent == null || percent <= 0 || percent > 100) {
+      _showError(l?.tr('promotions_error_percent_invalid') ??
+          'Le pourcentage doit être un nombre entre 1 et 100.');
+      return;
     }
 
     if ((_type == 'percent' || _type == 'conditional') &&
@@ -731,7 +732,10 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 final selected = _type == e.key;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _type = e.key),
+                    onTap: () => setState(() {
+                      _type = e.key;
+                      _errorMsg = null;
+                    }),
                     child: Container(
                       margin: const EdgeInsets.only(right: 6),
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -759,7 +763,50 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
             ),
             const SizedBox(height: 16),
 
-            _PromoField(label: l?.tr('promotions_field_title') ?? 'Titre *', controller: _titleCtrl),
+            // Inline validation banner — bottom-sheet hides global SnackBars.
+            if (_errorMsg != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline, size: 16, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMsg!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFFDC2626),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // For percent/conditional: free-form title.
+            // For 'code': the code itself doubles as the title — first
+            // field is the code, no separate title.
+            if (_type == 'code')
+              _PromoField(
+                label: l?.tr('promotions_code_hint') ?? 'Code promo (ex: BIENVENUE20)',
+                controller: _codeCtrl,
+              )
+            else
+              _PromoField(
+                label: l?.tr('promotions_field_title') ?? 'Titre *',
+                controller: _titleCtrl,
+              ),
             const SizedBox(height: 12),
             _PromoField(
                 label: l?.tr('promotions_field_description_optional') ??
@@ -768,15 +815,17 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                 maxLines: 2),
             const SizedBox(height: 12),
 
-            if (_type == 'percent' || _type == 'conditional') ...[
-              _PromoField(
-                label: l?.tr('promotions_field_percent') ?? 'Pourcentage de réduction (%)',
-                controller: _percentCtrl,
-                keyboard: const TextInputType.numberWithOptions(
-                    decimal: true),
-              ),
-              const SizedBox(height: 12),
+            // Discount % — required for all 3 types now (used to be only
+            // percent + conditional, which left code-type promos with no
+            // discount and the website applying 0%).
+            _PromoField(
+              label: l?.tr('promotions_field_percent') ?? 'Pourcentage de réduction (%)',
+              controller: _percentCtrl,
+              keyboard: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 12),
 
+            if (_type == 'percent' || _type == 'conditional') ...[
               // Service selection
               Text(l?.tr('promotions_apply_on') ?? 'Appliquer sur',
                   style: const TextStyle(
@@ -1007,14 +1056,6 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                         fontSize: 11, color: AppColors.secondary400),
                   ),
                 ),
-              const SizedBox(height: 12),
-            ],
-
-            if (_type == 'code') ...[
-              _PromoField(
-                label: l?.tr('promotions_code_hint') ?? 'Code promo (ex: BIENVENUE20)',
-                controller: _codeCtrl,
-              ),
               const SizedBox(height: 12),
             ],
 

@@ -67,20 +67,16 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   bool _calendarOpen = false;
   List<TeamMemberModel> _members = [];
   List<AppointmentModel> _appointments = [];
-  // Full month of appointments around the selected date — used to filter
-  // [_appointments] in-memory on day swipe (no extra Firestore read).
-  List<AppointmentModel> _selectedMonthApts = [];
-  // Monthly appointments cache for calendar dots: { "2026-04-14": [AppointmentModel, ...] }
-  Map<String, List<AppointmentModel>> _monthAppointments = {};
   bool _loading = true;
 
-  // Live Firestore subscriptions — re-keyed when the month changes so
-  // we keep one listener per visible month at most. New RDV created
-  // anywhere will appear instantly without re-opening the screen.
-  StreamSubscription<List<AppointmentModel>>? _selectedMonthSub;
-  StreamSubscription<List<AppointmentModel>>? _calendarDotsSub;
-  String? _selectedMonthKey; // 'yyyy-M'
-  String? _calendarDotsKey;
+  // Live Firestore subscription scoped to the SELECTED DAY only. We used
+  // to load the full month and filter in memory (plus a parallel dots
+  // listener for the calendar overlay), but a 100-RDV salon paid 200+
+  // reads on every agenda open for data the owner rarely scrolled
+  // through. Day-only is ~5 reads/open with a re-fetch on day change,
+  // far cheaper at the cost of losing in-memory swipe.
+  StreamSubscription<List<AppointmentModel>>? _selectedDaySub;
+  String? _selectedDayKey; // 'yyyy-MM-dd'
 
   // Timeline config
   static const int _startHour = 8;
@@ -106,8 +102,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
 
   @override
   void dispose() {
-    _selectedMonthSub?.cancel();
-    _calendarDotsSub?.cancel();
+    _selectedDaySub?.cancel();
     _verticalController.dispose();
     _headerScrollController.dispose();
     _gridScrollController.dispose();
@@ -131,84 +126,43 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
       setState(() {
         _members = members.where((m) => m.isActive).toList();
       });
-      _ensureSelectedMonthSubscription(_selectedDate);
+      _ensureSelectedDaySubscription(_selectedDate);
     } catch (e) {
       debugPrint('Agenda load error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// Re-subscribe to the live appointments stream for the month
-  /// containing [forDate] if needed. Stream emissions update both the
-  /// full-month buffer (used to filter on day swipe in-memory) and
-  /// [_appointments] (the currently visible day). No-op if already
-  /// subscribed to the same month.
-  void _ensureSelectedMonthSubscription(DateTime forDate) {
-    final key = '${forDate.year}-${forDate.month}';
-    if (_selectedMonthKey == key && _selectedMonthSub != null) return;
-    _selectedMonthKey = key;
-    _selectedMonthSub?.cancel();
+  /// Re-subscribe to the live appointments stream for [forDate] only.
+  /// Cancels any prior subscription. New RDV that lands inside the
+  /// visible day will appear instantly via the stream.
+  void _ensureSelectedDaySubscription(DateTime forDate) {
+    final key = DateFormat('yyyy-MM-dd').format(forDate);
+    if (_selectedDayKey == key && _selectedDaySub != null) return;
+    _selectedDayKey = key;
+    _selectedDaySub?.cancel();
+    setState(() => _loading = true);
 
-    final start = DateTime(forDate.year, forDate.month, 1);
-    final end = DateTime(forDate.year, forDate.month + 1, 0, 23, 59);
-    _selectedMonthSub = _db
+    final start = DateTime(forDate.year, forDate.month, forDate.day);
+    final end = start.add(const Duration(days: 1));
+    _selectedDaySub = _db
         .streamSalonAppointmentsForRange(widget.salonId, start, end)
         .listen((apts) {
       if (!mounted) return;
       setState(() {
-        _selectedMonthApts = apts;
-        _appointments = apts
-            .where((a) => DateUtils.isSameDay(a.dateTime, _selectedDate))
-            .toList();
+        _appointments = apts;
         _loading = false;
       });
     }, onError: (e) {
-      debugPrint('Selected-month stream error: $e');
+      debugPrint('Selected-day stream error: $e');
       if (mounted) setState(() => _loading = false);
     });
   }
 
-  /// Live subscription for the calendar overlay dots — separate from the
-  /// selected-date stream because the user can navigate the calendar
-  /// month without changing the visible day. When months coincide,
-  /// Firestore client dedupes the underlying network listener so this
-  /// is effectively free.
-  void _ensureCalendarDotsSubscription(DateTime forMonth) {
-    final key = '${forMonth.year}-${forMonth.month}';
-    if (_calendarDotsKey == key && _calendarDotsSub != null) return;
-    _calendarDotsKey = key;
-    _calendarDotsSub?.cancel();
-
-    final start = DateTime(forMonth.year, forMonth.month, 1);
-    final end = DateTime(forMonth.year, forMonth.month + 1, 0, 23, 59);
-    _calendarDotsSub = _db
-        .streamSalonAppointmentsForRange(widget.salonId, start, end)
-        .listen((apts) {
-      if (!mounted) return;
-      final map = <String, List<AppointmentModel>>{};
-      for (final a in apts) {
-        final mapKey = DateFormat('yyyy-MM-dd').format(a.dateTime);
-        map.putIfAbsent(mapKey, () => []).add(a);
-      }
-      setState(() => _monthAppointments = map);
-    }, onError: (e) {
-      debugPrint('Calendar dots stream error: $e');
-    });
-  }
-
-  /// Update [_selectedDate] and re-derive the visible day's appointments.
-  /// If the new date is in the same month as the current subscription,
-  /// the filter happens instantly from in-memory data (no network call).
-  /// If it's in a different month, we re-subscribe and the listener
-  /// updates [_appointments] on the first emission.
+  /// Update [_selectedDate] and re-subscribe to that day's stream.
   void _selectDate(DateTime date) {
-    setState(() {
-      _selectedDate = date;
-      _appointments = _selectedMonthApts
-          .where((a) => DateUtils.isSameDay(a.dateTime, date))
-          .toList();
-    });
-    _ensureSelectedMonthSubscription(date);
+    setState(() => _selectedDate = date);
+    _ensureSelectedDaySubscription(date);
   }
 
   // Total height of the timeline
@@ -318,7 +272,6 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
             GestureDetector(
               onTap: () {
                 setState(() => _calendarOpen = !_calendarOpen);
-                if (_calendarOpen) _ensureCalendarDotsSubscription(_calendarMonth);
               },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -400,13 +353,6 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
         ? ['L', 'M', 'M', 'J', 'V', 'S', 'D']
         : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-    // Build member color map for dots — honors custom agendaColorIndex when set
-    final memberColorMap = <String, Color>{};
-    for (int i = 0; i < _members.length; i++) {
-      final ci = _members[i].agendaColorIndex ?? i;
-      memberColorMap[_members[i].id] = _memberTextColors[ci % _memberTextColors.length];
-    }
-
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -423,7 +369,6 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                   setState(() {
                     _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month - 1);
                   });
-                  _ensureCalendarDotsSubscription(_calendarMonth);
                 },
               ),
               Text(
@@ -436,7 +381,6 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                   setState(() {
                     _calendarMonth = DateTime(_calendarMonth.year, _calendarMonth.month + 1);
                   });
-                  _ensureCalendarDotsSubscription(_calendarMonth);
                 },
               ),
             ],
@@ -456,7 +400,6 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                     setState(() {
                       _calendarMonth = DateTime(_calendarMonth.year, i + 1);
                     });
-                    _ensureCalendarDotsSubscription(_calendarMonth);
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -504,67 +447,33 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
 
               final day = dayOffset + 1;
               final date = DateTime(_calendarMonth.year, _calendarMonth.month, day);
-              final key = DateFormat('yyyy-MM-dd').format(date);
-              final dayAppointments = _monthAppointments[key] ?? [];
               final isSelected = DateUtils.isSameDay(date, _selectedDate);
               final isCurrentDay = DateUtils.isSameDay(date, now);
-
-              // Get unique member colors for dots (max 4)
-              final memberIds = dayAppointments
-                  .map((a) => a.assignedMemberId)
-                  .where((id) => id != null)
-                  .toSet()
-                  .take(4)
-                  .toList();
-              final dotColors = memberIds
-                  .map((id) => memberColorMap[id] ?? AppColors.secondary400)
-                  .toList();
-              // Add a dot for unassigned appointments
-              if (dayAppointments.any((a) => a.assignedMemberId == null) && dotColors.length < 4) {
-                dotColors.add(AppColors.secondary400);
-              }
 
               return GestureDetector(
                 onTap: () {
                   setState(() => _calendarOpen = false);
                   _selectDate(date);
                 },
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.brand600 : null,
-                        border: isCurrentDay && !isSelected ? Border.all(color: AppColors.brand600, width: 1.5) : null,
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$day',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSelected || isCurrentDay ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? Colors.white : isCurrentDay ? AppColors.brand600 : AppColors.brand950,
-                        ),
+                child: Center(
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.brand600 : null,
+                      border: isCurrentDay && !isSelected ? Border.all(color: AppColors.brand600, width: 1.5) : null,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected || isCurrentDay ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : isCurrentDay ? AppColors.brand600 : AppColors.brand950,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    // Dots
-                    SizedBox(
-                      height: 6,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: dotColors.map((c) => Container(
-                          width: 5,
-                          height: 5,
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: c),
-                        )).toList(),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               );
             },

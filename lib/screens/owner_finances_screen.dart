@@ -64,7 +64,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
     setState(() => _loadingRevenue = true);
     try {
       final rev = await _db.getMonthlyRevenue(
-          salonId, _selectedMonth, _selectedYear);
+          salonId, _selectedYear, _selectedMonth);
       if (mounted) setState(() => _revenue = rev);
     } finally {
       if (mounted) setState(() => _loadingRevenue = false);

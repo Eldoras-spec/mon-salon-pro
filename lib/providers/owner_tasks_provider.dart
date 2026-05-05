@@ -5,6 +5,7 @@ import '../models/appointment_model.dart';
 import '../models/review_reward_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
+import '../utils/timezone_helper.dart';
 import 'owner_providers.dart';
 
 final _db = DatabaseService();
@@ -124,8 +125,12 @@ final noShowRiskClientsProvider =
   final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
   if (appointments.isEmpty) return [];
 
-  final now = DateTime.now();
-  final todayStart = DateTime(now.year, now.month, now.day);
+  // `appointments[i].dateTime` is wall-clock-UTC of the salon TZ, so
+  // "today" must be the salon's wall-clock-UTC midnight — not the
+  // device's. A device in UTC reading a Casa salon would otherwise see
+  // "today" shift by 1h and mis-bucket boundary RDVs.
+  final salonTz = ref.watch(ownerSalonProvider).value?.timezone;
+  final todayStart = TimezoneHelper.salonWallClockTodayStart(salonTz);
   final todayEnd = todayStart.add(const Duration(days: 1));
 
   // Upcoming appointments today (excluding walk-ins without clientId).
@@ -234,8 +239,9 @@ final agendaRiskClientsProvider =
   final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
   if (appointments.isEmpty) return {};
 
-  final now = DateTime.now();
-  final todayStart = DateTime(now.year, now.month, now.day);
+  // Salon-TZ wall-clock midnight — see noShowRiskClientsProvider for why.
+  final salonTz = ref.watch(ownerSalonProvider).value?.timezone;
+  final todayStart = TimezoneHelper.salonWallClockTodayStart(salonTz);
   final windowEnd = todayStart.add(const Duration(days: 8));
 
   final upcoming = appointments.where((a) =>

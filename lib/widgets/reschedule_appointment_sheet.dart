@@ -152,7 +152,10 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
     final parts = timeStr.split(':');
     final h = int.parse(parts[0]);
     final m = int.parse(parts[1]);
-    final slotStart = DateTime(
+    // Wall-clock-UTC so the conflict comparison against `appt.dateTime`
+    // (also wall-clock-UTC) is in the same space — local + later
+    // `.toUtc()` would drift by the device's offset.
+    final slotStart = DateTime.utc(
         _selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
     final slotEnd = slotStart.add(Duration(minutes: duration));
 
@@ -181,14 +184,13 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
       if (startMin < eMin && endMin > sMin) return true;
     }
 
-    // Existing appointments for this member.
+    // Existing appointments for this member. All operands are now
+    // wall-clock-UTC — direct comparison.
     for (final appt in _dayAppointments) {
       if (appt.assignedMemberId != member.id) continue;
-      final apptStart = appt.dateTime.toUtc();
+      final apptStart = appt.dateTime;
       final apptEnd = apptStart.add(Duration(minutes: appt.durationMinutes));
-      final sUtc = slotStart.toUtc();
-      final eUtc = slotEnd.toUtc();
-      if (sUtc.isBefore(apptEnd) && eUtc.isAfter(apptStart)) return true;
+      if (slotStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart)) return true;
     }
 
     return false;

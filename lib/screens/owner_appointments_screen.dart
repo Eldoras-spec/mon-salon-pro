@@ -14,6 +14,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 import '../widgets/country_phone_field.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/reschedule_appointment_sheet.dart';
@@ -21,12 +22,11 @@ import '../widgets/whatsapp_otp_dialog.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
 
-enum _Filter { all, today, upcoming, completed, cancelled }
+enum _Filter { all, upcoming, completed, cancelled }
 
 extension _FilterLabel on _Filter {
   String localizedLabel(AppLocalizations? l) => switch (this) {
         _Filter.all => l?.tr('appointments_filter_all') ?? 'Tous',
-        _Filter.today => l?.tr('appointments_filter_today') ?? "Aujourd'hui",
         _Filter.upcoming => l?.tr('appointments_filter_upcoming') ?? 'À venir',
         _Filter.completed => l?.tr('appointments_filter_completed') ?? 'Terminés',
         _Filter.cancelled => l?.tr('appointments_filter_cancelled') ?? 'Annulés',
@@ -54,11 +54,6 @@ class _OwnerAppointmentsScreenState
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  static bool _isToday(DateTime dt) {
-    final n = DateTime.now();
-    return dt.year == n.year && dt.month == n.month && dt.day == n.day;
   }
 
   void _showAddAppointmentSheet(BuildContext context) {
@@ -89,7 +84,6 @@ class _OwnerAppointmentsScreenState
     final now = DateTime.now();
     var result = switch (_selected) {
       _Filter.all => all,
-      _Filter.today => all.where((a) => _isToday(a.dateTime)).toList(),
       _Filter.upcoming =>
         all.where((a) => a.status == 'upcoming' && a.dateTime.isAfter(now)).toList(),
       _Filter.completed => all.where((a) => a.status == 'completed').toList(),
@@ -268,7 +262,13 @@ class _OwnerAppointmentsScreenState
                   (context, i) => _AppointmentTile(
                     key: ValueKey(items[i].id),
                     appointment: items[i],
-                    onStatusChanged: () => ref.invalidate(ownerAppointmentsRangeProvider),
+                    onStatusChanged: () {
+                      ref.invalidate(ownerAppointmentsRangeProvider);
+                      // Aggregation queries don't auto-refresh; bust them
+                      // so the dashboard reflects the new status next open.
+                      ref.invalidate(ownerCurrentMonthRevenueProvider);
+                      ref.invalidate(ownerCurrentMonthCompletedCountProvider);
+                    },
                   ),
                   childCount: items.length,
                 ),
@@ -341,6 +341,8 @@ class _PeriodDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     String label(AppointmentsPeriod p) => switch (p) {
+          AppointmentsPeriod.lastWeek =>
+            l?.tr('appointments_period_1w') ?? 'Cette semaine',
           AppointmentsPeriod.last3Months =>
             l?.tr('appointments_period_3m') ?? '3 derniers mois',
           AppointmentsPeriod.last6Months =>
@@ -578,6 +580,12 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
     final a = widget.appointment;
     if (a.status != 'upcoming') return;
     final members = ref.read(ownerTeamProvider).value ?? [];
+    // `a.dateTime` is wall-clock-UTC of the salon TZ, so the "is this
+    // RDV in the past?" check below must compare against the salon's
+    // wall-clock-UTC now — not `DateTime.now()` which would drift by
+    // the salon's UTC offset (1h late for Casablanca).
+    final salonTz = ref.read(ownerSalonProvider).value?.timezone;
+    final salonNow = TimezoneHelper.salonWallClockNow(salonTz);
 
     showModalBottomSheet(
       context: context,
@@ -656,7 +664,7 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               ),
             ),
             const Divider(height: 1),
-            if (a.dateTime.isBefore(DateTime.now()))
+            if (a.dateTime.isBefore(salonNow))
               ListTile(
                 leading: Container(
                   width: 36,
@@ -927,10 +935,6 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final (icon, msg) = switch (filter) {
-      _Filter.today => (
-          Icons.calendar_today_outlined,
-          l?.tr('appointments_empty_today') ?? "Aucun rendez-vous aujourd'hui"
-        ),
       _Filter.upcoming => (
           Icons.event_available_outlined,
           l?.tr('appointments_empty_upcoming') ?? 'Aucun rendez-vous à venir'
@@ -1350,7 +1354,11 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   bool _canChainPackAt(String timeStr) {
     if (_selectedPack == null) return true;
     final parts = timeStr.split(':');
-    var cursor = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day,
+    // Wall-clock-UTC so this matches the storage convention of
+    // `appt.dateTime` (a 13:00 salon-local slot is stored as
+    // `DateTime.utc(y,m,d,13,0)` literally). Building as local + later
+    // `.toUtc()` would drift by the device's offset and miss conflicts.
+    var cursor = DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day,
         int.parse(parts[0]), int.parse(parts[1]));
     final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     final packServices = List<String>.from(_selectedPack!['services'] ?? []);
@@ -1378,9 +1386,11 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       for (final m in candidates) {
         final busy = _existingAppointments.any((a) {
           if (a.assignedMemberId != m.id) return false;
-          final aStart = a.dateTime.toUtc();
+          // a.dateTime is already wall-clock-UTC; cursor/svcEnd are now
+          // wall-clock-UTC too — compare directly.
+          final aStart = a.dateTime;
           final aEnd = aStart.add(Duration(minutes: a.durationMinutes));
-          return cursor.toUtc().isBefore(aEnd) && svcEnd.toUtc().isAfter(aStart);
+          return cursor.isBefore(aEnd) && svcEnd.isAfter(aStart);
         });
         final simBusy = (simulatedBusy[m.id] ?? []).any((r) =>
             cursor.isBefore(r[1]) && svcEnd.isAfter(r[0]));
@@ -1410,7 +1420,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
     final h = int.parse(parts[0]);
     final m = int.parse(parts[1]);
     final duration = _packDuration ?? ((_selectedService!['duration'] as int?) ?? 30);
-    final slotStart = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
+    // Wall-clock-UTC to match `appt.dateTime` storage convention.
+    final slotStart = DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
     final slotEnd = slotStart.add(Duration(minutes: duration));
 
     // Check member full-day unavailability (includes recurring days off)
@@ -1431,14 +1442,13 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       if (startMin < eMin && endMin > sMin) return true;
     }
 
-    // Check existing appointments for this member
+    // Check existing appointments for this member. All four operands
+    // are now wall-clock-UTC — direct comparison is correct.
     for (final appt in _existingAppointments) {
       if (appt.assignedMemberId != _selectedMember!.id) continue;
-      final apptStart = appt.dateTime.toUtc();
+      final apptStart = appt.dateTime;
       final apptEnd = apptStart.add(Duration(minutes: appt.durationMinutes));
-      final sUtc = slotStart.toUtc();
-      final eUtc = slotEnd.toUtc();
-      if (sUtc.isBefore(apptEnd) && eUtc.isAfter(apptStart)) return true;
+      if (slotStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart)) return true;
     }
 
     return false;
@@ -1454,7 +1464,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       final existing = await DatabaseService()
           .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
 
-      var cursor = DateTime(
+      // Wall-clock-UTC to match `appt.dateTime` storage convention.
+      var cursor = DateTime.utc(
         _selectedDate.year, _selectedDate.month, _selectedDate.day,
         _selectedTime.hour, _selectedTime.minute,
       );
@@ -1579,7 +1590,8 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
       final existing = await DatabaseService()
           .getSalonAppointmentsForDate(widget.salon.id, _selectedDate);
 
-      var cursor = DateTime(
+      // Wall-clock-UTC to match `appt.dateTime` storage convention.
+      var cursor = DateTime.utc(
         _selectedDate.year, _selectedDate.month, _selectedDate.day,
         _selectedTime.hour, _selectedTime.minute,
       );
@@ -1613,12 +1625,12 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
 
         TeamMemberModel? assigned;
         for (final m in candidates) {
-          // Check existing appointments
+          // a.dateTime + cursor + svcEnd are all wall-clock-UTC now.
           final busy = existing.any((a) {
             if (a.assignedMemberId != m.id) return false;
-            final aStart = a.dateTime.toUtc();
+            final aStart = a.dateTime;
             final aEnd = aStart.add(Duration(minutes: a.durationMinutes));
-            return cursor.toUtc().isBefore(aEnd) && svcEnd.toUtc().isAfter(aStart);
+            return cursor.isBefore(aEnd) && svcEnd.isAfter(aStart);
           });
           // Check already planned bookings in this chain
           final chainBusy = bookings.any((b) {

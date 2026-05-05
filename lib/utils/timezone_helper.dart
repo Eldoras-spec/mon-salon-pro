@@ -97,6 +97,27 @@ class TimezoneHelper {
     return DateTime(n.year, n.month, n.day);
   }
 
+  /// "Now" expressed in the salon's *wall-clock* UTC space — the same
+  /// space appointments are stored in (`DateTime.utc(y,m,d,h,m)` for a
+  /// salon-local time). Use this when comparing against
+  /// `appt.dateTime` or any slot built via `DateTime.utc(...)`. Comparing
+  /// to bare `DateTime.now()` (true UTC) drifts by the salon's offset —
+  /// 1h ahead/behind for Casablanca, 5h for NY, etc.
+  static DateTime salonWallClockNow(String? tzName) {
+    final n = salonNow(tzName);
+    return DateTime.utc(
+      n.year, n.month, n.day, n.hour, n.minute, n.second, n.millisecond,
+    );
+  }
+
+  /// Wall-clock-UTC midnight of "today" in the salon's TZ — the natural
+  /// lower bound when filtering appointments stored as wall-clock-UTC
+  /// for "everything from today onwards" / "today's window".
+  static DateTime salonWallClockTodayStart(String? tzName) {
+    final n = salonNow(tzName);
+    return DateTime.utc(n.year, n.month, n.day);
+  }
+
   /// Resolves the human label for a given IANA — falls back to the IANA
   /// itself when the timezone isn't in the curated list (defensive).
   static String labelFor(String iana) {

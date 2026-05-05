@@ -319,6 +319,7 @@
   "appointments_filter_upcoming": "Proximas",
   "appointments_filter_completed": "Completadas",
   "appointments_filter_cancelled": "Canceladas",
+  "appointments_period_1w": "Esta semana",
   "appointments_period_3m": "Últimos 3 meses",
   "appointments_period_6m": "Últimos 6 meses",
   "appointments_period_1y": "Último año",

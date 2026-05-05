@@ -1642,7 +1642,8 @@ class _MemberAddAppointmentSheetState
     final h = int.parse(parts[0]);
     final m = int.parse(parts[1]);
     final duration = _effectiveDuration;
-    final slotStart = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
+    // Wall-clock-UTC to match `appt.dateTime` storage convention.
+    final slotStart = DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day, h, m);
     final slotEnd = slotStart.add(Duration(minutes: duration));
 
     // Member unavailable (full day)
@@ -1651,12 +1652,12 @@ class _MemberAddAppointmentSheetState
     // Member unavailable (time slot)
     if (_isMemberUnavailableAtTime(_selectedDate, TimeOfDay(hour: h, minute: m), duration)) return true;
 
-    // Existing appointments
+    // Existing appointments — all operands wall-clock-UTC.
     for (final appt in _existingAppointments) {
       if (appt.assignedMemberId != widget.member.id) continue;
-      final apptStart = appt.dateTime.toUtc();
+      final apptStart = appt.dateTime;
       final apptEnd = apptStart.add(Duration(minutes: appt.durationMinutes));
-      if (slotStart.toUtc().isBefore(apptEnd) && slotEnd.toUtc().isAfter(apptStart)) return true;
+      if (slotStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart)) return true;
     }
     return false;
   }
@@ -2590,6 +2591,8 @@ class _MemberPeriodChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     String label(AppointmentsPeriod p) => switch (p) {
+          AppointmentsPeriod.lastWeek =>
+            l?.tr('appointments_period_1w') ?? 'Cette semaine',
           AppointmentsPeriod.last3Months =>
             l?.tr('appointments_period_3m') ?? '3 derniers mois',
           AppointmentsPeriod.last6Months =>

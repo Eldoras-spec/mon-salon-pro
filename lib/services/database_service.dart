@@ -228,8 +228,18 @@ class DatabaseService {
     await batch.commit();
   }
 
-  /// Dual-source hydration: for each appointment doc, fetch
-  /// `private/contact` subcol in parallel and merge PII into the model.
+  /// Dual-source hydration: for each appointment doc, merge PII into the
+  /// model. For appointments with a real `clientId` (registered user), we
+  /// resolve name + phone via the in-session user cache instead of the
+  /// `private/contact` subcoll — this saves ~1 read per appointment per
+  /// query, which is the dominant per-appt cost on agenda/home/RDV list.
+  ///
+  /// Trade-off: the owner sees the user's CURRENT profile name/phone rather
+  /// than the snapshot taken at booking time. In practice clients rarely
+  /// rename themselves and this matches what they want owners to see.
+  ///
+  /// Walk-in bookings (`clientId == 'walk-in'`) and other anonymous flows
+  /// have no user doc to fall back on, so we still read the subcoll.
   /// Falls back gracefully if subcol is absent (legacy flat docs).
   Future<List<AppointmentModel>> _enrichWithPrivate(
       Iterable<DocumentSnapshot<Map<String, dynamic>>> docs) async {
@@ -239,6 +249,19 @@ class DatabaseService {
       if (appt.clientName != null || appt.clientPhone != null) {
         return appt;
       }
+      // Registered client → cheap path via cached user doc.
+      if (appt.clientId.isNotEmpty && appt.clientId != 'walk-in') {
+        final user = await getCachedUser(appt.clientId);
+        if (user != null) {
+          final name = user.fullName.trim();
+          final wa = user.whatsapp.trim();
+          return appt.copyWith(
+            clientName: name.isNotEmpty ? name : null,
+            clientPhone: wa.isNotEmpty ? wa : null,
+          );
+        }
+      }
+      // Walk-in or user doc missing → read the private subcoll.
       try {
         final priv = await doc.reference
             .collection('private')
@@ -429,39 +452,42 @@ class DatabaseService {
         snap.docs.map((d) => ClientSummaryModel.fromFirestore(d)).toList());
   }
 
-  /// Live stream of the number of completed appointments for [salonId]
-  /// during [year]/[month]. Reuses the same composite index as [streamMonthlyRevenue].
-  Stream<int> streamMonthlyCompletedCount(
-      String salonId, int year, int month) {
+  /// Number of completed appointments for [salonId] during [year]/[month].
+  /// Uses Firestore server-side count() aggregation — 1 read regardless of
+  /// how many docs match. Refresh by invalidating the wrapping provider.
+  Future<int> getMonthlyCompletedCount(
+      String salonId, int year, int month) async {
     final start = DateTime(year, month);
     final end = DateTime(year, month + 1);
-    return _firestore
+    final agg = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
         .where('status', isEqualTo: 'completed')
         .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('dateTime', isLessThan: Timestamp.fromDate(end))
-        .snapshots()
-        .map((snap) => snap.size);
+        .count()
+        .get();
+    return agg.count ?? 0;
   }
 
-  /// Live stream of the total revenue for [salonId] during [year]/[month].
-  /// Sums the `price` of all appointments with status='completed' whose
-  /// dateTime is within the month. Server-side filtered — scales indefinitely.
-  Stream<double> streamMonthlyRevenue(String salonId, int year, int month) {
+  /// Total revenue for [salonId] during [year]/[month] (one-shot).
+  /// Uses Firestore server-side sum() aggregation — 1 read regardless of
+  /// how many completed RDV the month contains. Replaces the previous
+  /// stream variant that downloaded every doc and folded client-side.
+  Future<double> getMonthlyRevenue(
+      String salonId, int year, int month) async {
     final start = DateTime(year, month);
     final end = DateTime(year, month + 1);
-    return _firestore
+    final agg = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
         .where('status', isEqualTo: 'completed')
         .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('dateTime', isLessThan: Timestamp.fromDate(end))
-        .snapshots()
-        .map((snap) => snap.docs.fold<double>(
-            0,
-            (sum, doc) =>
-                sum + ((doc.data()['price'] as num?)?.toDouble() ?? 0)));
+        .aggregate(sum('price'))
+        .get();
+    final raw = agg.getSum('price');
+    return raw?.toDouble() ?? 0.0;
   }
 
   /// Returns all appointments booked at [salonId], ordered by date desc.
@@ -478,32 +504,52 @@ class DatabaseService {
         });
   }
 
+  // Session-scope cache of user docs. The agenda / home / appointments
+  // screens previously hit `users/{id}.get()` once for `getClientName`
+  // AND once for `getClientPhone` per appointment per render — for a
+  // 138-RDV salon that's 276 reads on every screen open. Caching at
+  // this layer collapses both into a single fetch per uid per session
+  // (Firestore document caches at the SDK level too, but only within
+  // an active listener — for one-shot `.get()` it doesn't help).
+  // Cleared on signout via `clearUserCache()` (called from auth flow).
+  static final Map<String, Future<UserModel?>> _userCache = {};
+
+  /// Returns the cached UserModel for `uid`, fetching once if absent.
+  /// Falls back to null if the doc doesn't exist or the fetch errors.
+  Future<UserModel?> getCachedUser(String uid) {
+    if (uid.isEmpty || uid == 'walk-in') return Future.value(null);
+    return _userCache.putIfAbsent(uid, () async {
+      try {
+        final doc = await _firestore.collection('users').doc(uid).get();
+        return doc.exists ? UserModel.fromFirestore(doc) : null;
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  /// Drops one entry (or the whole map) from the cache. Call after a
+  /// mutation that changes the user doc, or on signout.
+  static void clearUserCache([String? uid]) {
+    if (uid == null) {
+      _userCache.clear();
+    } else {
+      _userCache.remove(uid);
+    }
+  }
+
   /// Fetches the full name of a client by their user ID.
   Future<String> getClientName(String clientId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(clientId).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        return (data['fullName'] as String?)?.trim().isNotEmpty == true
-            ? data['fullName'] as String
-            : 'Client';
-      }
-    } catch (_) {}
-    return 'Client';
+    final user = await getCachedUser(clientId);
+    final name = user?.fullName.trim();
+    return (name != null && name.isNotEmpty) ? name : 'Client';
   }
 
   Future<String?> getClientPhone(String clientId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(clientId).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        // Read `whatsapp` (post-migration) or fall back to legacy `phone`.
-        final wa = data['whatsapp'] as String?;
-        if (wa != null && wa.trim().isNotEmpty) return wa;
-        final phone = data['phone'] as String?;
-        if (phone != null && phone.trim().isNotEmpty) return phone;
-      }
-    } catch (_) {}
+    final user = await getCachedUser(clientId);
+    // UserModel.whatsapp already folds the legacy `phone` fallback in.
+    final wa = user?.whatsapp.trim();
+    if (wa != null && wa.isNotEmpty) return wa;
     return null;
   }
 
@@ -628,27 +674,6 @@ class DatabaseService {
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return list;
         });
-  }
-
-  /// Returns total revenue (sum of completed appointment prices) for a given month/year.
-  Future<double> getMonthlyRevenue(
-      String salonId, int month, int year) async {
-    final start = DateTime(year, month);
-    final end = DateTime(year, month + 1);
-    final snap = await _firestore
-        .collection('appointments')
-        .where('salonId', isEqualTo: salonId)
-        .get();
-    return snap.docs.fold<double>(0, (acc, d) {
-      final data = d.data();
-      final status = data['status'] as String? ?? '';
-      if (status != 'completed') return acc;
-      final ts = data['dateTime'] as Timestamp?;
-      if (ts == null) return acc;
-      final dt = ts.toDate();
-      if (dt.isBefore(start) || !dt.isBefore(end)) return acc;
-      return acc + ((data['price'] as num?)?.toDouble() ?? 0);
-    });
   }
 
   Future<void> addCharge(ChargeModel charge) async {

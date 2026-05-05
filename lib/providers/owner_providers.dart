@@ -123,30 +123,38 @@ final ownerOrdersProvider = StreamProvider<List<OrderModel>>((ref) {
   return _db.getSalonOrders(salon.id);
 });
 
-/// Live stream of the owner salon's revenue for the CURRENT calendar month.
-/// Server-side filtered — no client-side limit, scales to any salon size.
-final ownerCurrentMonthRevenueProvider = StreamProvider<double>((ref) {
+/// Owner salon's revenue for the CURRENT calendar month.
+/// Implemented as a Firestore aggregation query (sum on the server) so
+/// the dashboard widget is 1 read instead of N (where N = completed RDV
+/// of the month).
+///
+/// Refresh strategy: invalidated by appointment status mutations
+/// (createAppointment / updateAppointmentStatus) and explicit refresh.
+final ownerCurrentMonthRevenueProvider = FutureProvider<double>((ref) async {
   final salon = ref.watch(ownerSalonProvider).value;
-  if (salon == null) return Stream.value(0.0);
+  if (salon == null) return 0.0;
   final now = DateTime.now();
-  return _db.streamMonthlyRevenue(salon.id, now.year, now.month);
+  return _db.getMonthlyRevenue(salon.id, now.year, now.month);
 });
 
-/// Live stream of the number of completed appointments during the current
-/// calendar month. Same index as [ownerCurrentMonthRevenueProvider].
-final ownerCurrentMonthCompletedCountProvider = StreamProvider<int>((ref) {
+/// Number of completed appointments during the current calendar month.
+/// Same aggregation pattern as [ownerCurrentMonthRevenueProvider].
+final ownerCurrentMonthCompletedCountProvider = FutureProvider<int>((ref) async {
   final salon = ref.watch(ownerSalonProvider).value;
-  if (salon == null) return Stream.value(0);
+  if (salon == null) return 0;
   final now = DateTime.now();
-  return _db.streamMonthlyCompletedCount(salon.id, now.year, now.month);
+  return _db.getMonthlyCompletedCount(salon.id, now.year, now.month);
 });
 
 /// Rolling window for the appointments list view.
-enum AppointmentsPeriod { last3Months, last6Months, lastYear }
+/// `lastWeek` is the default — last 7 days of history is enough for daily
+/// owner decisions, and the future side of the window is always unbounded
+/// so all upcoming RDV stay visible regardless of period.
+enum AppointmentsPeriod { lastWeek, last3Months, last6Months, lastYear }
 
 /// Selected period for the appointments list (shared between owner and member views).
 final appointmentsPeriodProvider =
-    StateProvider<AppointmentsPeriod>((_) => AppointmentsPeriod.last3Months);
+    StateProvider<AppointmentsPeriod>((_) => AppointmentsPeriod.lastWeek);
 
 /// Live stream of all appointments within the selected period.
 /// Replaces [ownerAppointmentsProvider] for the RDV list + member dashboard —
@@ -158,12 +166,13 @@ final ownerAppointmentsRangeProvider =
   final period = ref.watch(appointmentsPeriodProvider);
 
   final now = DateTime.now();
-  final months = switch (period) {
-    AppointmentsPeriod.last3Months => 3,
-    AppointmentsPeriod.last6Months => 6,
-    AppointmentsPeriod.lastYear => 12,
+  final start = switch (period) {
+    AppointmentsPeriod.lastWeek =>
+      DateTime(now.year, now.month, now.day - 7),
+    AppointmentsPeriod.last3Months => DateTime(now.year, now.month - 3, 1),
+    AppointmentsPeriod.last6Months => DateTime(now.year, now.month - 6, 1),
+    AppointmentsPeriod.lastYear => DateTime(now.year - 1, now.month, 1),
   };
-  final start = DateTime(now.year, now.month - months, 1);
   // End = far future so upcoming bookings stay visible regardless of period.
   final end = DateTime(now.year + 5);
 

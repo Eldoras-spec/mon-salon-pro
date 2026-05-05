@@ -85,8 +85,6 @@ class OwnerHomeScreen extends ConsumerWidget {
           // Current-month revenue + completed count come from dedicated
           // server-side providers (see ownerCurrentMonth* providers).
 
-          final recentAll = appointments.take(5).toList();
-
           // Weekly stats
           final now = DateTime.now();
           final weekStart = now.subtract(Duration(days: now.weekday - 1));
@@ -550,58 +548,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                                     .map((a) => _AppointmentCard(
                                         appointment: a,
                                         showDate: false,
-                                        currency: salon?.currency ?? 'MAD'))
-                                    .toList(),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 24),
-
-                      // ── Recent appointments ─────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child:
-                            _SectionHeader(title: l?.tr('home_recent_appointments') ?? 'Rendez-vous récents'),
-                      ),
-                      const SizedBox(height: 12),
-                      if (appointmentsAsync.isLoading)
-                        const _LoadingCard()
-                      else if (recentAll.isEmpty)
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20),
-                          child: _EmptyCard(
-                            icon: Icons.history_rounded,
-                            message:
-                                l?.tr('home_no_appointments_yet') ?? "Aucun rendez-vous pour l'instant",
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Column(
-                                children: recentAll
-                                    .map((a) => _AppointmentCard(
-                                        appointment: a,
-                                        showDate: true,
                                         currency: salon?.currency ?? 'MAD'))
                                     .toList(),
                               ),
