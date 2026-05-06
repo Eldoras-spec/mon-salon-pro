@@ -959,6 +959,8 @@ class DatabaseService {
     );
     await _firestore.collection('appointments').doc(appointmentId).update({
       'dateTime': Timestamp.fromDate(wallClockUtc),
+      'rescheduledAt': FieldValue.serverTimestamp(),
+      'rescheduledBy': 'owner',
     });
   }
 
