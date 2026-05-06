@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -40,12 +42,19 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _svc = MessageService();
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   bool _sending = false;
   SalonModel? _salon;
+
+  /// Heartbeat that refreshes `users/{uid}.activeConversationLastSeen`
+  /// every 30s while the user is on this chat. The `onNewMessage` CF
+  /// uses the freshness check to skip the FCM `notification` payload
+  /// (silencing the iOS auto-banner) when the recipient is currently
+  /// viewing the matching chat.
+  Timer? _activeChatHeartbeat;
 
   // ── Owner quick-reply templates ──────────────────────────────────────
   List<Map<String, String>> _getQuickReplies(AppLocalizations? l) => [
@@ -61,11 +70,59 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     // Silence foreground push banners for the conversation being viewed.
     NotificationService.activeConversationId = widget.conversationId;
+    WidgetsBinding.instance.addObserver(this);
+    _markActiveChat();
     if (widget.isClient) {
       _svc.markReadByClient(widget.conversationId);
       _loadSalon();
     } else {
       _svc.markReadByOwner(widget.conversationId);
+    }
+  }
+
+  void _markActiveChat() {
+    _writeActiveChat();
+    _activeChatHeartbeat?.cancel();
+    _activeChatHeartbeat = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _writeActiveChat(),
+    );
+  }
+
+  Future<void> _writeActiveChat() async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.currentUserId)
+          .update({
+        'activeConversationId': widget.conversationId,
+        'activeConversationLastSeen': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // best-effort; user logged out or doc gone — ignore
+    }
+  }
+
+  void _clearActiveChat() {
+    _activeChatHeartbeat?.cancel();
+    _activeChatHeartbeat = null;
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.currentUserId)
+        .update({
+      'activeConversationId': FieldValue.delete(),
+      'activeConversationLastSeen': FieldValue.delete(),
+    }).catchError((_) {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _markActiveChat();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _clearActiveChat();
     }
   }
 
@@ -108,6 +165,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _clearActiveChat();
     if (NotificationService.activeConversationId == widget.conversationId) {
       NotificationService.activeConversationId = null;
     }
