@@ -66,7 +66,7 @@ dependencies:
   crypto: ^3.0.3
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
-  cloud_functions: ^6.0.6
+  cloud_functions: ^6.2.0
   purchases_flutter: ^8.0.0
   linked_scroll_controller: ^0.2.0
 
