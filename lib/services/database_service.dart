@@ -353,22 +353,24 @@ class DatabaseService {
 
   // --- Notification Operations ---
 
-  // Stream all notifications for a user (ordered by date, max 30 days)
+  // Stream all notifications for a user — last 7 days only.
+  // Server-side filter + orderBy + limit (uses existing composite index
+  // `userId ASC, createdAt DESC`). The 7-day window mirrors the Firestore
+  // TTL on `notifications.expiresAt` (CF writes set expiresAt = now + 7d).
   Stream<List<NotificationModel>> getNotifications(String userId) {
-    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final cutoff = Timestamp.fromDate(
+      DateTime.now().subtract(const Duration(days: 7)),
+    );
     return _firestore
         .collection('notifications')
         .where('userId', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: cutoff)
+        .orderBy('createdAt', descending: true)
         .limit(50)
         .snapshots()
-        .map((snapshot) {
-          final list = snapshot.docs
-              .map((doc) => NotificationModel.fromFirestore(doc))
-              .where((n) => n.createdAt.isAfter(cutoff))
-              .toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
-        });
+        .map((snapshot) => snapshot.docs
+            .map((doc) => NotificationModel.fromFirestore(doc))
+            .toList());
   }
 
   // Stream unread notification count (for badge)
@@ -564,6 +566,7 @@ class DatabaseService {
     String type = 'general',
     bool pushSent = true,
   }) async {
+    final now = DateTime.now();
     await _firestore.collection('notifications').add({
       'userId': userId,
       'title': title,
@@ -572,6 +575,8 @@ class DatabaseService {
       'isRead': false,
       'pushSent': pushSent,
       'createdAt': FieldValue.serverTimestamp(),
+      // 7-day TTL — Firestore TTL policy on `expiresAt` deletes the doc.
+      'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 7))),
     });
   }
 
