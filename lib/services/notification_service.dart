@@ -45,11 +45,15 @@ class NotificationService {
     // 2. Request permissions
     await _requestPermissions();
 
-    // 2b. Show notifications when app is in foreground (iOS)
+    // 2b. Disable iOS auto-banner for foreground push so the Flutter handler
+    // (`_handleForegroundMessage`) has full control. Otherwise iOS displays
+    // the FCM notification payload directly and bypasses the active-chat
+    // suppression. Background/closed-app behavior is unaffected — iOS still
+    // shows banners then.
     await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
+      alert: false,
+      badge: false,
+      sound: false,
     );
 
     // 3. Create Android notification channel
