@@ -662,10 +662,26 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
   void _addOptionStep() {
     setState(() {
+      final stepTs = DateTime.now().millisecondsSinceEpoch;
       _optionSteps.add({
-        'id': 'step${DateTime.now().millisecondsSinceEpoch}',
+        'id': 'step$stepTs',
         'label': '',
-        'choices': <Map<String, dynamic>>[],
+        'choices': <Map<String, dynamic>>[
+          {
+            'id': 'c${stepTs}_1',
+            'label': '',
+            'priceModifier': 0,
+            'durationModifier': 0,
+            'nextOptionId': null,
+          },
+          {
+            'id': 'c${stepTs}_2',
+            'label': '',
+            'priceModifier': 0,
+            'durationModifier': 0,
+            'nextOptionId': null,
+          },
+        ],
       });
     });
   }

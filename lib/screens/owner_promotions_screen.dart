@@ -1339,7 +1339,7 @@ class _PromoTile extends StatelessWidget {
                     ),
                     if (promo.isAiGenerated)
                       _Badge(
-                          label: l?.tr('promotions_badge_ai') ?? 'IA',
+                          label: l?.tr('promotions_badge_ai') ?? '⚡',
                           color: AppColors.brand500),
                     if (promo.isAiGenerated) const SizedBox(width: 4),
                     if (isExpired)
@@ -2558,7 +2558,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
               const SizedBox(width: 10),
               Expanded(
                 child:
-                    Text(AppLocalizations.of(context)?.tr('promo_ai_title') ?? 'Promotions IA', style: const TextStyle(fontSize: 17)),
+                    Text(AppLocalizations.of(context)?.tr('promo_ai_title') ?? 'Réductions intelligentes', style: const TextStyle(fontSize: 17)),
               ),
             ],
           ),
@@ -2666,7 +2666,7 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
               ),
               const SizedBox(width: 10),
               const Expanded(
-                child: Text('Configurer les promos IA',
+                child: Text('Configurer les Réductions intelligentes',
                     style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.bold)),
               ),

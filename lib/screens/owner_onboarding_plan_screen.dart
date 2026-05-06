@@ -129,7 +129,7 @@ class _OwnerOnboardingPlanScreenState extends State<OwnerOnboardingPlanScreen> {
                     l?.tr('plan.free_f9') ?? 'Boutique en ligne',
                     l?.tr('plan.free_f10') ?? 'Assistant IA (résumé, suggestions, insights)',
                     l?.tr('plan.free_f11') ?? 'Prédiction IA des no-show',
-                    l?.tr('plan.free_f12') ?? "Réductions intelligentes générées par l'IA",
+                    l?.tr('plan.free_f12') ?? "Réductions intelligentes",
                     l?.tr('plan.free_f13') ?? 'Confirmation de RDV par WhatsApp',
                     l?.tr('plan.free_f14') ??
                         'Paiements par carte (5 % de commission)',

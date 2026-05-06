@@ -2601,8 +2601,14 @@ class _MemberPeriodChips extends StatelessWidget {
             l?.tr('appointments_period_1y') ?? 'Dernière année',
         };
 
+    const periods = [
+      AppointmentsPeriod.lastWeek,
+      AppointmentsPeriod.last3Months,
+      AppointmentsPeriod.last6Months,
+    ];
+
     return Row(
-      children: AppointmentsPeriod.values.map((p) {
+      children: periods.map((p) {
         final active = p == selected;
         return Expanded(
           child: GestureDetector(
@@ -2610,7 +2616,7 @@ class _MemberPeriodChips extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               margin: EdgeInsets.only(
-                  right: p == AppointmentsPeriod.values.last ? 0 : 6),
+                  right: p == periods.last ? 0 : 6),
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
                 color: active ? AppColors.brand50 : Colors.white,
