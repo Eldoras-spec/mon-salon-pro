@@ -400,7 +400,7 @@ class _OwnerPromotionsScreenState
                                   iconBg: AppColors.brand50,
                                   iconColor: AppColors.brand600,
                                   label: l?.tr('promotions_group_ai') ??
-                                      'Promotions IA',
+                                      'Réductions intelligentes',
                                   count: aiPromos.length,
                                   expanded: _isExpanded('ai'),
                                   onToggle: () => _toggleGroup('ai'),
@@ -2918,9 +2918,10 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Promotions IA',
-                      style: TextStyle(
+                    Text(
+                      AppLocalizations.of(context)?.tr('promo_ai_title') ??
+                          'Réductions intelligentes',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: AppColors.brand950,

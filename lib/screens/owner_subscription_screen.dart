@@ -483,7 +483,7 @@ class _FeaturesCard extends StatelessWidget {
       ),
       _FeatureRow(
         label: l?.tr('subscription.feat_ai') ??
-            'Assistant IA + Promotions IA',
+            'Assistant IA + Réductions intelligentes',
         enabled: true,
       ),
       _FeatureRow(

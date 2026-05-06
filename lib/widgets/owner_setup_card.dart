@@ -297,7 +297,7 @@ class _SetupTile extends ConsumerWidget {
           fg: const Color(0xFF6366F1),
           bg: const Color(0xFFE0E7FF),
           title: l?.tr('owner_setup_smart_title') ??
-              'Activer les Promotions IA',
+              'Activer les Réductions intelligentes',
           subtitle: l?.tr('owner_setup_smart_sub') ??
               'L\'IA crée des promos ciblées automatiquement',
         );
