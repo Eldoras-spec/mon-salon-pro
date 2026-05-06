@@ -45,15 +45,17 @@ class NotificationService {
     // 2. Request permissions
     await _requestPermissions();
 
-    // 2b. Disable iOS auto-banner for foreground push so the Flutter handler
-    // (`_handleForegroundMessage`) has full control. Otherwise iOS displays
-    // the FCM notification payload directly and bypasses the active-chat
-    // suppression. Background/closed-app behavior is unaffected — iOS still
-    // shows banners then.
+    // 2b. iOS-only foreground display knob (no-op on Android). Letting
+    // FCM auto-show the banner from the `notification` payload — `alert:
+    // false` was tried but FCM's UNUserNotificationCenter delegate then
+    // also suppresses any flutter_local_notifications.show() we'd attempt
+    // ourselves (delegate slot conflict), so foreground stays empty.
+    // Tradeoff: chat-screen suppression via `activeConversationId` only
+    // works on Android — iOS shows the banner even on the matching chat.
     await _messaging.setForegroundNotificationPresentationOptions(
-      alert: false,
-      badge: false,
-      sound: false,
+      alert: true,
+      badge: true,
+      sound: true,
     );
 
     // 3. Create Android notification channel
@@ -144,8 +146,17 @@ class NotificationService {
   /// that triggered this push — do NOT re-save it (would cause an infinite
   /// loop with onNewNotification).
   void _handleForegroundMessage(RemoteMessage message) {
-    // Skip the banner when the user is already in the matching conversation —
-    // live stream already renders the new message, the banner would be noise.
+    // iOS: FCM auto-displays the banner via the OS (see setForeground call
+    // in `initialize`). Calling showLocalNotification here would put a
+    // SECOND banner on screen because the local-notifs path goes through
+    // the same UNUserNotificationCenter that FCM is already presenting.
+    // Skip — chat-screen suppression cannot work on iOS as a result.
+    if (Platform.isIOS) return;
+
+    // Android: we own foreground presentation via flutter_local_notifs.
+    // The active-chat check skips the banner when the recipient is
+    // already viewing the matching conversation (live stream renders
+    // the message, banner would be redundant noise).
     final incomingConvId = message.data['conversationId'];
     if (incomingConvId != null &&
         activeConversationId != null &&
