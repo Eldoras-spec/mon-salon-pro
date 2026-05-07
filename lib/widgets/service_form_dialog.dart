@@ -769,13 +769,12 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                   ),
                 ),
               ),
-              if (depth > 0)
-                GestureDetector(
-                  onTap: () => setState(() {
-                    _removeStepAndChildren(stepId);
-                  }),
-                  child: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
-                ),
+              GestureDetector(
+                onTap: () => setState(() {
+                  _removeStepAndChildren(stepId);
+                }),
+                child: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1532,10 +1531,18 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   void _removeStepAndChildren(String stepId) {
     final step = _findStep(stepId);
     if (step == null) return;
-    // Remove children first
+    // Recursively delete sub-steps first (depth-first), and clean every
+    // gallery choice's Storage files in this step. Without the cleanup,
+    // deleting a step would orphan the .mp4/.jpg uploaded for its
+    // gallery items in Firebase Storage — they'd stay forever and keep
+    // counting against the salon's gallery quota even though Firestore
+    // no longer references them.
     for (final c in (step['choices'] as List? ?? [])) {
       if (c['nextOptionId'] != null) {
         _removeStepAndChildren(c['nextOptionId'] as String);
+      }
+      if (c['isGallery'] == true) {
+        _deleteAllGalleryFilesFromChoice(Map<String, dynamic>.from(c));
       }
     }
     // Remove references to this step
