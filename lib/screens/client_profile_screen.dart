@@ -2103,6 +2103,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final TextEditingController _name;
   late final String _whatsappInitial;
   String? _whatsappE164;
+  // Salon contact phone — distinct from WhatsApp. Mirrored to
+  // salons/{ownerId}.phone on save and read by the public website to
+  // power the "call" button. Owners only; for clients the field still
+  // renders but the save just no-ops on the salon mirror.
+  String _phoneInitial = '';
+  String? _phoneE164;
   late final TextEditingController _city;
   bool _loading = false;
 
@@ -2113,6 +2119,27 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     _whatsappInitial = widget.user.whatsapp;
     _whatsappE164 = _whatsappInitial.isEmpty ? null : _whatsappInitial;
     _city = TextEditingController(text: widget.user.city);
+    _loadSalonPhone();
+  }
+
+  Future<void> _loadSalonPhone() async {
+    if (widget.user.userType != UserType.owner) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.user.id)
+          .get();
+      if (!mounted) return;
+      final p = (doc.data()?['phone'] as String?) ?? '';
+      if (p.isNotEmpty) {
+        setState(() {
+          _phoneInitial = p;
+          _phoneE164 = p;
+        });
+      }
+    } catch (_) {
+      // Non-fatal — owner can still type a fresh number.
+    }
   }
 
   @override
@@ -2148,6 +2175,24 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         'fullName': _name.text.trim(),
         'city': _city.text.trim(),
       });
+
+      // Mirror the salon contact phone to salons/{ownerId}.phone so the
+      // public website can render the "call" button. Owners only — for
+      // clients there's no salon doc to write to.
+      if (widget.user.userType == UserType.owner) {
+        final newPhone = (_phoneE164 ?? '').trim();
+        if (newPhone != _phoneInitial) {
+          try {
+            await FirebaseFirestore.instance
+                .collection('salons')
+                .doc(widget.user.id)
+                .update({'phone': newPhone});
+          } catch (_) {
+            // Non-fatal — the rest of the profile save succeeded.
+          }
+        }
+      }
+
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -2201,6 +2246,19 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             initialE164: _whatsappInitial,
             onChanged: (v) => _whatsappE164 = v,
           ),
+          if (widget.user.userType == UserType.owner) ...[
+            const SizedBox(height: 12),
+            Text(
+              l?.tr('profile_phone') ?? 'Téléphone (optionnel)',
+              style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
+            ),
+            const SizedBox(height: 6),
+            CountryPhoneField(
+              key: ValueKey(_phoneInitial),
+              initialE164: _phoneInitial,
+              onChanged: (v) => _phoneE164 = v,
+            ),
+          ],
           const SizedBox(height: 12),
           _InputField(controller: _city, label: l?.tr('profile_city') ?? 'Ville'),
           const SizedBox(height: 24),
