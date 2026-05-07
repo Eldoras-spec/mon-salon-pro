@@ -1436,7 +1436,11 @@ class _PromoTile extends StatelessWidget {
                       ),
                     ],
                   )
-                else
+                else if (promo.description.trim().isNotEmpty)
+                  // Manual promos: show ONLY the start of the description
+                  // (truncated to 1 line). When description is empty we
+                  // skip the line entirely so the card height matches the
+                  // Réductions intelligentes density.
                   Text(promo.description,
                       style: const TextStyle(
                           fontSize: 11,
@@ -1501,54 +1505,39 @@ class _PromoTile extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (!isExpired)
-                Switch(
-                  value: promo.isActive,
-                  onChanged: onToggle,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: AppColors.brand600,
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
-                ),
-              // AI promos can only be enabled/disabled (the switch
-              // above). The pre-Zayna cron `generateSmartPromotions`
-              // already pushes a per-client notification on creation,
-              // so manual share is redundant. Delete is suppressed too:
-              // each AI promo expires on its own in 7 days, and removing
-              // one mid-window can leave a client looking for an offer
-              // they were already notified about. Owner just toggles
-              // on/off — set-and-forget.
-              if (!promo.isAiGenerated) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.share_rounded,
-                          size: 17, color: AppColors.brand400),
-                      onPressed: () => _sharePromo(promo, slug, l),
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          size: 17, color: AppColors.secondary300),
-                      onPressed: onDelete,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
+          const SizedBox(width: 4),
+          // Trailing actions — keep the row at the same vertical density
+          // as the Réductions intelligentes cards (which only show the
+          // switch). Share + delete sit inline as small icon buttons next
+          // to the switch instead of stacking under it.
+          if (!promo.isAiGenerated) ...[
+            IconButton(
+              icon: const Icon(Icons.share_rounded,
+                  size: 18, color: AppColors.brand400),
+              onPressed: () => _sharePromo(promo, slug, l),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              constraints:
+                  const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  size: 18, color: AppColors.secondary300),
+              onPressed: onDelete,
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              constraints:
+                  const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+          if (!isExpired)
+            Switch(
+              value: promo.isActive,
+              onChanged: onToggle,
+              activeThumbColor: Colors.white,
+              activeTrackColor: AppColors.brand600,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
         ],
       ),
     );

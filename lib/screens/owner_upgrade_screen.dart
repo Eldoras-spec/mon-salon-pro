@@ -396,8 +396,11 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      l?.tr('upgrade.secure_note') ??
-                          'Paiement sécurisé géré par Apple. Vous confirmerez avec Face ID / Touch ID.',
+                      Platform.isIOS
+                          ? (l?.tr('upgrade.secure_note_ios') ??
+                              'Paiement sécurisé géré par Apple. Vous confirmerez avec Face ID / Touch ID.')
+                          : (l?.tr('upgrade.secure_note_android') ??
+                              'Paiement sécurisé géré par Google Play. Vous confirmerez avec votre méthode de paiement Google.'),
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.blue.shade900,
