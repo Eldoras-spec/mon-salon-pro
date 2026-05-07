@@ -189,6 +189,14 @@ class MonSalonProApp extends ConsumerWidget {
 
           final userModelAsync = ref.watch(userModelProvider);
           return userModelAsync.when(
+            // Keep showing the current MainAppScaffold during reloads —
+            // otherwise an authStateChanges re-emit (triggered by Android
+            // activity pause/resume during long awaits like gallery image
+            // upload/delete) re-evaluates userModelProvider, transitions to
+            // loading, swaps the body for Scaffold(loading), and unmounts
+            // MainAppScaffold. The remount resets `_currentIndex` to 0 so
+            // the user is sent back to the Home tab from wherever they were.
+            skipLoadingOnReload: true,
             data: (model) {
               if (model == null) {
                 // Orphan auth user — `users/{uid}` doesn't exist after the
@@ -246,6 +254,11 @@ class MonSalonProApp extends ConsumerWidget {
               if (model.userType == UserType.owner) {
                 final salonAsync = ref.watch(ownerSalonProvider);
                 return salonAsync.when(
+                  // Same rationale as userModelAsync above — `ref.invalidate(
+                  // ownerSalonProvider)` (cover photo update) re-runs the
+                  // stream and would otherwise unmount MainAppScaffold during
+                  // the brief loading state, losing tab position.
+                  skipLoadingOnReload: true,
                   data: (salon) {
                     if (salon == null) {
                       // No salon → resume onboarding from step 1. The screen

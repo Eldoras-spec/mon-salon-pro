@@ -208,10 +208,13 @@ class OwnerHomeScreen extends ConsumerWidget {
                                     ));
                                   },
                                   child: StreamBuilder<QuerySnapshot>(
+                                    // Filter by ownerId (not salonId) so the
+                                    // Firestore rule can validate the query.
+                                    // salon.id == ownerId by convention.
                                     stream: salon != null
                                         ? FirebaseFirestore.instance
                                             .collection('conversations')
-                                            .where('salonId', isEqualTo: salon.id)
+                                            .where('ownerId', isEqualTo: salon.id)
                                             .where('unreadByOwner', isGreaterThan: 0)
                                             .snapshots()
                                         : const Stream.empty(),
