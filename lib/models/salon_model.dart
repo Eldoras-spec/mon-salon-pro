@@ -13,6 +13,11 @@ class SalonModel {
   final int reviewCount;
   final List<String> images;
   final String? logoUrl;
+  // Public salon contact phone, displayed on the website's "call" button.
+  // Optional and distinct from the owner's WhatsApp number (which lives in
+  // socialLinks.whatsapp and powers the WhatsApp button + bot/alerts).
+  // Empty when the owner hasn't set one — the call button hides itself.
+  final String phone;
   final Map<String, dynamic> workingHours;
   final List<Map<String, dynamic>> services;
   final List<String> serviceCategories;
@@ -73,6 +78,7 @@ class SalonModel {
     required this.reviewCount,
     required this.images,
     this.logoUrl,
+    this.phone = '',
     required this.workingHours,
     required this.services,
     required this.serviceCategories,
@@ -143,6 +149,7 @@ class SalonModel {
       reviewCount: data['reviewCount'] ?? 0,
       images: List<String>.from(data['images'] ?? []),
       logoUrl: data['logoUrl'],
+      phone: (data['phone'] as String?) ?? '',
       workingHours: Map<String, dynamic>.from(data['workingHours'] ?? {}),
       services: List<Map<String, dynamic>>.from(data['services'] ?? []),
       serviceCategories: List<String>.from(data['serviceCategories'] ?? []),
@@ -211,6 +218,7 @@ class SalonModel {
       'reviewCount': reviewCount,
       'images': images,
       'logoUrl': logoUrl,
+      'phone': phone,
       'workingHours': workingHours,
       'services': services,
       'serviceCategories': serviceCategories,

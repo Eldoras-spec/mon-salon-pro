@@ -564,6 +564,12 @@ class _InfoRows extends StatelessWidget {
           label: l?.tr('salon_info_description') ?? 'Description',
           value: salon.description.isNotEmpty ? salon.description : '—',
         ),
+        if (salon.phone.isNotEmpty)
+          _InfoRow(
+            icon: Icons.phone_outlined,
+            label: l?.tr('salon_info_phone') ?? 'Téléphone',
+            value: salon.phone,
+          ),
       ],
     );
   }
@@ -760,6 +766,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
   late final TextEditingController _street;
   late final TextEditingController _city;
   late final TextEditingController _postalCode;
+  late final TextEditingController _phone;
 
   bool _loading = false;
   bool _isGettingLocation = false;
@@ -770,6 +777,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
     super.initState();
     _name = TextEditingController(text: widget.salon.name);
     _description = TextEditingController(text: widget.salon.description);
+    _phone = TextEditingController(text: widget.salon.phone);
 
     _latitude = widget.salon.latitude;
     _longitude = widget.salon.longitude;
@@ -813,6 +821,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
     _street.dispose();
     _city.dispose();
     _postalCode.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -939,6 +948,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         reviewCount: widget.salon.reviewCount,
         images: widget.salon.images,
         logoUrl: widget.salon.logoUrl,
+        phone: _phone.text.trim(),
         workingHours: widget.salon.workingHours,
         services: widget.salon.services,
         serviceCategories: widget.salon.serviceCategories,
@@ -1088,6 +1098,16 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
               label: l?.tr('salon_edit_info_description') ?? 'Description',
               maxLines: 3,
             ),
+            const SizedBox(height: 16),
+
+            // Phone (optional) — distinct from owner's WhatsApp; powers the
+            // "call" button on the public salon page. Hidden on the website
+            // when empty.
+            _Field(
+              controller: _phone,
+              label: l?.tr('salon_edit_info_phone') ?? 'Téléphone (optionnel)',
+              keyboardType: TextInputType.phone,
+            ),
             const SizedBox(height: 24),
 
             // Save button
@@ -1192,6 +1212,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         reviewCount: widget.salon.reviewCount,
         images: widget.salon.images,
         logoUrl: widget.salon.logoUrl,
+        phone: widget.salon.phone,
         workingHours: Map<String, dynamic>.from(_hours),
         services: widget.salon.services,
         serviceCategories: widget.salon.serviceCategories,
@@ -1495,6 +1516,7 @@ class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
         reviewCount: widget.salon.reviewCount,
         images: widget.salon.images,
         logoUrl: widget.salon.logoUrl,
+        phone: widget.salon.phone,
         workingHours: widget.salon.workingHours,
         services: _services,
         serviceCategories: categories,

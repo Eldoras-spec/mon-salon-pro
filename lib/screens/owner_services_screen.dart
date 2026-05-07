@@ -83,6 +83,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
         reviewCount: salon.reviewCount,
         images: salon.images,
         logoUrl: salon.logoUrl,
+        phone: salon.phone,
         workingHours: salon.workingHours,
         services: _services,
         serviceCategories: categories,

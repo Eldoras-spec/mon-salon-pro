@@ -85,6 +85,7 @@ class DatabaseService {
       reviewCount: salon.reviewCount,
       images: salon.images,
       logoUrl: salon.logoUrl,
+      phone: salon.phone,
       workingHours: salon.workingHours,
       services: salon.services,
       serviceCategories: categories,
