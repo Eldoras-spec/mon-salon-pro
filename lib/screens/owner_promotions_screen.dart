@@ -1294,8 +1294,16 @@ class _PromoTile extends StatelessWidget {
     final iconColor = _typeColor[promo.type] ?? AppColors.brand600;
     final icon = _typeIcon[promo.type] ?? Icons.local_offer_outlined;
 
+    final pct = promo.discountPercent;
+    final hasDiscount = pct != null && pct > 0;
+    // Hide the code chip when the title IS the code (common case for
+    // owners who reuse the code as the promo's display name).
+    final codeIsRedundant = promo.promoCode != null &&
+        promo.promoCode!.trim().toLowerCase() ==
+            promo.title.trim().toLowerCase();
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -1309,8 +1317,8 @@ class _PromoTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: isExpired ? AppColors.secondary100 : bgColor,
               borderRadius: BorderRadius.circular(10),
@@ -1318,7 +1326,7 @@ class _PromoTile extends StatelessWidget {
             child: Icon(icon,
                 color:
                     isExpired ? AppColors.secondary300 : iconColor,
-                size: 20),
+                size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1327,29 +1335,63 @@ class _PromoTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    // Active/expired status as a small dot — saves
+                    // horizontal space vs the previous text pill.
+                    Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.only(right: 7),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isExpired
+                            ? AppColors.secondary300
+                            : (promo.isActive
+                                ? const Color(0xFF16A34A)
+                                : AppColors.secondary300),
+                      ),
+                    ),
                     Expanded(
                       child: Text(promo.title,
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            fontSize: 14,
                             color: isExpired
                                 ? AppColors.secondary400
                                 : AppColors.brand950,
-                          )),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ),
-                    if (promo.isAiGenerated)
+                    if (promo.isAiGenerated) ...[
+                      const SizedBox(width: 4),
                       _Badge(
                           label: l?.tr('promotions_badge_ai') ?? '⚡',
                           color: AppColors.brand500),
-                    if (promo.isAiGenerated) const SizedBox(width: 4),
-                    if (isExpired)
+                    ],
+                    if (isExpired) ...[
+                      const SizedBox(width: 6),
                       _Badge(
                           label: l?.tr('promotions_badge_expired') ?? 'Expirée',
-                          color: AppColors.secondary300)
-                    else if (promo.isActive)
-                      _Badge(
-                          label: l?.tr('promotions_badge_active') ?? 'Active',
-                          color: const Color(0xFF16A34A)),
+                          color: AppColors.secondary300),
+                    ] else if (hasDiscount) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '-${pct.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF15803D),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1424,7 +1466,7 @@ class _PromoTile extends StatelessWidget {
                     ],
                   ),
                 ],
-                if (promo.promoCode != null) ...[
+                if (promo.promoCode != null && !codeIsRedundant) ...[
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.symmetric(
