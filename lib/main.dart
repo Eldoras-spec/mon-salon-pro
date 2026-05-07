@@ -81,11 +81,25 @@ void main() async {
   runApp(const ProviderScope(child: MonSalonProApp()));
 }
 
-class MonSalonProApp extends ConsumerWidget {
+class MonSalonProApp extends ConsumerStatefulWidget {
   const MonSalonProApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MonSalonProApp> createState() => _MonSalonProAppState();
+}
+
+class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
+  // Memoize the force-update check Future so it's evaluated once per app
+  // launch instead of on every build. Without this, any rebuild of MyApp
+  // (e.g. ownerSalonProvider re-emit during a Firestore optimistic write)
+  // creates a new Future, the FutureBuilder transitions back to waiting,
+  // and the entire MainAppScaffold subtree is unmounted/remounted with
+  // fresh State — which silently sent the user back to the Home tab from
+  // wherever they were.
+  late final Future<bool> _needsForceUpdate = VersionService.needsForceUpdate();
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final locale = ref.watch(localeProvider);
 
@@ -117,7 +131,7 @@ class MonSalonProApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: FutureBuilder<bool>(
-        future: VersionService.needsForceUpdate(),
+        future: _needsForceUpdate,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
