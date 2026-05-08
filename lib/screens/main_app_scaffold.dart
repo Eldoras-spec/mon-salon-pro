@@ -80,6 +80,10 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
         _TabletNavItem(Icons.groups_outlined, l?.tr('menu_team') ?? 'Équipe', const OwnerTeamScreen()),
       _TabletNavItem(Icons.people_outline, l?.tr('menu_clients') ?? 'Clients', const OwnerClientsScreen()),
       _TabletNavItem(Icons.bar_chart_rounded, l?.tr('menu_statistics') ?? 'Stats', const OwnerStatisticsScreen()),
+      // "Mon abonnement" — owner only (gérant can't manage the salon's
+      // plan from the drawer either, so we mirror that gate here).
+      if (!isGerant)
+        _TabletNavItem(Icons.credit_card_rounded, l?.tr('menu_subscription') ?? 'Abonnement', const OwnerSubscriptionScreen()),
       if (isGerant)
         _TabletNavItem(Icons.event_busy_rounded, l?.tr('nav_unavailability') ?? 'Indispo', const GerantCongesScreen()),
       _TabletNavItem(Icons.person_rounded, l?.tr('nav_profile') ?? 'Profil', const ClientProfileScreen()),
