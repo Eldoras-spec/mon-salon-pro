@@ -1412,5 +1412,18 @@
   "trial_reminder_manage": "إدارة الاشتراك",
   "trial_banner_title": "متبقي {days} يوم من Essentiel التجريبية",
   "trial_banner_body": "ارتقِ إلى Essentiel لتجنب الرجوع إلى المجانية.",
-  "trial_banner_cta": "إدارة"
+  "trial_banner_cta": "إدارة",
+
+  "tutorial_options_eyebrow": "نصيحة",
+  "tutorial_options_skip": "تخطي",
+  "tutorial_options_next": "التالي",
+  "tutorial_options_finish": "هيا بنا",
+  "tutorial_options_intro_title": "خصّص كل خيار",
+  "tutorial_options_intro_body": "على كل خيار، اضغط على ⋮ لكشف 3 إمكانيات قوية: المعرض، الخيارات الفرعية، وطلب عبر واتساب.",
+  "tutorial_options_gallery_title": "معرض التصاميم",
+  "tutorial_options_gallery_body": "اعرض صوراً أو فيديوهات ليختار العملاء التصميم بصرياً (نيل آرت، تسريحات، مكياج…).",
+  "tutorial_options_suboptions_title": "خيارات فرعية",
+  "tutorial_options_suboptions_body": "أنشئ عدة مراحل اختيار متداخلة. يتم توجيه العميل بسلاسة (مثال: قص → لون → لمسة نهائية).",
+  "tutorial_options_whatsapp_title": "اسأل عبر واتساب",
+  "tutorial_options_whatsapp_body": "عندما يختار العميل خياراً مخصصاً، يتم تحويله إلى واتساب مع ملخص تلقائي للاختيارات السابقة — لإتمام الحجز معاً."
 }

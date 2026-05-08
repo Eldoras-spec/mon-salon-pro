@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import '../services/database_service.dart';
@@ -15,6 +14,7 @@ import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
 import '../services/auth_service.dart';
 import 'member_avatar.dart';
+import 'service_options_tutorial_dialog.dart';
 import '../utils/currency_helper.dart';
 import '../utils/media_compressor.dart';
 
@@ -63,8 +63,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   String? _memberError;
   bool _isComplex = false;
   List<Map<String, dynamic>> _optionSteps = [];
-  bool _showLongPressHint = false;
-  static const _hintKey = 'hasSeenLongPressHint';
 
   // ── Online card payment (Stripe Connect) ──
   /// 'none' | 'full' | 'percentage' | 'fixed_above'
@@ -75,7 +73,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   @override
   void initState() {
     super.initState();
-    _checkLongPressHint();
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['name'] as String? ?? '');
     _priceCtrl = TextEditingController(
@@ -106,20 +103,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _paymentThresholdCtrl = TextEditingController(
       text: pt is num && pt > 0 ? pt.toStringAsFixed(0) : '',
     );
-  }
-
-  @override
-  Future<void> _checkLongPressHint() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_hintKey) != true) {
-      setState(() => _showLongPressHint = true);
-    }
-  }
-
-  Future<void> _dismissLongPressHint() async {
-    setState(() => _showLongPressHint = false);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_hintKey, true);
   }
 
   @override
@@ -319,10 +302,15 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                           ),
                           Switch(
                             value: _isComplex,
-                            onChanged: (v) => setState(() {
-                              _isComplex = v;
-                              if (v && _optionSteps.isEmpty) _addOptionStep();
-                            }),
+                            onChanged: (v) {
+                              setState(() {
+                                _isComplex = v;
+                                if (v && _optionSteps.isEmpty) _addOptionStep();
+                              });
+                              if (v) {
+                                ServiceOptionsTutorialDialog.showIfNeeded(context);
+                              }
+                            },
                             activeColor: AppColors.brand600,
                           ),
                         ],
@@ -337,40 +325,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                         style: const TextStyle(fontSize: 11, color: AppColors.secondary400),
                       ),
                       const SizedBox(height: 8),
-                      // Long press hint tooltip
-                      if (_showLongPressHint && _optionSteps.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.brand950,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.touch_app, size: 18, color: Colors.white),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  l?.tr('salon_service_longpress_hint') ?? 'Appuyez sur ⋮ à côté d\'un choix pour plus d\'options (WhatsApp, galerie, sous-options)',
-                                  style: const TextStyle(fontSize: 11, color: Colors.white, height: 1.4),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: _dismissLongPressHint,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Text('OK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ..._buildOptionSteps(l),
                       const SizedBox(height: 8),
                       GestureDetector(

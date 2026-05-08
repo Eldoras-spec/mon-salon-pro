@@ -71,13 +71,22 @@ class MediaCompressor {
   }
 
   /// Compress a video with medium quality preset. Targets < 50MB.
+  ///
+  /// Note: video_compress always outputs H.264. If the source is already in
+  /// H.265 / HEVC (modern iPhones, Pixels), transcoding to H.264 typically
+  /// inflates the file because H.264 is ~30-40% less efficient. We mitigate
+  /// this with two guards: (a) skip outright for files under 20 MB (well-
+  /// encoded 1080p clips usually live there), and (b) compare sizes after
+  /// compression and keep whichever is smaller.
   static Future<CompressionResult?> compressVideo(File file) async {
     final originalSize = await file.length();
 
     if (originalSize > maxVideoInputBytes) return null;
 
-    // Skip compression for videos under 10 MB (already optimized)
-    if (originalSize < 10 * 1024 * 1024) {
+    // Skip threshold raised from 10 MB → 20 MB: a well-encoded 1080p video
+    // (modern phone in H.265, ~3-4 Mbps) often sits between 10-20 MB. The
+    // package's H.264 transcode would inflate those clips significantly.
+    if (originalSize < 20 * 1024 * 1024) {
       return CompressionResult(file: file, originalSize: originalSize, compressedSize: originalSize);
     }
 
@@ -85,6 +94,7 @@ class MediaCompressor {
       final info = await VideoCompress.compressVideo(
         file.path,
         quality: VideoQuality.Res1920x1080Quality,
+        frameRate: 30, // cap 60 fps → 30 fps (~30% size cut, no visible loss for salon content)
         deleteOrigin: false,
         includeAudio: true,
       );
@@ -93,6 +103,22 @@ class MediaCompressor {
 
       final compressedFile = info.file!;
       final compressedSize = await compressedFile.length();
+
+      // Garde-fou: if compression made the file bigger (or barely changed it),
+      // keep the original. This happens when the source is in an efficient
+      // codec (H.265) and we re-encoded to H.264, or when the original was
+      // already optimized. We require a meaningful gain (>5%) to bother.
+      if (compressedSize >= originalSize * 0.95) {
+        // Drop the useless compressed file from the temp dir
+        try {
+          await compressedFile.delete();
+        } catch (_) {}
+        return CompressionResult(
+          file: file,
+          originalSize: originalSize,
+          compressedSize: originalSize,
+        );
+      }
 
       return CompressionResult(file: compressedFile, originalSize: originalSize, compressedSize: compressedSize);
     } catch (e) {

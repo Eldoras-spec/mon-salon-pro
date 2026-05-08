@@ -1412,5 +1412,18 @@
   "trial_reminder_manage": "Gestionar suscripción",
   "trial_banner_title": "Quedan {days}d de prueba Essentiel",
   "trial_banner_body": "Actualiza a Essentiel para evitar bajar a Free.",
-  "trial_banner_cta": "Gestionar"
+  "trial_banner_cta": "Gestionar",
+
+  "tutorial_options_eyebrow": "CONSEJO",
+  "tutorial_options_skip": "Omitir",
+  "tutorial_options_next": "Siguiente",
+  "tutorial_options_finish": "¡Vamos!",
+  "tutorial_options_intro_title": "Personaliza cada elección",
+  "tutorial_options_intro_body": "En cada elección, pulsa ⋮ para descubrir 3 opciones potentes: Galería, Subopciones y Solicitud por WhatsApp.",
+  "tutorial_options_gallery_title": "Galería de diseños",
+  "tutorial_options_gallery_body": "Ofrece fotos o vídeos para que tus clientes elijan visualmente un diseño (nail art, peinados, maquillaje…).",
+  "tutorial_options_suboptions_title": "Subopciones",
+  "tutorial_options_suboptions_body": "Crea varios pasos de elección anidados. El cliente avanza guiado de forma natural (ej.: Corte → Color → Acabado).",
+  "tutorial_options_whatsapp_title": "Preguntar por WhatsApp",
+  "tutorial_options_whatsapp_body": "Cuando un cliente elige una opción personalizada, se le redirige a WhatsApp con un resumen automático de las elecciones ya hechas — para finalizar la reserva juntos."
 }

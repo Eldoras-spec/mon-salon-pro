@@ -1412,5 +1412,18 @@
   "trial_reminder_manage": "Manage subscription",
   "trial_banner_title": "{days} days left of Essentiel trial",
   "trial_banner_body": "Upgrade to Essentiel to avoid being downgraded to Free.",
-  "trial_banner_cta": "Manage"
+  "trial_banner_cta": "Manage",
+
+  "tutorial_options_eyebrow": "TIP",
+  "tutorial_options_skip": "Skip",
+  "tutorial_options_next": "Next",
+  "tutorial_options_finish": "Got it",
+  "tutorial_options_intro_title": "Customise every choice",
+  "tutorial_options_intro_body": "On each choice, tap ⋮ to reveal 3 powerful options: Gallery, Sub-options and WhatsApp request.",
+  "tutorial_options_gallery_title": "Design gallery",
+  "tutorial_options_gallery_body": "Offer photos or videos so clients can pick a design visually (nail art, hairstyles, makeup looks…).",
+  "tutorial_options_suboptions_title": "Sub-options",
+  "tutorial_options_suboptions_body": "Build several nested choice steps. Clients are guided naturally (e.g. Cut → Colour → Finish).",
+  "tutorial_options_whatsapp_title": "Ask via WhatsApp",
+  "tutorial_options_whatsapp_body": "When a client picks a custom option, they're redirected to WhatsApp with an automatic recap of choices already made — to finalise the booking together."
 }
