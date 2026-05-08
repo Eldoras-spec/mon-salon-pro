@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,8 +10,12 @@ import '../theme/app_colors.dart';
 const String _kBotBillingUrl = 'https://monsalon.web.app/bot-billing.html';
 
 /// Live read of the salon's `botMessageQuota` map; renders a usage bar +
-/// sub badge + a button that opens the web billing page in an external
-/// browser. Reused by:
+/// sub badge. On Android, also exposes a button to manage the bot
+/// subscription via the external Stripe-backed billing page. iOS hides
+/// this button entirely to comply with App Store Guideline 3.1.1
+/// (no in-app steering toward external payment for digital services).
+///
+/// Reused by:
 /// - `owner_subscription_screen.dart` (Mon abonnement)
 /// - `owner_bot_settings_screen.dart` (Assistant BOT — under "Zayna est active")
 ///
@@ -149,22 +155,24 @@ class BotQuotaCard extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => _openBilling(context),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Gérer mon abonnement bot'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brand600,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              if (!Platform.isIOS) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _openBilling(context),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('Gérer mon abonnement bot'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brand600,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         );
