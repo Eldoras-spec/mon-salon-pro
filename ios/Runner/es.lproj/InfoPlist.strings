@@ -1,0 +1,6 @@
+"NSUserTrackingUsageDescription" = "Este permiso nos ayuda a medir la eficacia de los anuncios de Mon Salon Pro y a mejorar tu experiencia.";
+"NSCameraUsageDescription" = "Mon Salon necesita acceso a tu cámara para tomar fotos de tu salón y tus trabajos.";
+"NSPhotoLibraryUsageDescription" = "Mon Salon necesita acceso a tus fotos para añadirlas a la galería del salón.";
+"NSPhotoLibraryAddUsageDescription" = "Mon Salon desea guardar fotos en tu biblioteca.";
+"NSLocationWhenInUseUsageDescription" = "Mon Salon usa tu ubicación para encontrar salones cerca de ti.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Mon Salon usa tu ubicación para encontrar salones cerca de ti.";

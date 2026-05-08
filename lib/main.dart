@@ -17,6 +17,7 @@ import 'screens/main_app_scaffold.dart';
 import 'screens/member_home_screen.dart';
 import 'screens/owner_onboarding_step1_screen.dart';
 import 'screens/team_profile_selector_screen.dart';
+import 'services/fb_events_service.dart';
 import 'services/notification_service.dart';
 import 'services/revenue_cat_service.dart';
 import 'services/version_service.dart';
@@ -78,6 +79,12 @@ void main() async {
     await RevenueCatService.syncCurrentUser();
   } catch (_) {}
 
+  // Facebook App Events — install + activation tracking for Meta Ads
+  // campaigns. iOS ATT prompt is deferred to after first frame (see
+  // _MonSalonProAppState.initState) because requesting ATT before the
+  // app is in `UIApplicationStateActive` causes iOS to silently deny
+  // without showing any UI.
+
   runApp(const ProviderScope(child: MonSalonProApp()));
 }
 
@@ -99,6 +106,23 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
   late final Future<bool> _needsForceUpdate = VersionService.needsForceUpdate();
 
   @override
+  void initState() {
+    super.initState();
+    // Defer FB SDK init until the app is on screen and active. Calling
+    // ATT before the app reaches UIApplicationStateActive causes iOS to
+    // silently deny the request without ever showing the system prompt.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Small delay so the notification permission prompt (which is
+      // requested earlier) has time to settle before we stack ATT on top.
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      try {
+        await FbEventsService.initialize();
+      } catch (_) {}
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final locale = ref.watch(localeProvider);
@@ -113,8 +137,10 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
         ref.read(profileSelectedProvider.notifier).state = false;
         ref.read(activeTeamMemberProvider.notifier).state = null;
         RevenueCatService.loginUser(nextUser.uid);
+        FbEventsService.setUserId(nextUser.uid);
       } else if (prevUser != null && nextUser == null) {
         RevenueCatService.logoutUser();
+        FbEventsService.setUserId(null);
       }
     });
 

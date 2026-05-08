@@ -38,6 +38,23 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
+        <!-- Facebook SDK (App Events / installs / ad attribution) -->
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id" />
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/facebook_client_token" />
+        <!-- Disable auto-init so we can gate it on ATT consent / GDPR -->
+        <meta-data
+            android:name="com.facebook.sdk.AutoInitEnabled"
+            android:value="false" />
+        <meta-data
+            android:name="com.facebook.sdk.AutoLogAppEventsEnabled"
+            android:value="false" />
+        <meta-data
+            android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
+            android:value="false" />
     </application>
     <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -50,6 +67,8 @@
     <!-- Gallery / camera (image_picker) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- Advertising ID (Facebook SDK install attribution, Android 13+) -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.

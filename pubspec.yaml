@@ -69,6 +69,8 @@ dependencies:
   cloud_functions: ^6.2.0
   purchases_flutter: ^8.0.0
   linked_scroll_controller: ^0.2.0
+  facebook_app_events: ^0.27.2
+  app_tracking_transparency: ^2.0.6+1
 
 flutter_launcher_icons: 
   ios : true

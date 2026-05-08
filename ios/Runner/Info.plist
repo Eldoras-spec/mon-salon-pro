@@ -6,6 +6,13 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>fr</string>
+		<string>en</string>
+		<string>ar</string>
+		<string>es</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Mon Salon Pro</string>
 	<key>CFBundleExecutable</key>
@@ -36,6 +43,49 @@
 	<string>Mon Salon souhaite enregistrer des photos dans votre bibliothèque.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Mon Salon a besoin d'accéder à vos photos pour ajouter des images à votre galerie salon.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Cette autorisation nous permet de mesurer l'efficacité des publicités Mon Salon Pro et d'améliorer votre expérience.</string>
+	<key>FacebookAppID</key>
+	<string>1351939696773714</string>
+	<key>FacebookClientToken</key>
+	<string>e456f1192d3cdf7db1d0c51be4a112a7</string>
+	<key>FacebookDisplayName</key>
+	<string>Mon Salon Pro</string>
+	<key>FacebookAutoInitEnabled</key>
+	<false/>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1351939696773714</string>
+			</array>
+		</dict>
+	</array>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
