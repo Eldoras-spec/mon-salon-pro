@@ -9,6 +9,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bot_quota_card.dart';
+import 'owner_promotions_screen.dart';
 
 /// Owner-facing config screen for the WhatsApp Zayna bot. Available
 /// from `Profil → Assistant BOT` for Business-plan owners.
@@ -276,6 +277,7 @@ class _Body extends StatelessWidget {
         final botStatus = data['botStatus'] as String? ?? 'pending';
         final botWhatsapp = data['botWhatsapp'] as String?;
         final setupComplete = data['botSetupComplete'] == true;
+        final aiPromosEnabled = data['aiPromosEnabled'] == true;
         final cfgRaw = data['botConfig'];
         final cfg = cfgRaw is Map
             ? Map<String, dynamic>.from(cfgRaw)
@@ -327,6 +329,7 @@ class _Body extends StatelessWidget {
               _ProactivesCard(
                 salonId: salonId,
                 pro: pro,
+                aiPromosEnabled: aiPromosEnabled,
               ),
               const SizedBox(height: 16),
               _BehaviourCard(
@@ -543,13 +546,58 @@ class _WaMeShareCard extends StatelessWidget {
 class _ProactivesCard extends StatelessWidget {
   final String salonId;
   final Map<String, dynamic> pro;
-  const _ProactivesCard({required this.salonId, required this.pro});
+  final bool aiPromosEnabled;
+  const _ProactivesCard({
+    required this.salonId,
+    required this.pro,
+    required this.aiPromosEnabled,
+  });
 
   Future<void> _toggle(String key, bool value) async {
     await FirebaseFirestore.instance
         .collection('salons')
         .doc(salonId)
         .update({'botConfig.proactiveOptIn.$key': value});
+  }
+
+  /// Show the same in-app explanation Zayna would give when she returns
+  /// `needs_ai_promo_config`: the proactive flow depends on AI promos
+  /// being enabled with the discount/threshold config set. CTA jumps to
+  /// the Promotions screen where "Réductions intelligentes" lives.
+  void _showAiPromoGate(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l?.tr('bot_settings.ai_gate_title') ??
+            'Réductions intelligentes requises'),
+        content: Text(l?.tr('bot_settings.ai_gate_body') ??
+            'Ces messages envoient une réduction au client. Activez d\'abord les Réductions intelligentes (avec les % à appliquer) dans la page Promotions.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OwnerPromotionsScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand600,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(l?.tr('bot_settings.ai_gate_configure') ??
+                'Configurer'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -584,74 +632,124 @@ class _ProactivesCard extends StatelessWidget {
                 height: 1.4),
           ),
           const SizedBox(height: 8),
-          // All proactives default ON — owner decides what to disable.
+          // G3 + G2 depend on aiPromosEnabled (the discount %s come from
+          // aiPromoConfig). When AI promos is off, the proactive CF
+          // silently skips the salon — gate the toggle here so the
+          // misconfig can't happen. Pour le owner : un tap sur le toggle
+          // ouvre un dialog qui le redirige vers la page Promotions.
           _toggleRow(
-            l?.tr('bot_settings.g3_label') ?? 'Anniversaire',
-            l?.tr('bot_settings.g3_desc') ??
+            label: l?.tr('bot_settings.g3_label') ?? 'Anniversaire',
+            desc: l?.tr('bot_settings.g3_desc') ??
                 'Souhait + offre (Marketing — opt-in client requis)',
-            pro['g3'] != false,
-            (v) => _toggle('g3', v),
+            value: pro['g3'] != false,
+            onChanged: aiPromosEnabled ? (v) => _toggle('g3', v) : null,
+            gatedNote: aiPromosEnabled
+                ? null
+                : (l?.tr('bot_settings.needs_ai_promos') ??
+                    'Nécessite Réductions intelligentes'),
+            onGatedTap: () => _showAiPromoGate(context),
           ),
           _toggleRow(
-            l?.tr('bot_settings.g2_label') ?? 'Réactivation 90 jours',
-            l?.tr('bot_settings.g2_desc') ??
+            label: l?.tr('bot_settings.g2_label') ??
+                'Réactivation absence',
+            desc: l?.tr('bot_settings.g2_desc') ??
                 'Relance les clients silencieux (Marketing — opt-in client requis)',
-            pro['g2'] != false,
-            (v) => _toggle('g2', v),
+            value: pro['g2'] != false,
+            onChanged: aiPromosEnabled ? (v) => _toggle('g2', v) : null,
+            gatedNote: aiPromosEnabled
+                ? null
+                : (l?.tr('bot_settings.needs_ai_promos') ??
+                    'Nécessite Réductions intelligentes'),
+            onGatedTap: () => _showAiPromoGate(context),
           ),
           _toggleRow(
-            l?.tr('bot_settings.j2_label') ??
+            label: l?.tr('bot_settings.j2_label') ??
                 'Demande d\'avis Google',
-            l?.tr('bot_settings.j2_desc') ??
+            desc: l?.tr('bot_settings.j2_desc') ??
                 'Envoyé J+1 après un RDV terminé (Utility, sans opt-in)',
-            pro['j2'] != false,
-            (v) => _toggle('j2', v),
+            value: pro['j2'] != false,
+            onChanged: (v) => _toggle('j2', v),
           ),
           _toggleRow(
-            l?.tr('bot_settings.k3_label') ?? 'Place libérée (waitlist)',
-            l?.tr('bot_settings.k3_desc') ??
+            label: l?.tr('bot_settings.k3_label') ??
+                'Place libérée (waitlist)',
+            desc: l?.tr('bot_settings.k3_desc') ??
                 'Notifie les clients en liste d\'attente (Utility)',
-            pro['k3'] != false,
-            (v) => _toggle('k3', v),
+            value: pro['k3'] != false,
+            onChanged: (v) => _toggle('k3', v),
           ),
         ],
       ),
     );
   }
 
-  Widget _toggleRow(
-      String label, String desc, bool value, ValueChanged<bool> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
+  Widget _toggleRow({
+    required String label,
+    required String desc,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+    String? gatedNote,
+    VoidCallback? onGatedTap,
+  }) {
+    final isGated = onChanged == null;
+    return InkWell(
+      onTap: isGated ? onGatedTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.brand950),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  desc,
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.secondary500),
-                ),
-              ],
+                      color: isGated
+                          ? AppColors.secondary400
+                          : AppColors.brand950,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    desc,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.secondary500),
+                  ),
+                  if (gatedNote != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.lock_outline_rounded,
+                            size: 12, color: Color(0xFFB45309)),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            gatedNote,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFFB45309),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppColors.brand600,
-          ),
-        ],
+            Switch(
+              value: isGated ? false : value,
+              onChanged: onChanged,
+              activeColor: AppColors.brand600,
+            ),
+          ],
+        ),
       ),
     );
   }
