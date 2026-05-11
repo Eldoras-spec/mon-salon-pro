@@ -186,6 +186,104 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
           ? client.id // already 'walkin_<digits>'
           : client.clientId;
 
+      // Past / upcoming queries are routed differently depending on
+      // whether we have a Firebase UID or only a phone number:
+      //
+      // • Registered client → query by clientId. Uses existing
+      //   composite indexes:
+      //     #1 appointments(clientId, status, dateTime ASC)
+      //     #2 appointments(clientId, status, dateTime DESC)
+      //   salonId is filtered client-side (small result set, ≤ 30 docs).
+      //
+      // • Walk-in client → query by clientPhone since appointment.clientId
+      //   for walk-ins is the literal string 'walk-in'. Uses existing:
+      //     #6 appointments(salonId, clientPhone, dateTime ASC)
+      //
+      // The previous version queried salonId+clientId+dateTime which had
+      // no matching index — catchError swallowed the error and the
+      // history rendered empty even for clients with 80+ visits.
+      Future<List<AppointmentModel>> fetchPast;
+      Future<List<AppointmentModel>> fetchUpcoming;
+
+      if (client.isWalkIn) {
+        final phoneE164 = _normalisePhoneToE164(client.clientPhone);
+        if (phoneE164.isEmpty) {
+          fetchPast = Future.value([]);
+          fetchUpcoming = Future.value([]);
+        } else {
+          // Past: dateTime ≤ now, dateTime ASC index, reverse in memory.
+          fetchPast = fs
+              .collection('appointments')
+              .where('salonId', isEqualTo: salonId)
+              .where('clientPhone', isEqualTo: phoneE164)
+              .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(now))
+              .orderBy('dateTime', descending: false)
+              .limit(50)
+              .get()
+              .then((s) {
+            final list = s.docs.map((d) => AppointmentModel.fromFirestore(d)).toList()
+              ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+            return list.take(10).toList();
+          });
+          // Upcoming: dateTime > now, status=upcoming, dateTime ASC.
+          fetchUpcoming = fs
+              .collection('appointments')
+              .where('salonId', isEqualTo: salonId)
+              .where('clientPhone', isEqualTo: phoneE164)
+              .where('dateTime', isGreaterThan: Timestamp.fromDate(now))
+              .orderBy('dateTime')
+              .limit(20)
+              .get()
+              .then((s) => s.docs
+                  .map((d) => AppointmentModel.fromFirestore(d))
+                  .where((a) => a.status == 'upcoming')
+                  .toList());
+        }
+      } else {
+        final uid = client.clientId;
+        if (uid.isEmpty) {
+          fetchPast = Future.value([]);
+          fetchUpcoming = Future.value([]);
+        } else {
+          // Past: 3 status branches × index #2, filter salonId in-memory.
+          // whereIn on status would also work but limits us to a single
+          // index hit; explicit 3 queries are clearer when reasoning
+          // about which composite is being used.
+          fetchPast = Future.wait([
+            for (final s in ['completed', 'cancelled', 'no_show'])
+              fs
+                  .collection('appointments')
+                  .where('clientId', isEqualTo: uid)
+                  .where('status', isEqualTo: s)
+                  .orderBy('dateTime', descending: true)
+                  .limit(10)
+                  .get()
+                  .then((q) => q.docs.map((d) => AppointmentModel.fromFirestore(d)).toList()),
+          ]).then((lists) {
+            final merged = <AppointmentModel>[
+              for (final l in lists) ...l,
+            ];
+            merged.removeWhere((a) => a.salonId != salonId);
+            merged.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+            return merged.take(10).toList();
+          });
+          // Upcoming: clientId + status='upcoming' + dateTime ASC →
+          // index #1. Filter salonId + future-only client-side.
+          fetchUpcoming = fs
+              .collection('appointments')
+              .where('clientId', isEqualTo: uid)
+              .where('status', isEqualTo: 'upcoming')
+              .orderBy('dateTime')
+              .limit(30)
+              .get()
+              .then((s) => s.docs
+                  .map((d) => AppointmentModel.fromFirestore(d))
+                  .where((a) => a.salonId == salonId && a.dateTime.isAfter(now))
+                  .take(20)
+                  .toList());
+        }
+      }
+
       // Run independent reads in parallel.
       final results = await Future.wait<dynamic>([
         // Loyalty balance — registered users only (walk-ins have no UID
@@ -194,29 +292,14 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
           db.getUserPointsForSalon(client.clientId, salonId)
         else
           Future.value(0.0),
-        // Upcoming RDV — server-side filter by salon + clientId.
-        fs
-            .collection('appointments')
-            .where('salonId', isEqualTo: salonId)
-            .where('clientId', isEqualTo: client.isWalkIn ? client.id : client.clientId)
-            .where('status', isEqualTo: 'upcoming')
-            .where('dateTime', isGreaterThan: Timestamp.fromDate(now))
-            .orderBy('dateTime')
-            .limit(20)
-            .get()
-            .then((s) => s.docs.map((d) => AppointmentModel.fromFirestore(d)).toList())
-            .catchError((_) => <AppointmentModel>[]),
-        // Past RDV (completed / cancelled) — limited to 10 most recent.
-        fs
-            .collection('appointments')
-            .where('salonId', isEqualTo: salonId)
-            .where('clientId', isEqualTo: client.isWalkIn ? client.id : client.clientId)
-            .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(now))
-            .orderBy('dateTime', descending: true)
-            .limit(10)
-            .get()
-            .then((s) => s.docs.map((d) => AppointmentModel.fromFirestore(d)).toList())
-            .catchError((_) => <AppointmentModel>[]),
+        fetchUpcoming.catchError((e) {
+          debugPrint('[ClientDetail] upcoming query failed: $e');
+          return <AppointmentModel>[];
+        }),
+        fetchPast.catchError((e) {
+          debugPrint('[ClientDetail] past query failed: $e');
+          return <AppointmentModel>[];
+        }),
         // Blacklist check — single doc read on the salon.
         db.isBlacklisted(
           salonId,
@@ -447,6 +530,21 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
 
   void _toast(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  /// Normalise an arbitrary phone string to E.164 (`+212...`) so we can
+  /// match Firestore `clientPhone` fields, which are always stored in
+  /// that form. Returns empty when there isn't enough material.
+  String _normalisePhoneToE164(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.startsWith('+')) return raw;
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '';
+    // Single leading 0 → Moroccan local format (legacy) → +212.
+    if (digits.startsWith('0') && digits.length == 10) {
+      digits = '212' + digits.substring(1);
+    }
+    return '+$digits';
   }
 
   // ── Build ─────────────────────────────────────────────────────
