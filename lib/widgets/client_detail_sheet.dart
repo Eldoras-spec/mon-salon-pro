@@ -972,8 +972,8 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
                 onPressed: onToggleShowAll,
                 child: Text(showAll
                     ? (l?.tr('common_show_less') ?? 'Voir moins')
-                    : (l?.tr('common_show_more') ?? 'Voir tout (${items.length})')
-                        .replaceAll('${items.length}', '${items.length}')),
+                    : (l?.tr('common_show_more') ?? 'Voir tout ({count})')
+                        .replaceAll('{count}', '${items.length}')),
               ),
             ),
         ],
