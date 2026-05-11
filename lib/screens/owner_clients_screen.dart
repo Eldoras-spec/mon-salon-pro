@@ -11,6 +11,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../utils/currency_helper.dart';
+import '../widgets/client_detail_sheet.dart';
 
 class OwnerClientsScreen extends ConsumerWidget {
   const OwnerClientsScreen({super.key});
@@ -600,6 +601,23 @@ class _ClientCard extends StatelessWidget {
             ? l?.tr('clients_yesterday') ?? 'Hier'
             : (l?.tr('clients_days_ago') ?? 'Il y a {days} jours').replaceAll('{days}', '$daysSinceLast');
 
+    // Wrap the card body in InkWell so tapping anywhere (other than
+    // the trailing popup-menu button — which Flutter routes first)
+    // opens the full client-detail bottom sheet.
+    return Consumer(builder: (context, ref, _) {
+      return InkWell(
+        onTap: () {
+          final salon = ref.read(ownerSalonProvider).value;
+          if (salon == null) return;
+          showClientDetailSheet(context, client: client, salon: salon);
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: _buildCard(context, l, lastVisitLabel),
+      );
+    });
+  }
+
+  Widget _buildCard(BuildContext context, AppLocalizations? l, String lastVisitLabel) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),

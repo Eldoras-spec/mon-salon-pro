@@ -71,7 +71,7 @@ class _OwnerAppointmentsScreenState
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.9,
         ),
-        child: _AddAppointmentSheet(
+        child: OwnerAddAppointmentSheet(
           salon: salon,
           teamMembers: team,
           onCreated: () => ref.invalidate(ownerAppointmentsRangeProvider),
@@ -984,21 +984,37 @@ class _EmptyState extends StatelessWidget {
 
 // ── Add appointment sheet ───────────────────────────────────────────────────
 
-class _AddAppointmentSheet extends StatefulWidget {
-  const _AddAppointmentSheet({
+/// Owner / employee booking sheet. Exposed publicly so other screens
+/// (notably `ClientDetailSheet`) can open it pre-filled for a known
+/// client via `initialClientName` + `initialClientPhoneE164`.
+class OwnerAddAppointmentSheet extends StatefulWidget {
+  const OwnerAddAppointmentSheet({
+    super.key,
     required this.salon,
     required this.teamMembers,
     required this.onCreated,
+    this.initialClientName,
+    this.initialClientPhoneE164,
   });
   final SalonModel salon;
   final List<TeamMemberModel> teamMembers;
   final VoidCallback onCreated;
 
+  /// Pre-fills the walk-in name field. Used by the client-detail
+  /// "Book now" action.
+  final String? initialClientName;
+
+  /// Pre-fills the verified WhatsApp number in E.164 format
+  /// (e.g. `+212612345678`). When set we ALSO mark it as
+  /// `_verifiedWalkInWhatsapp` so the OTP step is skipped — the
+  /// client already exists in this salon's summaries.
+  final String? initialClientPhoneE164;
+
   @override
-  State<_AddAppointmentSheet> createState() => _AddAppointmentSheetState();
+  State<OwnerAddAppointmentSheet> createState() => _OwnerAddAppointmentSheetState();
 }
 
-class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
+class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
   static const _dayKeys = [
     'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
   ];
@@ -1106,6 +1122,16 @@ class _AddAppointmentSheetState extends State<_AddAppointmentSheet> {
   @override
   void initState() {
     super.initState();
+    // Apply prefill from the optional widget params so the client-detail
+    // "Book now" action lands the owner on a sheet that already knows
+    // who they're booking for — name + phone filled, OTP skipped.
+    if (widget.initialClientName != null && widget.initialClientName!.isNotEmpty) {
+      _clientNameCtrl.text = widget.initialClientName!;
+    }
+    if (widget.initialClientPhoneE164 != null && widget.initialClientPhoneE164!.isNotEmpty) {
+      _clientWhatsappE164 = widget.initialClientPhoneE164;
+      _verifiedWalkInWhatsapp = widget.initialClientPhoneE164;
+    }
     _snapTimeToOpenHours();
     _loadAppointments();
     _loadActivePromos();
