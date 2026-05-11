@@ -17,6 +17,7 @@ import '../widgets/member_avatar.dart';
 import '../widgets/reschedule_appointment_sheet.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 
 class MemberHomeScreen extends ConsumerStatefulWidget {
   const MemberHomeScreen({super.key});
@@ -1725,6 +1726,10 @@ class _MemberAddAppointmentSheetState
     }
   }
 
+  /// Same TZ caveat as OwnerAddAppointmentSheet — filter past slots
+  /// against the SALON's wall clock, not the device's, so an emulator/
+  /// traveler whose TZ lags the salon doesn't see past slots offered
+  /// as bookable. See `reference_wall_clock_utc_convention.md`.
   List<String> _generateTimeSlots() {
     final data = _getHoursForDate(_selectedDate);
     if (data == null || data['isOpen'] != true) return [];
@@ -1733,11 +1738,11 @@ class _MemberAddAppointmentSheetState
     final openMin = open.hour * 60 + open.minute;
     final closeMin = close.hour * 60 + close.minute;
     final slots = <String>[];
-    final now = DateTime.now();
-    final isToday = _selectedDate.year == now.year &&
-        _selectedDate.month == now.month &&
-        _selectedDate.day == now.day;
-    final nowMin = now.hour * 60 + now.minute;
+    final salonNow = TimezoneHelper.salonWallClockNow(widget.salon.timezone);
+    final isToday = _selectedDate.year == salonNow.year &&
+        _selectedDate.month == salonNow.month &&
+        _selectedDate.day == salonNow.day;
+    final nowMin = salonNow.hour * 60 + salonNow.minute;
     for (int m = openMin; m < closeMin; m += 30) {
       if (isToday && m <= nowMin) continue;
       final h = m ~/ 60;

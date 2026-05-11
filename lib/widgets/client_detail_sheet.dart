@@ -17,6 +17,7 @@ import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 
 /// Show the full client-detail bottom sheet for [client]. Returns when
 /// the user dismisses the sheet.
@@ -179,7 +180,12 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
       final fs = FirebaseFirestore.instance;
       final salonId = widget.salon.id;
       final client = widget.client;
-      final now = DateTime.now();
+      // Compare upcoming/past appointments against the SALON's wall
+      // clock, not the device's — `appointment.dateTime` is stored as
+      // wall-clock-UTC of the salon TZ (see
+      // reference_wall_clock_utc_convention.md), and `DateTime.now()`
+      // would drift by the salon's offset on a non-salon-TZ device.
+      final now = TimezoneHelper.salonWallClockNow(widget.salon.timezone);
       // Reputation key — `clientReputation/{userId}` for registered,
       // `walkin_{digits}` mirror for walk-ins (CF maintains both).
       final repDocId = client.isWalkIn
