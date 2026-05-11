@@ -1338,6 +1338,12 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
   }
 
   /// Generate 30-min time slots from salon working hours for selected date.
+  ///
+  /// Filters past slots using the SALON's wall-clock time, not the
+  /// device's. Without this, an owner on a device whose TZ lags behind
+  /// the salon (e.g. emulator in UTC vs Casablanca +1) would see past
+  /// slots offered as bookable — when "Book now" from a client card
+  /// rendered 13:00 and 13:30 even though salon-local was already 13:46.
   List<String> _generateTimeSlots() {
     final data = _getHoursForDate(_selectedDate);
     if (data == null || data['isOpen'] != true) return [];
@@ -1346,11 +1352,13 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
     final openMin = open.hour * 60 + open.minute;
     final closeMin = close.hour * 60 + close.minute;
     final slots = <String>[];
-    final now = DateTime.now();
-    final isToday = _selectedDate.year == now.year &&
-        _selectedDate.month == now.month &&
-        _selectedDate.day == now.day;
-    final nowMin = now.hour * 60 + now.minute;
+    // Use the salon's wall-clock-UTC now (matches our storage convention
+    // and the existing pattern elsewhere in this file — cf. line 588).
+    final salonNow = TimezoneHelper.salonWallClockNow(widget.salon.timezone);
+    final isToday = _selectedDate.year == salonNow.year &&
+        _selectedDate.month == salonNow.month &&
+        _selectedDate.day == salonNow.day;
+    final nowMin = salonNow.hour * 60 + salonNow.minute;
     for (int m = openMin; m < closeMin; m += 30) {
       if (isToday && m <= nowMin) continue;
       final h = m ~/ 60;
