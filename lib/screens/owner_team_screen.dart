@@ -20,6 +20,7 @@ import '../utils/media_compressor.dart';
 import '../widgets/country_phone_field.dart';
 import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/team_member_detail_sheet.dart';
 
 // Agenda palette — kept in sync with `_memberColors` in owner_agenda_screen.dart.
 // All light pastels for readability.
@@ -659,6 +660,7 @@ class _MemberCard extends StatelessWidget {
     required this.salonId,
     required this.onEdit,
     required this.onDelete,
+    this.onTap,
   });
 
   final TeamMemberModel member;
@@ -666,6 +668,7 @@ class _MemberCard extends StatelessWidget {
   final String salonId;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onTap;
 
   Color get _roleColor {
     switch (member.role) {
@@ -750,7 +753,13 @@ class _MemberCard extends StatelessWidget {
     final isCapDeactivated = member.isDeactivatedByCap;
     return Opacity(
       opacity: isCapDeactivated ? 0.55 : 1.0,
-      child: Container(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: (isCapDeactivated || onTap == null) ? null : onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isCapDeactivated ? const Color(0xFFF9FAFB) : Colors.white,
@@ -937,6 +946,8 @@ class _MemberCard extends StatelessWidget {
           ],
         ],
       ),
+      ),
+        ),
       ),
     );
   }
@@ -1733,6 +1744,15 @@ class _TeamServiceToggleState extends State<_TeamServiceToggle> {
                 salonId: widget.salon?.id ?? '',
                 onEdit: () => widget.onEditMember(m),
                 onDelete: () => widget.onDeleteMember(m),
+                onTap: widget.salon == null || widget.isGerant
+                    ? null
+                    : () => showTeamMemberDetailSheet(
+                          context,
+                          member: m,
+                          salon: widget.salon!,
+                          onEdit: () => widget.onEditMember(m),
+                          onDelete: () => widget.onDeleteMember(m),
+                        ),
               ),
             )),
         ] else ...[
