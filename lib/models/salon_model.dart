@@ -27,6 +27,16 @@ class SalonModel {
   // Social links — handle/username only (e.g. "mybeautysalon"), empty = not set
   final Map<String, String> socialLinks;
   final bool rewardPointsEnabled;
+  // Loyalty cashback config. Owner-tunable from the Promotions screen.
+  // Keys + defaults:
+  //   cashbackPercent: 5     (1-20)
+  //   expirationDays: 30     (7-182, multiples of 7) — ignored when
+  //                           pointsNeverExpire == true
+  //   pointsNeverExpire: false
+  // Read by the `onAppointmentStatusChanged` CF when crediting points
+  // and by `toolGetMyLoyaltyPoints` when telling the client how long
+  // their points will live.
+  final Map<String, dynamic> loyaltyConfig;
   final bool aiPromosEnabled;
   final Map<String, dynamic> aiPromoConfig;
   final Map<String, dynamic> googleReviewReward;
@@ -88,6 +98,11 @@ class SalonModel {
     this.socialLinks = const {},
     this.servicePacks = const [],
     this.rewardPointsEnabled = true,
+    this.loyaltyConfig = const {
+      'cashbackPercent': 5,
+      'expirationDays': 30,
+      'pointsNeverExpire': false,
+    },
     this.aiPromosEnabled = false,
     this.aiPromoConfig = const {
       'topClientPercent': 30,
@@ -164,6 +179,11 @@ class SalonModel {
             )
           : {},
       rewardPointsEnabled: data['rewardPointsEnabled'] ?? true,
+      loyaltyConfig: Map<String, dynamic>.from(data['loyaltyConfig'] ?? {
+        'cashbackPercent': 5,
+        'expirationDays': 30,
+        'pointsNeverExpire': false,
+      }),
       aiPromosEnabled: data['aiPromosEnabled'] ?? false,
       aiPromoConfig: Map<String, dynamic>.from(data['aiPromoConfig'] ?? {
         'topClientPercent': 30,
@@ -227,6 +247,7 @@ class SalonModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'socialLinks': socialLinks,
       'rewardPointsEnabled': rewardPointsEnabled,
+      'loyaltyConfig': loyaltyConfig,
       'aiPromosEnabled': aiPromosEnabled,
       'aiPromoConfig': aiPromoConfig,
       'googleReviewReward': googleReviewReward,
