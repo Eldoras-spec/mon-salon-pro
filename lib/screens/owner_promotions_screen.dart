@@ -2670,69 +2670,126 @@ class _LoyaltyConfigDialogState extends State<_LoyaltyConfigDialog> {
         .replaceAll('{days}', '$days');
   }
 
+  /// Mirrors `_AiPromoToggleState._configRow` for visual parity with the
+  /// Smart Discounts dialog: bold title + subtitle on the left, a value
+  /// chip on the right, slider below full-width.
+  Widget _configRow({
+    required String title,
+    required String subtitle,
+    required String valueLabel,
+    required double value,
+    required double min,
+    required double max,
+    int? divisions,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.brand50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                valueLabel,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brand600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: AppColors.brand600,
+            inactiveTrackColor: AppColors.brand100,
+            thumbColor: AppColors.brand600,
+            overlayColor: AppColors.brand600.withValues(alpha: 0.1),
+            trackHeight: 3,
+          ),
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text(
-        l?.tr('promo_loyalty_dialog_title') ?? 'Paramètres de fidélité',
-        style: GoogleFonts.dmSans(
-            fontWeight: FontWeight.w700,
-            color: AppColors.brand950,
-            fontSize: 18),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Cashback % ────────────────────────────────────
-            Text(
-              l?.tr('promo_loyalty_cashback_label') ??
-                  'Pourcentage de cashback',
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.brand50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.tune_rounded,
+                size: 20, color: AppColors.brand600),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              l?.tr('promo_loyalty_dialog_title') ??
+                  'Configurer la fidélité',
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.brand950,
-              ),
+                  fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  l?.tr('promo_loyalty_cashback_hint') ??
-                      'Crédité au RDV terminé',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.secondary500),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.brand50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$_cashbackPercent%',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brand600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: AppColors.brand600,
-                inactiveTrackColor: AppColors.brand100,
-                thumbColor: AppColors.brand600,
-                overlayColor: AppColors.brand600.withValues(alpha: 0.1),
-                trackHeight: 3,
-              ),
-              child: Slider(
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _configRow(
+                title: l?.tr('promo_loyalty_cashback_label') ??
+                    'Pourcentage de cashback',
+                subtitle: l?.tr('promo_loyalty_cashback_hint') ??
+                    'Crédité au RDV terminé',
+                valueLabel: '$_cashbackPercent%',
                 value: _cashbackPercent.toDouble(),
                 min: 1,
                 max: 20,
@@ -2740,89 +2797,66 @@ class _LoyaltyConfigDialogState extends State<_LoyaltyConfigDialog> {
                 onChanged: (v) =>
                     setState(() => _cashbackPercent = v.round()),
               ),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Expiration ────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    l?.tr('promo_loyalty_never_expire') ??
-                        'Aucune expiration',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.brand950,
-                    ),
-                  ),
-                ),
-                Switch(
-                  value: _neverExpire,
-                  onChanged: (v) => setState(() => _neverExpire = v),
-                  activeTrackColor: AppColors.brand600,
-                ),
-              ],
-            ),
-            if (!_neverExpire) ...[
-              const SizedBox(height: 4),
+              const Divider(height: 24),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    l?.tr('promo_loyalty_expiration_label') ??
-                        'Durée de validité',
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.secondary500),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l?.tr('promo_loyalty_never_expire') ??
+                              'Aucune expiration',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.brand950,
+                          ),
+                        ),
+                        Text(
+                          l?.tr('promo_loyalty_never_expire_hint') ??
+                              'Les points ne périment jamais',
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.secondary400),
+                        ),
+                      ],
+                    ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.brand50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _weeksLabel(l, _expirationDays),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brand600,
-                      ),
-                    ),
+                  Switch(
+                    value: _neverExpire,
+                    activeTrackColor: AppColors.brand600,
+                    onChanged: (v) => setState(() => _neverExpire = v),
                   ),
                 ],
               ),
-              SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: AppColors.brand600,
-                  inactiveTrackColor: AppColors.brand100,
-                  thumbColor: AppColors.brand600,
-                  overlayColor:
-                      AppColors.brand600.withValues(alpha: 0.1),
-                  trackHeight: 3,
-                ),
-                child: Slider(
+              if (!_neverExpire) ...[
+                const SizedBox(height: 8),
+                _configRow(
+                  title: l?.tr('promo_loyalty_expiration_label') ??
+                      'Durée de validité',
+                  subtitle: l?.tr('promo_loyalty_expiration_hint') ??
+                      'Au-delà, les points sont annulés',
+                  valueLabel: _weeksLabel(l, _expirationDays),
                   value: _expirationDays.toDouble(),
                   min: _expMin.toDouble(),
                   max: _expMax.toDouble(),
                   divisions: (_expMax - _expMin) ~/ _expStep,
                   onChanged: (v) {
-                    final snapped =
-                        ((v / _expStep).round()) * _expStep;
+                    final snapped = ((v / _expStep).round()) * _expStep;
                     setState(() => _expirationDays = snapped);
                   },
                 ),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                l?.tr('promo_loyalty_non_retroactive') ??
+                    'Les changements ne s\'appliquent qu\'aux nouveaux RDV. Les points déjà crédités gardent leur % et leur date d\'expiration.',
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.secondary400),
               ),
             ],
-            const SizedBox(height: 6),
-            Text(
-              l?.tr('promo_loyalty_non_retroactive') ??
-                  'Les changements ne s\'appliquent qu\'aux nouveaux RDV. Les points déjà crédités gardent leur % et leur date d\'expiration.',
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.secondary500),
-            ),
-          ],
+          ),
         ),
       ),
       actions: [
@@ -2833,14 +2867,16 @@ class _LoyaltyConfigDialogState extends State<_LoyaltyConfigDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.brand600,
-            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
           ),
           onPressed: () => Navigator.pop<Map<String, dynamic>>(context, {
             'cashbackPercent': _cashbackPercent,
             'expirationDays': _expirationDays,
             'pointsNeverExpire': _neverExpire,
           }),
-          child: Text(l?.tr('common_save') ?? 'Enregistrer'),
+          child: Text(l?.tr('common_save') ?? 'Enregistrer',
+              style: const TextStyle(color: Colors.white)),
         ),
       ],
     );
