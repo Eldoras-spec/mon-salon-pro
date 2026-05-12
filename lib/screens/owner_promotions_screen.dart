@@ -2960,8 +2960,12 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                     ),
                     Text(
                       _enabled
-                          ? 'Promotions ciblées automatiques'
-                          : 'Désactivé',
+                          ? (AppLocalizations.of(context)
+                                  ?.tr('promo_ai_subtitle_on') ??
+                              'Promotions ciblées automatiques')
+                          : (AppLocalizations.of(context)
+                                  ?.tr('promo_ai_subtitle_off') ??
+                              'Désactivé'),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary400,
@@ -2998,15 +3002,17 @@ class _AiPromoToggleState extends State<_AiPromoToggle> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.brand100),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.tune_rounded,
+                    const Icon(Icons.tune_rounded,
                         size: 16, color: AppColors.brand600),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'Configurer les pourcentages',
-                      style: TextStyle(
+                      AppLocalizations.of(context)
+                              ?.tr('promo_ai_configure_percentages') ??
+                          'Configurer les pourcentages',
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: AppColors.brand600,

@@ -45,13 +45,17 @@
         <meta-data
             android:name="com.facebook.sdk.ClientToken"
             android:value="@string/facebook_client_token" />
-        <!-- Disable auto-init so we can gate it on ATT consent / GDPR -->
+        <!-- Android has no ATT prompt, so auto-init can run at app start.
+             AdvertiserID collection stays gated separately via Flutter's
+             setAdvertiserTracking() — kept false at manifest level so the
+             SDK can't send IDFA-equivalent before our consent layer runs.
+             iOS keeps AutoInit=false in Info.plist where ATT applies. -->
         <meta-data
             android:name="com.facebook.sdk.AutoInitEnabled"
-            android:value="false" />
+            android:value="true" />
         <meta-data
             android:name="com.facebook.sdk.AutoLogAppEventsEnabled"
-            android:value="false" />
+            android:value="true" />
         <meta-data
             android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
             android:value="false" />
