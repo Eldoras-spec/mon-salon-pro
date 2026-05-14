@@ -10,6 +10,7 @@ import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bot_quota_card.dart';
 import 'owner_promotions_screen.dart';
+import 'owner_subscription_screen.dart';
 
 /// Owner-facing config screen for the WhatsApp Zayna bot. Available
 /// from `Profil → Assistant BOT` for Business-plan owners.
@@ -1734,53 +1735,489 @@ class _FaqBaseCard extends StatelessWidget {
 
 // ── Business plan gate ────────────────────────────────────────────
 
-class _BusinessGate extends StatelessWidget {
+/// Upsell screen shown to Free + Essential plan owners when they tap the
+/// "Assistant BOT" entry. Replaces the previous flat "Business only"
+/// gate. Three sections:
+///   1. Hero header with a looping WhatsApp-style chat preview cycling
+///      through Zayna's capabilities (4 scenarios × 3s = 12s loop).
+///   2. Feature bullets that describe what Zayna does, in the owner's
+///      terms (not technical).
+///   3. CTA pushing to OwnerSubscriptionScreen for the upgrade.
+///
+/// Keeps the source order text-first for screen-readers; visual ordering
+/// is preserved via Column for native a11y tree.
+class _BusinessGate extends StatefulWidget {
   final AppLocalizations? l;
   const _BusinessGate({required this.l});
 
   @override
+  State<_BusinessGate> createState() => _BusinessGateState();
+}
+
+class _BusinessGateState extends State<_BusinessGate>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  int _scene = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          if (!mounted) return;
+          setState(() => _scene = (_scene + 1) % 4);
+          _ctrl.forward(from: 0);
+        }
+      });
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  // 4 scenarios, each a pair (client → Zayna). Stay short so they read
+  // at-a-glance during the 3s window. Texts are i18n-keyed.
+  List<({String tr, String fallback, bool fromZayna})> _scenes(int i) {
+    switch (i) {
+      case 0:
+        return [
+          (
+            tr: 'bot_upsell.scene1_client',
+            fallback: 'Salam, RDV mardi 18h pour une coupe ?',
+            fromZayna: false
+          ),
+          (
+            tr: 'bot_upsell.scene1_zayna',
+            fallback: "Bonjour ! Mardi 18h c'est libre avec Sarah. Je confirme ?",
+            fromZayna: true
+          ),
+        ];
+      case 1:
+        return [
+          (
+            tr: 'bot_upsell.scene2_client',
+            fallback: 'Tu te souviens de mes allergies ?',
+            fromZayna: false
+          ),
+          (
+            tr: 'bot_upsell.scene2_zayna',
+            fallback: 'Oui Yasmin, ammoniaque et sulfates. On reste sur Olaplex.',
+            fromZayna: true
+          ),
+        ];
+      case 2:
+        return [
+          (
+            tr: 'bot_upsell.scene3_client',
+            fallback: 'Vous ouvrez à quelle heure dimanche ?',
+            fromZayna: false
+          ),
+          (
+            tr: 'bot_upsell.scene3_zayna',
+            fallback: '10h - 19h en continu. À dimanche !',
+            fromZayna: true
+          ),
+        ];
+      default:
+        return [
+          (
+            tr: 'bot_upsell.scene4_zayna',
+            fallback: "Salut Marie 👋 RDV demain 14h avec Sophie. À demain !",
+            fromZayna: true
+          ),
+          (
+            tr: 'bot_upsell.scene4_client',
+            fallback: 'Merci, confirmé !',
+            fromZayna: false
+          ),
+        ];
+    }
+    // Unreachable — default returns above.
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+    final l = widget.l;
+    final scenes = _scenes(_scene);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ── Hero header ────────────────────────────────────────
             Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                color: AppColors.brand50,
-                shape: BoxShape.circle,
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.brand50,
+                    Color(0xFFFAFBF5),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.brand100),
               ),
-              child: const Icon(Icons.workspace_premium_rounded,
-                  color: AppColors.brand700, size: 28),
+              child: Column(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppColors.brand500,
+                          AppColors.brand700,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              AppColors.brand500.withValues(alpha: 0.3),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    l?.tr('bot_upsell.title') ??
+                        'Zayna, votre assistante WhatsApp',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.brand950,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l?.tr('bot_upsell.subtitle') ??
+                        'Elle répond, réserve et fidélise vos clients sur WhatsApp, 24h/24, en 4 langues.',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.secondary500,
+                      height: 1.45,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Animated chat preview ────────────────────────
+                  _ChatPreview(
+                    key: ValueKey('scene_$_scene'),
+                    bubbles: scenes,
+                    l: l,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              l?.tr('bot_settings.business_only_title') ??
-                  'Réservé au plan Business',
-              style: GoogleFonts.dmSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.brand950,
+
+            const SizedBox(height: 24),
+
+            // ── Feature bullets ─────────────────────────────────────
+            _Feature(
+              icon: Icons.chat_bubble_rounded,
+              iconBg: const Color(0xFFDCFCE7),
+              iconColor: const Color(0xFF16A34A),
+              title: l?.tr('bot_upsell.feat1_title') ??
+                  'Réservations 24/7 sur WhatsApp',
+              body: l?.tr('bot_upsell.feat1_body') ??
+                  'Plus aucun appel manqué la nuit ou le dimanche. Vos clients réservent directement par WhatsApp et Zayna prend le RDV à votre place.',
+            ),
+            const SizedBox(height: 14),
+            _Feature(
+              icon: Icons.favorite_rounded,
+              iconBg: const Color(0xFFFCE7F3),
+              iconColor: const Color(0xFFDB2777),
+              title: l?.tr('bot_upsell.feat2_title') ??
+                  'Mémoire client personnalisée',
+              body: l?.tr('bot_upsell.feat2_body') ??
+                  'Préférences, allergies, dernière prestation : Zayna se souvient de chaque cliente et adapte ses réponses sans que vous ayez à le lui dire.',
+            ),
+            const SizedBox(height: 14),
+            _Feature(
+              icon: Icons.flash_on_rounded,
+              iconBg: const Color(0xFFFEF3C7),
+              iconColor: const Color(0xFFD97706),
+              title: l?.tr('bot_upsell.feat3_title') ??
+                  'Rappels et promos automatiques',
+              body: l?.tr('bot_upsell.feat3_body') ??
+                  'Rappels J-1 et H-1 envoyés tout seuls, win-back des clientes inactives, promo anniversaire — sans rien faire de votre côté.',
+            ),
+            const SizedBox(height: 14),
+            _Feature(
+              icon: Icons.translate_rounded,
+              iconBg: const Color(0xFFDBEAFE),
+              iconColor: const Color(0xFF2563EB),
+              title: l?.tr('bot_upsell.feat4_title') ??
+                  'Quatre langues incluses',
+              body: l?.tr('bot_upsell.feat4_body') ??
+                  'Français, anglais, arabe, espagnol. Zayna détecte automatiquement la langue de chaque cliente et répond dans la même.',
+            ),
+
+            const SizedBox(height: 28),
+
+            // ── CTA ─────────────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OwnerSubscriptionScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.workspace_premium_rounded, size: 20),
+                label: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    l?.tr('bot_upsell.cta') ??
+                        'Passer à Business pour activer Zayna',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brand600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
+                ),
               ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              l?.tr('bot_upsell.cta_hint') ??
+                  '1000 messages WhatsApp inclus par mois',
               textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              l?.tr('bot_settings.business_only_body') ??
-                  'L\'assistante WhatsApp Zayna est incluse dans le plan Business. Passez Business pour activer la réception et la réponse automatique des messages clients.',
               style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.secondary500,
-                height: 1.4,
+                fontSize: 11,
+                color: AppColors.secondary400,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Two WhatsApp-style bubbles that fade in sequentially. Keyed on the
+/// scene index by the parent so swapping scenes rebuilds the widget and
+/// re-plays the entry animation.
+class _ChatPreview extends StatefulWidget {
+  const _ChatPreview({
+    super.key,
+    required this.bubbles,
+    required this.l,
+  });
+  final List<({String tr, String fallback, bool fromZayna})> bubbles;
+  final AppLocalizations? l;
+
+  @override
+  State<_ChatPreview> createState() => _ChatPreviewState();
+}
+
+class _ChatPreviewState extends State<_ChatPreview>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE5DD),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: SizedBox(
+        height: 130,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < widget.bubbles.length; i++) ...[
+              _AnimatedBubble(
+                controller: _ctrl,
+                delay: i == 0 ? 0.0 : 0.45,
+                text: widget.l?.tr(widget.bubbles[i].tr) ??
+                    widget.bubbles[i].fallback,
+                fromZayna: widget.bubbles[i].fromZayna,
+              ),
+              if (i < widget.bubbles.length - 1) const SizedBox(height: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedBubble extends StatelessWidget {
+  const _AnimatedBubble({
+    required this.controller,
+    required this.delay,
+    required this.text,
+    required this.fromZayna,
+  });
+
+  final AnimationController controller;
+  final double delay;
+  final String text;
+  final bool fromZayna;
+
+  @override
+  Widget build(BuildContext context) {
+    final anim = CurvedAnimation(
+      parent: controller,
+      curve: Interval(delay, (delay + 0.5).clamp(0, 1),
+          curve: Curves.easeOutCubic),
+    );
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, child) {
+        return Opacity(
+          opacity: anim.value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - anim.value) * 8),
+            child: child,
+          ),
+        );
+      },
+      child: Align(
+        alignment:
+            fromZayna ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              color: fromZayna ? const Color(0xFFDCF8C6) : Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(10),
+                topRight: const Radius.circular(10),
+                bottomLeft: Radius.circular(fromZayna ? 10 : 2),
+                bottomRight: Radius.circular(fromZayna ? 2 : 10),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF1F2A1B),
+                height: 1.35,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Feature extends StatelessWidget {
+  const _Feature({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconBg,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brand950,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                body,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.secondary500,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
