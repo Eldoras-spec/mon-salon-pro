@@ -753,6 +753,101 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
     );
   }
 
+  void _showCompletedActions() {
+    final l = AppLocalizations.of(context);
+    final a = widget.appointment;
+    if (a.status != 'completed') return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.secondary200,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                a.serviceName,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brand950,
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Color(0xFFDC2626), size: 20),
+              ),
+              title: Text(
+                l?.tr('appointments_cancel') ?? 'Annuler le rendez-vous',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                l?.tr('appointments_cancel_completed_hint') ??
+                    'Les points crédités au client seront retirés',
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.secondary400),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dctx) => AlertDialog(
+                    title: Text(l?.tr('appointments_cancel_completed_title') ??
+                        'Annuler ce rendez-vous terminé ?'),
+                    content: Text(
+                      l?.tr('appointments_cancel_completed_body') ??
+                          'Le rendez-vous passera en "Annulé" et les points de fidélité crédités au client seront supprimés. Action irréversible.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dctx, false),
+                        child: Text(l?.tr('common_cancel') ?? 'Retour'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dctx, true),
+                        style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626)),
+                        child: Text(l?.tr('common_confirm') ?? 'Confirmer'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  _updateStatus('cancelled');
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -779,10 +874,12 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
       _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
     };
 
-    final canAct = a.status == 'upcoming';
+    final canAct = a.status == 'upcoming' || a.status == 'completed';
 
     return InkWell(
-      onTap: canAct ? _showActions : null,
+      onTap: canAct
+          ? (a.status == 'completed' ? _showCompletedActions : _showActions)
+          : null,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -1029,7 +1126,10 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
   Map<String, dynamic>? _selectedService;
   Map<String, dynamic>? _selectedPack;
   TeamMemberModel? _selectedMember;
-  DateTime _selectedDate = DateTime.now();
+  // Set in `initState` once the salon's timezone is available so the
+  // default day shown matches the salon's wall-clock today, not the
+  // owner's device TZ (matters when the owner is travelling).
+  late DateTime _selectedDate;
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
   List<AppointmentModel> _existingAppointments = [];
@@ -1122,6 +1222,8 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
   @override
   void initState() {
     super.initState();
+    _selectedDate =
+        TimezoneHelper.salonWallClockNow(widget.salon.timezone);
     // Apply prefill from the optional widget params so the client-detail
     // "Book now" action lands the owner on a sheet that already knows
     // who they're booking for — name + phone filled, OTP skipped.

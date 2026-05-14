@@ -802,18 +802,41 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
   @override
   void initState() {
     super.initState();
+    // Initial focused month uses device TZ — the salon doc isn't loaded
+    // yet in initState. The post-frame callback re-anchors to the
+    // salon's wall-clock month once Riverpod has the data, which is the
+    // convention the web booking.js + Cloud Functions use when reading
+    // these ISO date keys. Cheap no-op when device TZ == salon TZ.
     final now = DateTime.now();
     _focusedMonth = DateTime(now.year, now.month);
     _unavailable = Set<String>.from(widget.member.unavailableDates);
     _unavailableSlots = Map<String, List<String>>.from(
       widget.member.unavailableSlots.map((k, v) => MapEntry(k, List<String>.from(v))),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tz = ref.read(ownerSalonProvider).value?.timezone;
+      if (tz == null) return;
+      final tzNow = TimezoneHelper.salonWallClockNow(tz);
+      if (tzNow.year != _focusedMonth.year || tzNow.month != _focusedMonth.month) {
+        setState(() => _focusedMonth = DateTime(tzNow.year, tzNow.month));
+      }
+    });
   }
 
   String _isoDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  String _todayKey() => _isoDate(DateTime.now());
+  /// Salon-TZ "now" — keys written here must match what the web/CF side
+  /// reads via `getUTCDate()` / `toISOString().slice(0,10)` on the
+  /// wall-clock-UTC appointment.dateTime. Falls back to device TZ only
+  /// when the salon document hasn't loaded yet (very brief startup).
+  DateTime _salonNow() {
+    final tz = ref.read(ownerSalonProvider).value?.timezone;
+    return tz == null ? DateTime.now() : TimezoneHelper.salonWallClockNow(tz);
+  }
+
+  String _todayKey() => _isoDate(_salonNow());
 
   bool get _isTodayFullyUnavailable => _unavailable.contains(_todayKey());
 
@@ -1358,10 +1381,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                     final key = _isoDate(date);
                     final isUnavailable = _unavailable.contains(key);
                     final isToday = _todayKey() == key;
-                    final isPast = date.isBefore(DateTime(
-                        DateTime.now().year,
-                        DateTime.now().month,
-                        DateTime.now().day));
+                    final tzNow = _salonNow();
+                    final isPast = date.isBefore(
+                        DateTime(tzNow.year, tzNow.month, tzNow.day));
 
                     return GestureDetector(
                       onTap: isPast ? null : () => _toggleDay(date),
@@ -1517,7 +1539,9 @@ class _MemberAddAppointmentSheetState
   final List<Map<String, dynamic>> _selectedServices = [];
   Map<String, dynamic>? _selectedService;
   Map<String, dynamic>? _selectedPack;
-  DateTime _selectedDate = DateTime.now();
+  // Anchored to salon TZ in `initState` so the date picker and the
+  // member's unavailability lookup agree on what "today" means.
+  late DateTime _selectedDate;
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _loading = false;
   List<AppointmentModel> _existingAppointments = [];
@@ -1608,6 +1632,7 @@ class _MemberAddAppointmentSheetState
   @override
   void initState() {
     super.initState();
+    _selectedDate = TimezoneHelper.salonWallClockNow(widget.salon.timezone);
     _snapTimeToOpenHours();
     _loadAppointments();
   }

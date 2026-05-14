@@ -20,6 +20,7 @@ import '../services/database_service.dart';
 import '../services/app_localizations.dart';
 import '../services/message_service.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 import 'owner_subscription_screen.dart';
 import 'conversations_screen.dart';
 import '../widgets/owner_tasks_card.dart';
@@ -560,6 +561,19 @@ class OwnerHomeScreen extends ConsumerWidget {
 
                       const SizedBox(height: 28),
 
+                      // ── Revenue by employee (Today / Week / Month) ──────
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        child: _RevenueByEmployeeCard(
+                          salon: salon,
+                          homeAppointments: appointmentsAsync.value ?? const [],
+                          currency: salon?.currency ?? 'MAD',
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
                       // ── Add-on services (premium Mon Salon offerings) ───
                       const _AddOnServicesSection(),
 
@@ -571,6 +585,369 @@ class OwnerHomeScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// ─── Revenue by employee card ────────────────────────────────────────────────
+//
+// Live revenue breakdown by team member, with Today/Week/Month segmented
+// control. Only counts `status == 'completed'` appointments. Today + Week
+// derive from `ownerHomeAppointmentsProvider` (already streaming ±7d);
+// Month watches `ownerCurrentMonthAppointmentsProvider` (calendar month).
+// Both are Riverpod streams → cache + listener built in, no manual cache.
+
+enum _RevenuePeriod { today, week, month }
+
+class _RevenueByEmployeeCard extends ConsumerStatefulWidget {
+  const _RevenueByEmployeeCard({
+    required this.salon,
+    required this.homeAppointments,
+    required this.currency,
+  });
+
+  final SalonModel? salon;
+  final List<AppointmentModel> homeAppointments;
+  final String currency;
+
+  @override
+  ConsumerState<_RevenueByEmployeeCard> createState() =>
+      _RevenueByEmployeeCardState();
+}
+
+class _RevenueByEmployeeCardState
+    extends ConsumerState<_RevenueByEmployeeCard> {
+  _RevenuePeriod _period = _RevenuePeriod.today;
+
+  ({DateTime start, DateTime end}) _range(_RevenuePeriod p, DateTime now) {
+    switch (p) {
+      case _RevenuePeriod.today:
+        final start = DateTime(now.year, now.month, now.day);
+        return (start: start, end: start.add(const Duration(days: 1)));
+      case _RevenuePeriod.week:
+        // ISO week: Monday → next Monday
+        final weekday = now.weekday; // 1 = Monday
+        final monday = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: weekday - 1));
+        return (start: monday, end: monday.add(const Duration(days: 7)));
+      case _RevenuePeriod.month:
+        final start = DateTime(now.year, now.month, 1);
+        final end = DateTime(now.year, now.month + 1, 1);
+        return (start: start, end: end);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final team = ref.watch(ownerTeamProvider).value ?? const [];
+
+    // Pick the right source stream based on selected period. Today + Week
+    // fit in the existing ±7d home stream (no extra reads). Month needs
+    // the dedicated calendar-month stream.
+    final List<AppointmentModel> source = _period == _RevenuePeriod.month
+        ? (ref.watch(ownerCurrentMonthAppointmentsProvider).value ?? const [])
+        : widget.homeAppointments;
+
+    // Salon-TZ wall-clock "now" so period bounds match the
+    // wall-clock-UTC convention used to store `appointment.dateTime`.
+    final now = TimezoneHelper.salonWallClockNow(widget.salon?.timezone);
+    final r = _range(_period, now);
+
+    // Filter: completed AND in range.
+    final filtered = source.where((a) {
+      if (a.status != 'completed') return false;
+      final dt = a.dateTime;
+      return !dt.isBefore(r.start) && dt.isBefore(r.end);
+    }).toList();
+
+    // Aggregate per assigned member. Legacy RDV without assignedMemberId
+    // fall into a silent "_unassigned" bucket so total == sum(members).
+    final byMember = <String, ({String name, double revenue, int count})>{};
+    double total = 0;
+    for (final a in filtered) {
+      final mid = a.assignedMemberId ?? '_unassigned';
+      final mname = a.assignedMemberName ??
+          (l?.tr('home_revenue_unassigned') ?? 'Non assigné');
+      final cur = byMember[mid];
+      final newRev = (cur?.revenue ?? 0) + a.price;
+      final newCount = (cur?.count ?? 0) + 1;
+      byMember[mid] = (name: mname, revenue: newRev, count: newCount);
+      total += a.price;
+    }
+
+    // Sort: members with revenue first (desc), then 0-revenue members
+    // alphabetically. Pull all active members from the team so the
+    // owner sees who's at 0 in the period (useful signal).
+    final activeMembers = team.where((m) => m.isActive).toList();
+    final lines = <({String name, double revenue, int count, String? photoUrl})>[];
+    for (final m in activeMembers) {
+      final agg = byMember.remove(m.id);
+      lines.add((
+        name: m.name,
+        revenue: agg?.revenue ?? 0,
+        count: agg?.count ?? 0,
+        photoUrl: m.photoUrl,
+      ));
+    }
+    // Any remaining buckets = RDV with assignedMemberId not in active team
+    // (deactivated member or legacy data). Surface them so total matches.
+    for (final entry in byMember.entries) {
+      lines.add((
+        name: entry.value.name,
+        revenue: entry.value.revenue,
+        count: entry.value.count,
+        photoUrl: null,
+      ));
+    }
+    lines.sort((a, b) {
+      if (a.revenue != b.revenue) return b.revenue.compareTo(a.revenue);
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    final totalLabel = total >= 1000
+        ? '${(total / 1000).toStringAsFixed(1)}k ${CurrencyHelper.symbol(widget.currency)}'
+        : CurrencyHelper.format(total, widget.currency);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.payments_outlined,
+                    color: AppColors.brand600, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l?.tr('home_revenue_title') ?? 'Revenus',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brand950,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Segmented control
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.brand50,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                for (final p in _RevenuePeriod.values)
+                  Expanded(
+                    child: _PeriodPill(
+                      label: switch (p) {
+                        _RevenuePeriod.today =>
+                          l?.tr('home_revenue_today') ?? "Aujourd'hui",
+                        _RevenuePeriod.week =>
+                          l?.tr('home_revenue_week') ?? 'Semaine',
+                        _RevenuePeriod.month =>
+                          l?.tr('home_revenue_month') ?? 'Mois',
+                      },
+                      selected: _period == p,
+                      onTap: () => setState(() => _period = p),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Total
+          Text(
+            totalLabel,
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brand950,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            (l?.tr('home_revenue_completed_count') ??
+                    '{n} RDV terminés')
+                .replaceAll('{n}', '${filtered.length}'),
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.secondary400,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+
+          // Per-member breakdown
+          if (lines.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                l?.tr('home_revenue_no_members') ??
+                    'Ajoutez des membres pour voir le détail',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.secondary400),
+              ),
+            )
+          else
+            ...lines.map((line) {
+              final pct = total > 0 ? (line.revenue / total).clamp(0.0, 1.0) : 0.0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppColors.brand100,
+                      backgroundImage: line.photoUrl != null
+                          ? NetworkImage(line.photoUrl!)
+                          : null,
+                      child: line.photoUrl == null
+                          ? Text(
+                              line.name.isNotEmpty
+                                  ? line.name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brand700,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            line.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.brand950,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              minHeight: 4,
+                              backgroundColor: AppColors.brand50,
+                              valueColor: const AlwaysStoppedAnimation(
+                                  AppColors.brand500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          CurrencyHelper.format(
+                              line.revenue, widget.currency),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.brand950,
+                          ),
+                        ),
+                        Text(
+                          '${line.count} RDV',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.secondary400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodPill extends StatelessWidget {
+  const _PeriodPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected
+                  ? AppColors.brand700
+                  : AppColors.secondary400,
+            ),
+          ),
+        ),
       ),
     );
   }

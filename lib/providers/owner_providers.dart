@@ -80,6 +80,25 @@ final ownerNoShowWindowAppointmentsProvider =
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
+/// Live stream of appointments for the current calendar month (salon TZ).
+/// Used by the home revenue-by-employee widget when the Month filter is
+/// active. Today + Week filters reuse [ownerHomeAppointmentsProvider]
+/// (±7d) which already covers their range, so this provider only kicks
+/// in when the owner taps "Mois".
+///
+/// Bounds: 1st of the current month at 00:00 → 1st of next month at 00:00.
+/// Wall-clock comparisons elsewhere (appointment.dateTime is wall-clock-
+/// UTC) match these bounds without TZ conversion.
+final ownerCurrentMonthAppointmentsProvider =
+    StreamProvider<List<AppointmentModel>>((ref) {
+  final salon = ref.watch(ownerSalonProvider).value;
+  if (salon == null) return Stream.value([]);
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, 1);
+  final end = DateTime(now.year, now.month + 1, 1);
+  return _db.streamSalonAppointmentsForRange(salon.id, start, end);
+});
+
 /// Live stream of inventory items for the owner's salon.
 final ownerInventoryProvider = StreamProvider<List<InventoryModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
