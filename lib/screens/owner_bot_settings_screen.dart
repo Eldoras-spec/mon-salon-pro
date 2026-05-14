@@ -20,10 +20,10 @@ import 'owner_subscription_screen.dart';
 ///
 /// Mutations write back to `salons/{id}.botConfig.*` directly (rules
 /// allow owner-only updates on their own salon doc).
-class OwnerBotSettingsScreen extends ConsumerWidget {
-  const OwnerBotSettingsScreen({super.key});
-
-  void _showHowItWorks(BuildContext context) {
+/// Exposed at top level so the `_BusinessGate` upsell + the header
+/// help-icon both open the same sheet without duplicating the
+/// ~180-line capability content.
+void showZaynaCapabilitiesSheet(BuildContext context) {
     final l = AppLocalizations.of(context);
     showModalBottomSheet<void>(
       context: context,
@@ -208,6 +208,9 @@ class OwnerBotSettingsScreen extends ConsumerWidget {
     );
   }
 
+class OwnerBotSettingsScreen extends ConsumerWidget {
+  const OwnerBotSettingsScreen({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
@@ -238,7 +241,7 @@ class OwnerBotSettingsScreen extends ConsumerWidget {
                 color: AppColors.brand600, size: 22),
             tooltip: l?.tr('bot_settings.help_tooltip') ??
                 'Comment ça marche ?',
-            onPressed: () => _showHowItWorks(context),
+            onPressed: () => showZaynaCapabilitiesSheet(context),
           ),
         ],
       ),
@@ -1975,6 +1978,38 @@ class _BusinessGateState extends State<_BusinessGate>
             ),
 
             const SizedBox(height: 28),
+
+            // ── See-more button ─────────────────────────────────────
+            // Same sheet the header help-icon opens on the Business
+            // version of this screen — reusing it keeps a single source
+            // of truth for "what Zayna can do".
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => showZaynaCapabilitiesSheet(context),
+                icon: const Icon(Icons.menu_book_rounded, size: 18),
+                label: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    l?.tr('bot_upsell.see_capabilities') ??
+                        'Voir toutes les capacités',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brand700,
+                  side: const BorderSide(color: AppColors.brand200),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // ── CTA ─────────────────────────────────────────────────
             SizedBox(
