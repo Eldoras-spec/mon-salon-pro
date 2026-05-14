@@ -1911,7 +1911,7 @@ class _BusinessGateState extends State<_BusinessGate>
                   const SizedBox(height: 6),
                   Text(
                     l?.tr('bot_upsell.subtitle') ??
-                        'Elle répond, réserve et fidélise vos clients sur WhatsApp, 24h/24, en 4 langues.',
+                        'Elle répond, réserve et fidélise vos clients sur WhatsApp, 24h/24, dans leur langue.',
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.secondary500,
@@ -1965,13 +1965,13 @@ class _BusinessGateState extends State<_BusinessGate>
             ),
             const SizedBox(height: 14),
             _Feature(
-              icon: Icons.translate_rounded,
+              icon: Icons.insights_rounded,
               iconBg: const Color(0xFFDBEAFE),
               iconColor: const Color(0xFF2563EB),
               title: l?.tr('bot_upsell.feat4_title') ??
-                  'Quatre langues incluses',
+                  'Votre tableau de bord WhatsApp',
               body: l?.tr('bot_upsell.feat4_body') ??
-                  'Français, anglais, arabe, espagnol. Zayna détecte automatiquement la langue de chaque cliente et répond dans la même.',
+                  'Demandez à Zayna depuis votre propre WhatsApp : « CA d\'avril ? », « Qui est libre vendredi 15h ? », « Mes top clientes VIP ? ». Elle répond directement.',
             ),
 
             const SizedBox(height: 28),

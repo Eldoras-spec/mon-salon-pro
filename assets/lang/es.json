@@ -1402,7 +1402,7 @@
   "bot_settings.faqbase_a_hint": "Ej: Sí, en pelo oscuro ofrecemos mechas progresivas…",
 
   "bot_upsell.title": "Zayna, tu asistente de WhatsApp",
-  "bot_upsell.subtitle": "Responde, reserva y fideliza a tus clientes en WhatsApp 24/7, en 4 idiomas.",
+  "bot_upsell.subtitle": "Responde, reserva y fideliza a tus clientes en WhatsApp 24/7, en su idioma.",
   "bot_upsell.scene1_client": "Hola, ¿una cita el martes a las 18:00 para un corte?",
   "bot_upsell.scene1_zayna": "¡Hola! El martes 18:00 está libre con Sarah. ¿Lo confirmo?",
   "bot_upsell.scene2_client": "¿Recuerdas mis alergias?",
@@ -1417,8 +1417,8 @@
   "bot_upsell.feat2_body": "Preferencias, alergias, último servicio: Zayna recuerda a cada clienta y adapta sus respuestas sin que tengas que decírselo.",
   "bot_upsell.feat3_title": "Recordatorios y promos automáticos",
   "bot_upsell.feat3_body": "Recordatorios D-1 y H-1 enviados solos, win-back de clientas inactivas, promo de cumpleaños — sin que hagas nada.",
-  "bot_upsell.feat4_title": "Cuatro idiomas incluidos",
-  "bot_upsell.feat4_body": "Francés, inglés, árabe, español. Zayna detecta automáticamente el idioma de cada clienta y responde en el mismo.",
+  "bot_upsell.feat4_title": "Tu panel desde WhatsApp",
+  "bot_upsell.feat4_body": "Pregunta a Zayna desde tu propio WhatsApp: «¿Ingresos de abril?», «¿Quién está libre el viernes 15h?», «¿Mis clientas VIP?». Te responde al instante.",
   "bot_upsell.cta": "Pasar a Business para activar Zayna",
   "bot_upsell.cta_hint": "1000 mensajes de WhatsApp incluidos al mes",
 
