@@ -330,6 +330,8 @@ class _Body extends StatelessWidget {
               const SizedBox(height: 16),
               _PauseCard(salonId: salonId, paused: paused),
               const SizedBox(height: 16),
+              _ClientCapCard(salonId: salonId, cfg: cfg),
+              const SizedBox(height: 16),
               _ProactivesCard(
                 salonId: salonId,
                 pro: pro,
@@ -1287,6 +1289,219 @@ class _PauseCard extends StatelessWidget {
             onChanged: (v) => _toggle(context, v),
             activeColor: Colors.red.shade600,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Per-client daily message cap ──────────────────────────────────
+//
+// Owner-tunable rate-limit applied by `_checkClientDailyCap` in
+// whatsappBot.ts. When `enabled == false`, the CF skips the cap check
+// entirely (a client can send unlimited messages in 24h). When enabled,
+// the slider value (clamped 30..100 in UI; CF clamps 1..500 defensively)
+// becomes the per-client per-day ceiling. Hitting the ceiling routes to
+// the existing handover-to-owner flow.
+//
+// Defaults preserve legacy behavior: `enabled=true, messagesPerDay=30`
+// when the field is missing on a salon doc.
+
+class _ClientCapCard extends StatefulWidget {
+  final String salonId;
+  final Map<String, dynamic> cfg;
+  const _ClientCapCard({required this.salonId, required this.cfg});
+
+  @override
+  State<_ClientCapCard> createState() => _ClientCapCardState();
+}
+
+class _ClientCapCardState extends State<_ClientCapCard> {
+  // Local mirror so the slider stays responsive while the write
+  // round-trips Firestore. Debounced commit on slider end.
+  late bool _enabled;
+  late double _value;
+
+  @override
+  void initState() {
+    super.initState();
+    final raw = widget.cfg['clientDailyCap'];
+    final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    _enabled = map['enabled'] != false; // default true
+    final v = (map['messagesPerDay'] as num?)?.toInt() ?? 30;
+    _value = v.clamp(30, 100).toDouble();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ClientCapCard old) {
+    super.didUpdateWidget(old);
+    // Reflect external changes (e.g. another device, or after a
+    // Firestore round-trip) without clobbering an in-flight slide.
+    final raw = widget.cfg['clientDailyCap'];
+    final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    final remoteEnabled = map['enabled'] != false;
+    final remoteValue =
+        ((map['messagesPerDay'] as num?)?.toInt() ?? 30).clamp(30, 100).toDouble();
+    if (remoteEnabled != _enabled || (remoteValue - _value).abs() > 0.01) {
+      setState(() {
+        _enabled = remoteEnabled;
+        _value = remoteValue;
+      });
+    }
+  }
+
+  Future<void> _writeEnabled(bool v) async {
+    setState(() => _enabled = v);
+    await FirebaseFirestore.instance
+        .collection('salons')
+        .doc(widget.salonId)
+        .update({
+      'botConfig.clientDailyCap.enabled': v,
+      'botConfig.clientDailyCap.messagesPerDay': _value.toInt(),
+    });
+  }
+
+  Future<void> _writeValue(int v) async {
+    await FirebaseFirestore.instance
+        .collection('salons')
+        .doc(widget.salonId)
+        .update({'botConfig.clientDailyCap.messagesPerDay': v});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.secondary100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.brand50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.speed_rounded,
+                  color: AppColors.brand700,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l?.tr('bot_settings.client_cap_title') ??
+                          'Limite par client (24h)',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.brand950,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _enabled
+                          ? (l?.tr('bot_settings.client_cap_desc_on') ??
+                              'Plafond le nombre de messages que Zayna traite par client et par jour.')
+                          : (l?.tr('bot_settings.client_cap_desc_off') ??
+                              'Aucune limite — Zayna répond sans plafond par client.'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.secondary500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _enabled,
+                onChanged: _writeEnabled,
+                activeColor: AppColors.brand600,
+              ),
+            ],
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: AppColors.secondary100),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    (l?.tr('bot_settings.client_cap_slider_label') ??
+                            '{n} messages / client / jour')
+                        .replaceAll('{n}', '${_value.toInt()}'),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${_value.toInt()}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.brand700,
+                  ),
+                ),
+              ],
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                activeTrackColor: AppColors.brand600,
+                inactiveTrackColor: AppColors.brand100,
+                thumbColor: AppColors.brand700,
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 16),
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 8),
+              ),
+              child: Slider(
+                value: _value,
+                min: 30,
+                max: 100,
+                divisions: 7, // 30, 40, 50, 60, 70, 80, 90, 100
+                onChanged: (v) => setState(() => _value = v),
+                onChangeEnd: (v) => _writeValue(v.toInt()),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('30',
+                    style: const TextStyle(
+                        fontSize: 10, color: AppColors.secondary400)),
+                Text('100',
+                    style: const TextStyle(
+                        fontSize: 10, color: AppColors.secondary400)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l?.tr('bot_settings.client_cap_hint') ??
+                  'Au-delà, Zayna transfère la conversation à votre WhatsApp pour que vous repreniez la main.',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.secondary400,
+                height: 1.45,
+              ),
+            ),
+          ],
         ],
       ),
     );
