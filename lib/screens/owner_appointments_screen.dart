@@ -18,7 +18,6 @@ import '../utils/timezone_helper.dart';
 import '../widgets/country_phone_field.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/reschedule_appointment_sheet.dart';
-import '../widgets/whatsapp_otp_dialog.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
 
@@ -1101,10 +1100,8 @@ class OwnerAddAppointmentSheet extends StatefulWidget {
   /// "Book now" action.
   final String? initialClientName;
 
-  /// Pre-fills the verified WhatsApp number in E.164 format
-  /// (e.g. `+212612345678`). When set we ALSO mark it as
-  /// `_verifiedWalkInWhatsapp` so the OTP step is skipped — the
-  /// client already exists in this salon's summaries.
+  /// Pre-fills the WhatsApp number in E.164 format
+  /// (e.g. `+212612345678`) from the client-detail "Book now" flow.
   final String? initialClientPhoneE164;
 
   @override
@@ -1118,7 +1115,6 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
 
   final _clientNameCtrl = TextEditingController();
   String? _clientWhatsappE164;
-  String? _verifiedWalkInWhatsapp;
   // Multi-service selection (cap 5). _selectedService is kept in sync with
   // _selectedServices.first for compatibility with existing single-service
   // logic paths (slot checks, employee picker).
@@ -1232,7 +1228,6 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
     }
     if (widget.initialClientPhoneE164 != null && widget.initialClientPhoneE164!.isNotEmpty) {
       _clientWhatsappE164 = widget.initialClientPhoneE164;
-      _verifiedWalkInWhatsapp = widget.initialClientPhoneE164;
     }
     _snapTimeToOpenHours();
     _loadAppointments();
@@ -1850,24 +1845,14 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       return;
     }
 
-    // WhatsApp OTP verification — pre-check Business plan server-side.
-    // Free/Essentiel salons short-circuit silently (no dialog opens).
-    // Business salons get the dialog after OTP has been sent. Field is
-    // optional: skip entirely if no WA number was entered.
-    final whatsapp = _clientWhatsappE164;
-    if (whatsapp != null && whatsapp.isNotEmpty &&
-        _verifiedWalkInWhatsapp != whatsapp) {
-      final result = await WhatsappOtpDialog.showForWalkIn(
-        context, whatsapp, widget.salon.id,
-      );
-      if (!mounted) return;
-      if (result == null) {
-        _showError(l?.tr('appointments_walkin_otp_required') ??
-            'Vérification WhatsApp annulée. Réessayez ou laissez le champ vide.');
-        return;
-      }
-      _verifiedWalkInWhatsapp = whatsapp;
-    }
+    // WhatsApp OTP intentionally skipped here. The OTP anti-saturation
+    // feature exists to protect the salon's planning from fake bookings
+    // posted by anonymous users via the public website / Zayna walk-in
+    // flow. When the appointment is created from the Pro app, the
+    // owner (or a trusted gérant) is the one entering the number, so
+    // the fraud vector doesn't apply — and forcing the client to read
+    // a code in front of the owner adds noisy friction. The number is
+    // still saved on the appointment doc for messaging / waitlist.
 
     // Pack mode → auto-assign and create chained appointments
     if (_selectedPack != null) {
@@ -2338,9 +2323,6 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
               onChanged: (e164) {
                 setState(() {
                   _clientWhatsappE164 = e164;
-                  if (_verifiedWalkInWhatsapp != e164) {
-                    _verifiedWalkInWhatsapp = null;
-                  }
                 });
               },
             ),
