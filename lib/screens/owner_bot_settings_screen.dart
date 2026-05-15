@@ -1327,7 +1327,7 @@ class _ClientCapCardState extends State<_ClientCapCard> {
     super.initState();
     final raw = widget.cfg['clientDailyCap'];
     final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
-    _enabled = map['enabled'] != false; // default true
+    _enabled = map['enabled'] == true; // default OFF (opt-in)
     final v = (map['messagesPerDay'] as num?)?.toInt() ?? 30;
     _value = v.clamp(30, 100).toDouble();
   }
@@ -1339,7 +1339,7 @@ class _ClientCapCardState extends State<_ClientCapCard> {
     // Firestore round-trip) without clobbering an in-flight slide.
     final raw = widget.cfg['clientDailyCap'];
     final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
-    final remoteEnabled = map['enabled'] != false;
+    final remoteEnabled = map['enabled'] == true;
     final remoteValue =
         ((map['messagesPerDay'] as num?)?.toInt() ?? 30).clamp(30, 100).toDouble();
     if (remoteEnabled != _enabled || (remoteValue - _value).abs() > 0.01) {
@@ -1351,6 +1351,45 @@ class _ClientCapCardState extends State<_ClientCapCard> {
   }
 
   Future<void> _writeEnabled(bool v) async {
+    // When activating, show an info dialog so the owner understands
+    // what the cap protects against (quota abuse from a single client
+    // burning their monthly Zayna message budget). On cancel, the
+    // toggle stays off — no Firestore write.
+    if (v) {
+      final l = AppLocalizations.of(context);
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dCtx) => AlertDialog(
+          title: Text(
+            l?.tr('bot_settings.client_cap_enable_title') ??
+                'Activer la limite par client ?',
+            style: GoogleFonts.dmSans(
+                fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            l?.tr('bot_settings.client_cap_enable_body') ??
+                'Cette option plafonne le nombre de messages que Zayna traite par client et par 24h. Elle évite qu\'un seul utilisateur (curieux ou spammeur) ne consomme votre quota mensuel à lui seul. Au-delà du plafond, Zayna transfère la conversation à votre WhatsApp.',
+            style: const TextStyle(fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: Text(
+                l?.tr('bot_settings.client_cap_enable_ok') ?? 'Activer',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.brand700),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
     setState(() => _enabled = v);
     await FirebaseFirestore.instance
         .collection('salons')
