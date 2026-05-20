@@ -136,6 +136,12 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
       if (prevUser == null && nextUser != null) {
         ref.read(profileSelectedProvider.notifier).state = false;
         ref.read(activeTeamMemberProvider.notifier).state = null;
+        // Drop any cached `null` from a previous orphan-user session.
+        // userModelAsync.when uses skipLoadingOnReload, so without this
+        // invalidate the new login briefly keeps the previous `null`,
+        // which triggers the orphan-signout branch and bounces the user
+        // back to LoginScreen.
+        ref.invalidate(userModelProvider);
         RevenueCatService.loginUser(nextUser.uid);
         FbEventsService.setUserId(nextUser.uid);
       } else if (prevUser != null && nextUser == null) {

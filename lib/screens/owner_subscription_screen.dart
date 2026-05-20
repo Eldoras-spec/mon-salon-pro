@@ -164,35 +164,35 @@ class _Body extends StatelessWidget {
             const SizedBox(height: 16),
           ],
           // ── Card payments (Stripe Connect) ────────────────────
-          if (!salon.isFree) ...[
-            Text(
-              l?.tr('stripe_connect.section_title') ??
-                  'Paiements par carte',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.secondary600,
-              ),
+          // Available on all plans — commission varies (5% Free / 3%
+          // Essentiel / 0% Business), enforced server-side at payout.
+          Text(
+            l?.tr('stripe_connect.section_title') ??
+                'Paiements par carte',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.secondary600,
             ),
-            const SizedBox(height: 8),
-            _ActionTile(
-              icon: Icons.credit_card_rounded,
-              color: AppColors.brand600,
-              title: l?.tr('stripe_connect.tile_title') ??
-                  'Stripe Connect Express',
-              subtitle: l?.tr('stripe_connect.tile_subtitle') ??
-                  'Acomptes et paiements lors de la réservation',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const OwnerStripeConnectScreen(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
+          ),
+          const SizedBox(height: 8),
+          _ActionTile(
+            icon: Icons.credit_card_rounded,
+            color: AppColors.brand600,
+            title: l?.tr('stripe_connect.tile_title') ??
+                'Stripe Connect Express',
+            subtitle: l?.tr('stripe_connect.tile_subtitle') ??
+                'Acomptes et paiements lors de la réservation',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const OwnerStripeConnectScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
           // ── Manage payment (disabled until RevenueCat) ────────
           Opacity(
             opacity: 0.5,

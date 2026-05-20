@@ -22,6 +22,7 @@ class AppConstants {
     {'name': 'Hammam & Spa', 'icon': Icons.hot_tub},
     {'name': 'Soin visage', 'icon': Icons.face},
     {'name': 'Manucure', 'icon': Icons.back_hand},
+    {'name': 'Épilation', 'icon': Icons.auto_fix_high},
     {'name': 'Massage', 'icon': Icons.spa},
     {'name': 'Soin corps', 'icon': Icons.self_improvement},
     {'name': 'Tatouage', 'icon': Icons.draw},

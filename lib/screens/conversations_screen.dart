@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../theme/app_colors.dart';
 import '../models/conversation_model.dart';
-import '../services/message_service.dart';
+import '../providers/messaging_providers.dart';
 import 'chat_screen.dart';
 import '../services/app_localizations.dart';
 
-class ConversationsScreen extends StatelessWidget {
+class ConversationsScreen extends ConsumerWidget {
   const ConversationsScreen({
     super.key,
     required this.currentUserId,
@@ -23,11 +24,11 @@ class ConversationsScreen extends StatelessWidget {
   final String? salonId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
-    final stream = isClient
-        ? MessageService().getClientConversations(currentUserId)
-        : MessageService().getOwnerConversations(salonId!);
+    final convosAsync = isClient
+        ? ref.watch(clientConversationsProvider(currentUserId))
+        : ref.watch(ownerConversationsProvider(salonId!));
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -52,20 +53,22 @@ class ConversationsScreen extends StatelessWidget {
             ),
           ),
 
-          StreamBuilder<List<ConversationModel>>(
-            stream: stream,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const SliverFillRemaining(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.brand600),
-                  ),
-                );
-              }
-
-              final convs = snap.data ?? [];
-
+          convosAsync.when(
+            loading: () => const SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.brand600),
+              ),
+            ),
+            error: (e, _) => SliverFillRemaining(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text('Erreur: $e',
+                      style: TextStyle(color: AppColors.secondary400)),
+                ),
+              ),
+            ),
+            data: (convs) {
               if (convs.isEmpty) {
                 return SliverFillRemaining(
                   child: Center(

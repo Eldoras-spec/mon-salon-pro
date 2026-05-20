@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/team_member_model.dart';
 import '../providers/team_providers.dart';
 import '../services/database_service.dart';
+import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
 import '../services/app_localizations.dart';
 import '../widgets/country_phone_field.dart';
@@ -28,6 +29,14 @@ class _OwnerOnboardingStep5ScreenState
 
   String get _salonId =>
       (widget.salonData['ownerId'] as String?) ?? '';
+
+  String get _plan =>
+      (widget.salonData['plan'] as String?) ?? PlanConfig.planFree;
+
+  bool get _isFreePlan => _plan == PlanConfig.planFree;
+
+  bool get _atFreeCap =>
+      _isFreePlan && _members.length >= PlanConfig.freeTeamMemberCap;
 
   @override
   void initState() {
@@ -77,6 +86,10 @@ class _OwnerOnboardingStep5ScreenState
   }
 
   void _showAddMemberSheet() {
+    if (_atFreeCap) {
+      _showFreeCapDialog();
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -86,6 +99,45 @@ class _OwnerOnboardingStep5ScreenState
         onAdded: (member) {
           setState(() => _members.add(member));
         },
+      ),
+    );
+  }
+
+  void _showFreeCapDialog() {
+    final l = AppLocalizations.of(context);
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.group_add_outlined,
+              color: Colors.amber.shade800, size: 28),
+        ),
+        title: Text(
+          l?.tr('team_cap_title') ?? 'Limite du plan Free',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: Text(
+          l?.tr('team_cap_body') ??
+              'Le plan Free autorise jusqu\'à 2 employés. Passez au plan Essentiel pour une équipe illimitée (3 mois offerts).',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary600),
+        ),
+        actions: [
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: Text(l?.tr('common_ok') ?? 'OK'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1101,27 +1101,6 @@ class DatabaseService {
         });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Submit a review. Salon rating/reviewCount are recomputed server-side
-  /// by the `onReviewWrite` Cloud Function — clients only write the review doc.
-  Future<void> submitReview({
-    required String salonId,
-    required String userId,
-    required String userName,
-    required int rating,
-    required String comment,
-  }) async {
-    await _firestore.collection('reviews').add({
-      'salonId': salonId,
-      'userId': userId,
-      'userName': userName,
-      'rating': rating,
-      'comment': comment,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
   // ─── Update single salon field ───────────────────────────────────────────
 
   Future<void> updateSalonField(String salonId, String field, dynamic value) async {
