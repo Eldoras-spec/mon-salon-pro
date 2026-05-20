@@ -188,47 +188,76 @@ class MessageService {
 
   // ── Streams ───────────────────────────────────────────────────────────────
 
-  /// All conversations for a client, sorted by most recent.
+  /// Max conversations / messages fetched per stream. UI shows "Load older"
+  /// to paginate beyond this window.
+  static const int _conversationsLimit = 50;
+  static const int _messagesLimit = 50;
+
+  /// 50 most recent conversations for a client.
+  /// Requires composite index (clientId ASC, lastMessageAt DESC).
   Stream<List<ConversationModel>> getClientConversations(String clientId) {
     return _db
         .collection('conversations')
         .where('clientId', isEqualTo: clientId)
+        .orderBy('lastMessageAt', descending: true)
+        .limit(_conversationsLimit)
         .snapshots()
-        .map((snap) {
-      final list =
-          snap.docs.map((d) => ConversationModel.fromFirestore(d)).toList();
-      list.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
-      return list;
-    });
+        .map((snap) =>
+            snap.docs.map((d) => ConversationModel.fromFirestore(d)).toList());
   }
 
-  /// All conversations for a salon (owner view), sorted by most recent.
+  /// 50 most recent conversations for a salon (owner view).
   /// Filter by ownerId (not salonId) so the Firestore rule
   /// `read if resource.data.ownerId == request.auth.uid` can validate the
   /// query is safe. `salonId == ownerId` by convention (salon doc id = owner uid).
+  /// Requires composite index (ownerId ASC, lastMessageAt DESC).
   Stream<List<ConversationModel>> getOwnerConversations(String ownerId) {
     return _db
         .collection('conversations')
         .where('ownerId', isEqualTo: ownerId)
+        .orderBy('lastMessageAt', descending: true)
+        .limit(_conversationsLimit)
         .snapshots()
-        .map((snap) {
-      final list =
-          snap.docs.map((d) => ConversationModel.fromFirestore(d)).toList();
-      list.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
-      return list;
-    });
+        .map((snap) =>
+            snap.docs.map((d) => ConversationModel.fromFirestore(d)).toList());
   }
 
-  /// Messages for a conversation, ordered oldest → newest.
+  /// 50 most recent messages for a conversation, returned oldest → newest.
   Stream<List<MessageModel>> getMessages(String convId) {
     return _db
         .collection('conversations')
         .doc(convId)
         .collection('messages')
-        .orderBy('sentAt')
+        .orderBy('sentAt', descending: true)
+        .limit(_messagesLimit)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => MessageModel.fromFirestore(d)).toList());
+        .map((snap) => snap.docs
+            .map((d) => MessageModel.fromFirestore(d))
+            .toList()
+            .reversed
+            .toList());
+  }
+
+  /// Fetch [_messagesLimit] older messages BEFORE [olderThan] (sentAt cursor).
+  /// One-shot (no stream). Used by chat screen's "Load older" UI. Returns
+  /// messages oldest → newest. Empty list = no more history.
+  Future<List<MessageModel>> getOlderMessages(
+    String convId,
+    DateTime olderThan,
+  ) async {
+    final snap = await _db
+        .collection('conversations')
+        .doc(convId)
+        .collection('messages')
+        .where('sentAt', isLessThan: Timestamp.fromDate(olderThan))
+        .orderBy('sentAt', descending: true)
+        .limit(_messagesLimit)
+        .get();
+    return snap.docs
+        .map((d) => MessageModel.fromFirestore(d))
+        .toList()
+        .reversed
+        .toList();
   }
 
   /// Total unread messages for the owner across their salon.
@@ -281,6 +310,7 @@ class MessageService {
     double? proposedPrice,
     int? proposedDuration,
     String? ownerResponse,
+    String? proposedServiceName,
   }) async {
     final data = <String, dynamic>{
       'customRequestStatus': status,
@@ -288,6 +318,7 @@ class MessageService {
     if (proposedPrice != null) data['proposedPrice'] = proposedPrice;
     if (proposedDuration != null) data['proposedDuration'] = proposedDuration;
     if (ownerResponse != null) data['ownerResponse'] = ownerResponse;
+    if (proposedServiceName != null) data['proposedServiceName'] = proposedServiceName;
 
     await _db
         .collection('conversations')

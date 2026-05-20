@@ -1958,16 +1958,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       );
 
       await DatabaseService().createAppointment(appointment);
-
-      // Notify the assigned member
-      final timeLabel =
-          '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-      await DatabaseService().saveNotification(
-        userId: 'team_${widget.salon.id}_${_selectedMember!.id}',
-        title: l?.tr('appointments_new_assignment_title') ?? 'Nouveau RDV assigné',
-        body: (l?.tr('appointments_new_assignment_body') ?? '{service} avec {client} le {date} à {time}').replaceAll('{service}', serviceName).replaceAll('{client}', clientName).replaceAll('{date}', DateFormat('d MMM', 'fr_FR').format(dateTime)).replaceAll('{time}', timeLabel),
-        type: 'assignment',
-      );
+      // The team assignment notif is written server-side by
+      // `onNewAppointment` (admin SDK bypasses the rule that rejects
+      // `userId: team_*` from a client write).
 
       widget.onCreated();
       if (mounted) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -10,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../models/message_model.dart';
 import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
+import '../providers/messaging_providers.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
 import '../services/notification_service.dart';
@@ -17,7 +19,7 @@ import '../services/app_localizations.dart';
 import '../utils/currency_helper.dart';
 import '../widgets/member_avatar.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
     super.key,
     required this.conversationId,
@@ -39,15 +41,21 @@ class ChatScreen extends StatefulWidget {
   final String otherPartyName;
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final _svc = MessageService();
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   bool _sending = false;
   SalonModel? _salon;
+
+  /// Paginated history loaded above the live 50 newest. Cleared on dispose.
+  final List<MessageModel> _olderMessages = [];
+  bool _loadingOlder = false;
+  bool _hasMoreHistory = true;
 
   /// Heartbeat that refreshes `users/{uid}.activeConversationLastSeen`
   /// every 30s while the user is on this chat. The `onNewMessage` CF
@@ -71,12 +79,67 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Silence foreground push banners for the conversation being viewed.
     NotificationService.activeConversationId = widget.conversationId;
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_onScroll);
     _markActiveChat();
     if (widget.isClient) {
       _svc.markReadByClient(widget.conversationId);
       _loadSalon();
     } else {
       _svc.markReadByOwner(widget.conversationId);
+    }
+  }
+
+  /// Trigger "load older" when user scrolls near the top of the message list.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels <= 100 &&
+        !_loadingOlder &&
+        _hasMoreHistory) {
+      _loadOlderMessages();
+    }
+  }
+
+  /// Fetch the next 50 messages older than the oldest currently displayed.
+  /// Preserves visual scroll position so the user stays where they were reading.
+  Future<void> _loadOlderMessages() async {
+    if (_loadingOlder || !_hasMoreHistory) return;
+
+    final liveMessages =
+        ref.read(messagesProvider(widget.conversationId)).value ?? [];
+    final combined = [..._olderMessages, ...liveMessages];
+    if (combined.isEmpty) return;
+
+    final oldestCursor = combined.first.sentAt;
+    setState(() => _loadingOlder = true);
+
+    final oldMaxExtent = _scrollController.position.maxScrollExtent;
+
+    try {
+      final older =
+          await _svc.getOlderMessages(widget.conversationId, oldestCursor);
+      if (!mounted) return;
+
+      if (older.isEmpty) {
+        setState(() {
+          _loadingOlder = false;
+          _hasMoreHistory = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _olderMessages.insertAll(0, older);
+        _loadingOlder = false;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final newMaxExtent = _scrollController.position.maxScrollExtent;
+        final delta = newMaxExtent - oldMaxExtent;
+        _scrollController.jumpTo(_scrollController.position.pixels + delta);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingOlder = false);
     }
   }
 
@@ -170,6 +233,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (NotificationService.activeConversationId == widget.conversationId) {
       NotificationService.activeConversationId = null;
     }
+    _scrollController.removeListener(_onScroll);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -255,78 +319,114 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         children: [
           // Messages list
           Expanded(
-            child: StreamBuilder<List<MessageModel>>(
-              stream: _svc.getMessages(widget.conversationId),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
+            child: Builder(
+              builder: (context) {
+                final liveAsync =
+                    ref.watch(messagesProvider(widget.conversationId));
+
+                return liveAsync.when(
+                  loading: () => const Center(
                     child: CircularProgressIndicator(
                         color: AppColors.brand600),
-                  );
-                }
-
-                final messages = snap.data ?? [];
-
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.chat_bubble_outline_rounded,
-                            size: 48, color: AppColors.secondary200),
-                        const SizedBox(height: 12),
-                        Text(
-                          l?.tr('chat_start_conversation') ?? 'Démarrez la conversation',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 16,
-                            color: AppColors.secondary400,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          l?.tr('chat_start_hint') ?? 'Envoyez un message pour commencer.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.secondary300),
-                        ),
-                      ],
+                  ),
+                  error: (e, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text('Erreur: $e',
+                          style:
+                              TextStyle(color: AppColors.secondary400)),
                     ),
-                  );
-                }
+                  ),
+                  data: (liveMessages) {
+                    final messages = [..._olderMessages, ...liveMessages];
 
-                // Auto-scroll when new messages arrive
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOut,
-                    );
-                  }
-                });
-
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  itemCount: messages.length,
-                  itemBuilder: (context, i) {
-                    final msg = messages[i];
-                    final isMine = msg.senderId == widget.currentUserId;
-                    final showDate = i == 0 ||
-                        !_sameDay(
-                            messages[i - 1].sentAt, msg.sentAt);
-
-                    return Column(
-                      children: [
-                        if (showDate) _DateDivider(date: msg.sentAt),
-                        _MessageBubble(
-                          message: msg,
-                          isMine: isMine,
-                          conversationId: widget.conversationId,
-                          isClient: widget.isClient,
-                          currencyCode: _salon?.currency ?? 'MAD',
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.chat_bubble_outline_rounded,
+                                size: 48, color: AppColors.secondary200),
+                            const SizedBox(height: 12),
+                            Text(
+                              l?.tr('chat_start_conversation') ??
+                                  'Démarrez la conversation',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 16,
+                                color: AppColors.secondary400,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              l?.tr('chat_start_hint') ??
+                                  'Envoyez un message pour commencer.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.secondary300),
+                            ),
+                          ],
                         ),
-                      ],
+                      );
+                    }
+
+                    // Auto-scroll to bottom only when user is already near
+                    // the bottom (not when scrolled up reading history).
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!_scrollController.hasClients) return;
+                      final pos = _scrollController.position;
+                      final atBottom =
+                          pos.maxScrollExtent - pos.pixels < 120;
+                      if (atBottom) {
+                        _scrollController.animateTo(
+                          pos.maxScrollExtent,
+                          duration:
+                              const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                    });
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding:
+                          const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      itemCount: messages.length + (_loadingOlder ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (_loadingOlder && i == 0) {
+                          return const Padding(
+                            padding:
+                                EdgeInsets.symmetric(vertical: 12),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.brand600),
+                              ),
+                            ),
+                          );
+                        }
+                        final idx = _loadingOlder ? i - 1 : i;
+                        final msg = messages[idx];
+                        final isMine =
+                            msg.senderId == widget.currentUserId;
+                        final showDate = idx == 0 ||
+                            !_sameDay(messages[idx - 1].sentAt, msg.sentAt);
+
+                        return Column(
+                          children: [
+                            if (showDate) _DateDivider(date: msg.sentAt),
+                            _MessageBubble(
+                              message: msg,
+                              isMine: isMine,
+                              conversationId: widget.conversationId,
+                              isClient: widget.isClient,
+                              currencyCode: _salon?.currency ?? 'MAD',
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
                 );
@@ -722,12 +822,19 @@ class _MessageBubbleState extends State<_MessageBubble> {
   }
 
   Future<void> _approveRequest(String? customName, double price, int duration, {TeamMemberModel? assignedMember}) async {
+    final serviceName = customName ?? (message.text.isNotEmpty ? message.text : 'Prestation personnalisée');
+
+    // Stamp the service name on the message doc so the CF that fires on
+    // status==approved can include it in the client notification body
+    // (the client-side notif write was moved server-side because the
+    // auth.uid rule rejects an owner write with `userId: clientId`).
     await MessageService().updateCustomRequest(
       convId: widget.conversationId,
       messageId: message.id,
       status: 'approved',
       proposedPrice: price,
       proposedDuration: duration,
+      proposedServiceName: serviceName,
     );
 
     final parts = widget.conversationId.split('_');
@@ -737,9 +844,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
 
       final salonDoc = await FirebaseFirestore.instance.collection('salons').doc(salonId).get();
       if (salonDoc.exists) {
-        final salonName = salonDoc.data()?['name'] ?? 'Salon';
-        final serviceName = customName ?? (message.text.isNotEmpty ? message.text : 'Prestation personnalisée');
-
         // Create personalized service visible only to this client
         final services = List<Map<String, dynamic>>.from(salonDoc.data()?['services'] ?? []);
         services.add({
@@ -753,20 +857,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
           if (assignedMember != null) 'assignedMembers': [assignedMember.name],
         });
         await FirebaseFirestore.instance.collection('salons').doc(salonId).update({'services': services});
-
-        // Send in-app notification to the client.
-        // pushSent: false so the onNewNotification Cloud Function sends a FCM push
-        // to the client device (we want a real push here since the client isn't active).
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': clientId,
-          'title': 'Demande acceptée ✅',
-          'body': '$salonName a accepté votre demande "$serviceName" — ${CurrencyHelper.format(price, widget.currencyCode)}, $duration min. Vous pouvez maintenant réserver !',
-          'type': 'custom_request_approved',
-          'salonId': salonId,
-          'createdAt': FieldValue.serverTimestamp(),
-          'isRead': false,
-          'pushSent': false,
-        });
       }
     }
 
