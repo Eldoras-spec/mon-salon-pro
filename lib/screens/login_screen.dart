@@ -101,11 +101,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       );
 
       if (credential != null && credential.user != null) {
+        // Force-refresh the ID token so any cached token from a previous
+        // session (e.g. employee custom-token that was just signed out)
+        // doesn't leak into the next Firestore requests. Without this,
+        // owner-only queries (orders/inventory/conversations/reviewRewards)
+        // keep failing with PERMISSION_DENIED until the app is hot-reloaded.
+        await credential.user!.getIdToken(true);
+        // Re-evaluate auth-derived providers against the new user before
+        // any UI screen reads them.
+        //
+        // Do NOT invalidate `authStateProvider` itself — FlutterFire's
+        // `authStateChanges()` already emits the new user on sign-in; a
+        // forced re-subscription transitions through isLoading → null and
+        // briefly fools downstream providers into thinking the user is
+        // logged out, which can trip main.dart's orphan-auth branch.
+        ref.invalidate(userModelProvider);
+        ref.invalidate(userStreamProvider);
+        ref.invalidate(employeeSessionProvider);
+
         final userModel = await authService.getUserModel(credential.user!.uid);
 
         // Block client accounts from logging into the Pro app
         if (userModel != null && userModel.userType == UserType.client) {
-          await authService.signOut();
+          await signOutAll(ref);
           if (mounted) {
             final l = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(

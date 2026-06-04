@@ -1835,6 +1835,23 @@ class _PromoField extends StatelessWidget {
 
 // ── Google Review Reward Section ─────────────────────────────────────────────
 
+/// Normalise un lien d'avis Google. Accepte un lien d'avis direct OU un lien
+/// Google Maps (repli pour les owners qui ne savent pas récupérer le direct).
+/// Seule transformation gratuite : un lien `g.page/r/...` sans le suffixe
+/// `/review` est complété pour ouvrir directement le formulaire d'étoiles.
+/// Les liens Maps (maps.app.goo.gl / google.com/maps) et
+/// `writereview?placeid=` passent inchangés. Doit rester aligné avec
+/// `_normalizeGoogleReviewUrl` côté serveur (botTools.ts).
+String _normalizeGoogleReviewUrl(String raw) {
+  var url = raw.trim();
+  if (url.isEmpty) return url;
+  final lower = url.toLowerCase();
+  if (lower.contains('g.page/r/') && !lower.contains('/review')) {
+    url = '${url.replaceAll(RegExp(r'/+$'), '')}/review';
+  }
+  return url;
+}
+
 class _GoogleReviewSection extends StatefulWidget {
   const _GoogleReviewSection({
     required this.salonId,
@@ -1966,11 +1983,15 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Text(l?.tr('promotions_google_review_maps_url') ?? 'Lien Google Maps',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary500,
-                          fontWeight: FontWeight.w500)),
+                  Flexible(
+                    child: Text(
+                        l?.tr('promotions_google_review_maps_url') ??
+                            'Lien d\'avis Google ou Maps',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.secondary500,
+                            fontWeight: FontWeight.w500)),
+                  ),
                   const SizedBox(width: 6),
                   GestureDetector(
                     onTap: () {
@@ -1980,11 +2001,15 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
                           title: Text(l?.tr('promotions_google_review_how_to_link') ?? 'Comment obtenir le lien ?'),
-                          content: const Text(
-                            '1. Ouvrez Google Maps\n'
-                            '2. Recherchez votre salon\n'
-                            '3. Appuyez sur "Partager" → copiez le lien\n\n'
-                            'Le lien ressemble à :\nhttps://maps.app.goo.gl/...',
+                          content: Text(
+                            l?.tr('promotions_google_review_how_to_link_body') ??
+                                '⭐ Idéal — lien d\'avis direct (le client note tout de suite) :\n'
+                                    '1. Ouvrez votre profil Google Business\n'
+                                    '2. « Demandez des avis » → copiez le lien (format https://g.page/r/...)\n\n'
+                                    'Pas sûr ? Collez simplement votre lien Google Maps :\n'
+                                    '1. Ouvrez Google Maps → cherchez votre salon\n'
+                                    '2. « Partager » → copiez le lien (https://maps.app.goo.gl/...)\n\n'
+                                    'Les deux fonctionnent — le lien direct rapporte plus d\'avis.',
                           ),
                           actions: [
                             TextButton(
@@ -2003,7 +2028,7 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
               TextField(
                 controller: mapsUrlCtrl,
                 decoration: InputDecoration(
-                  hintText: 'https://maps.app.goo.gl/...',
+                  hintText: 'https://g.page/r/... ou https://maps.app.goo.gl/...',
                   filled: true,
                   fillColor: AppColors.secondary50,
                   border: OutlineInputBorder(
@@ -2026,13 +2051,14 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                   : () async {
                       final percent =
                           int.tryParse(percentCtrl.text.trim()) ?? 10;
-                      final mapsUrl = mapsUrlCtrl.text.trim();
+                      final mapsUrl =
+                          _normalizeGoogleReviewUrl(mapsUrlCtrl.text);
                       if (percent <= 0 || percent > 100) return;
                       if (forceEnable && mapsUrl.isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(
                             content: Text(l?.tr('promotions_google_review_url_required') ??
-                                'Merci d\'entrer votre lien Google Maps pour activer la récompense.'),
+                                'Merci d\'entrer votre lien d\'avis ou Google Maps pour activer la récompense.'),
                             backgroundColor: Colors.red,
                           ),
                         );

@@ -83,5 +83,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- url_launcher: required on Android 11+ (package visibility) so
+             canLaunchUrl/launchUrl can resolve https links (e.g. the
+             "Reply on WhatsApp" wa.me/<number> handover action). Without it,
+             canLaunchUrl returns false even with a browser/WhatsApp installed. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

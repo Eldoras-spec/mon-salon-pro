@@ -7,6 +7,7 @@ import '../providers/setup_tasks_provider.dart';
 import '../screens/owner_boutique_screen.dart';
 import '../screens/owner_promotions_screen.dart';
 import '../screens/owner_salon_screen.dart';
+import '../screens/owner_services_screen.dart';
 import '../screens/owner_team_screen.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -212,6 +213,13 @@ class _SetupTile extends ConsumerWidget {
           MaterialPageRoute(builder: (_) => const OwnerBoutiqueScreen()),
         );
         break;
+      case SetupTaskKey.firstPack:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => const OwnerServicesScreen(initialTab: 1)),
+        );
+        break;
       case SetupTaskKey.salonImages:
       case SetupTaskKey.beforeAfter:
         Navigator.push(
@@ -260,6 +268,16 @@ class _SetupTile extends ConsumerWidget {
               'Ajouter vos premiers produits',
           subtitle:
               l?.tr('owner_setup_product_sub') ?? 'Vendez via votre boutique',
+        );
+      case SetupTaskKey.firstPack:
+        return _TileMeta(
+          icon: Icons.inventory_2_outlined,
+          fg: const Color(0xFF0D9488),
+          bg: const Color(0xFFCCFBF1),
+          title: l?.tr('owner_setup_pack_title') ??
+              'Créer votre premier pack',
+          subtitle: l?.tr('owner_setup_pack_sub') ??
+              'Regroupez des prestations à prix réduit',
         );
       case SetupTaskKey.salonImages:
         return _TileMeta(

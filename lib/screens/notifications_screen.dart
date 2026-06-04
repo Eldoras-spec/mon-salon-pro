@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
 import '../services/database_service.dart';
 import '../services/auth_service.dart';
@@ -7,7 +8,14 @@ import '../models/notification_model.dart';
 import '../services/app_localizations.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  /// Optional explicit notifications owner. When null, falls back to the
+  /// signed-in Firebase uid. The member view passes the synthetic key
+  /// `emp_${salonId}_${memberId}` so a member in profile-selector mode
+  /// (sharing the owner's Firebase session) still sees THEIR own notifs,
+  /// not the owner's.
+  const NotificationsScreen({super.key, this.userId});
+
+  final String? userId;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -21,7 +29,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void initState() {
     super.initState();
     // Mark all as read when screen opens
-    final uid = _auth.currentUserId;
+    final uid = widget.userId ?? _auth.currentUserId;
     if (uid != null) {
       _db.markAllNotificationsRead(uid);
     }
@@ -37,6 +45,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (diff.inDays == 1) return l?.tr('notifications_yesterday') ?? 'Hier';
     if (diff.inDays < 7) return (l?.tr('notifications_days_ago') ?? 'Il y a {days}j').replaceAll('{days}', '${diff.inDays}');
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  /// Open the WhatsApp chat with the client behind a handover notification.
+  /// Falls back to a snackbar (showing the number to copy) when no app can
+  /// open the link — e.g. an emulator without WhatsApp or a browser.
+  Future<void> _openClientWhatsApp(String phone) async {
+    final l = AppLocalizations.of(context);
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$digits');
+    bool launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text((l?.tr('notif_handover_no_wa') ??
+                'WhatsApp indisponible sur cet appareil. Numéro du client : {phone}')
+            .replaceAll('{phone}', '+$digits')),
+      ));
+    }
   }
 
   IconData _iconForType(String type) {
@@ -83,7 +114,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final uid = _auth.currentUserId;
+    final uid = widget.userId ?? _auth.currentUserId;
 
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -144,8 +175,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final n = notifications[index];
+                    final isHandover = n.type == 'bot_handover' &&
+                        (n.clientPhone?.trim().isNotEmpty ?? false);
                     return GestureDetector(
-                      onTap: () => _db.markNotificationRead(n.id),
+                      onTap: () {
+                        _db.markNotificationRead(n.id);
+                        // A handover means a client is waiting — tapping opens
+                        // the WhatsApp chat with them directly.
+                        if (isHandover) _openClientWhatsApp(n.clientPhone!);
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -218,6 +256,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       color: AppColors.secondary600,
                                     ),
                                   ),
+                                  if (isHandover) ...[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF25D366)
+                                            .withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.chat_rounded,
+                                              size: 14, color: Color(0xFF128C7E)),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              '${l?.tr('notif_handover_reply') ?? 'Répondre sur WhatsApp'}'
+                                              '${(n.clientName?.trim().isNotEmpty ?? false) ? ' · ${n.clientName}' : ''}'
+                                              ' · ${n.clientPhone}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFF128C7E),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

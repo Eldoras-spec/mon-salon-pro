@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../providers/auth_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 
@@ -55,29 +56,62 @@ class _EmployeeLoginScreenState extends ConsumerState<EmployeeLoginScreen> {
       }
 
       await FirebaseAuth.instance.signInWithCustomToken(token);
+      // Force-refresh the ID token so the custom claims (employee,
+      // salonId, memberId) are present on the next Firestore request.
+      // Without this, the SDK can use a stale token and the
+      // teamMembers update gets PERMISSION_DENIED.
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
 
-      // Save FCM token for push notifications per employee.
-      try {
-        final fcm = await FirebaseMessaging.instance.getToken();
-        if (fcm != null) {
-          await FirebaseFirestore.instance
-              .collection('salons')
-              .doc(salonId)
-              .collection('teamMembers')
-              .doc(memberId)
-              .update({
-            'fcmToken': fcm,
-            'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-            'lastSeenAt': FieldValue.serverTimestamp(),
-          });
-        }
-      } catch (_) {
-        // non-fatal
-      }
+      // Drop every auth-derived provider so leftover owner-scoped listeners
+      // (appointments/*/private/contact, ownerSalonProvider, etc.) stop
+      // querying under the employee's auth — they don't have the owner
+      // claim and would flood the logs with PERMISSION_DENIED until the
+      // app is hot-restarted.
+      //
+      // IMPORTANT: do NOT invalidate `authStateProvider` here. The
+      // FlutterFire `authStateChanges()` stream emits the new user
+      // naturally after `signInWithCustomToken`; re-subscribing would
+      // force the StreamProvider through `isLoading` → null before the
+      // new user shows up, which would briefly make
+      // `employeeSessionProvider` see `auth.value == null`, return null,
+      // and trigger main.dart's orphan-auth branch (signOutAll → kicked
+      // back to the LoginScreen).
+      ref.invalidate(userModelProvider);
+      ref.invalidate(userStreamProvider);
+      ref.invalidate(employeeSessionProvider);
+      invalidateOwnerScopedProviders(ref);
 
-      // main.dart router will detect the employee claim and route to the right screen.
+      // Pop FIRST so the screen disappears immediately — main.dart router
+      // will detect the employee claim and route to the right screen.
+      // The FCM token update runs fire-and-forget below; if it hangs or
+      // fails (rule denial during the brief auth-propagation window), we
+      // don't want to keep the login button spinning forever.
       if (!mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);
+
+      // Save FCM token for push notifications per employee — fire-and-forget.
+      // Token write happens after navigation so a slow Firestore round-trip
+      // doesn't block the route change.
+      // ignore: unawaited_futures
+      () async {
+        try {
+          final fcm = await FirebaseMessaging.instance.getToken();
+          if (fcm != null) {
+            await FirebaseFirestore.instance
+                .collection('salons')
+                .doc(salonId)
+                .collection('teamMembers')
+                .doc(memberId)
+                .update({
+              'fcmToken': fcm,
+              'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+              'lastSeenAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (_) {
+          // non-fatal — owner's app will refresh the token on next session
+        }
+      }();
     } on FirebaseFunctionsException catch (e) {
       setState(() {
         _loading = false;

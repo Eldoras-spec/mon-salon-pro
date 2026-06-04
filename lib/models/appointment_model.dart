@@ -124,6 +124,11 @@ class AppointmentModel {
       selectedDesignThumbnail: selectedDesignThumbnail,
       selectedDesignIsVideo: selectedDesignIsVideo,
       managementToken: managementToken ?? this.managementToken,
+      paymentStatus: paymentStatus,
+      paymentIntentId: paymentIntentId,
+      paymentAmount: paymentAmount,
+      paymentCurrency: paymentCurrency,
+      paymentChargedKind: paymentChargedKind,
     );
   }
 

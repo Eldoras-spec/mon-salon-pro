@@ -19,6 +19,12 @@ class SalonModel {
   // Empty when the owner hasn't set one — the call button hides itself.
   final String phone;
   final Map<String, dynamic> workingHours;
+
+  /// Salon-wide full-day closures (national holidays / exceptional closures).
+  /// ISO "YYYY-MM-DD" dates in the salon's LOCAL calendar (same convention as
+  /// TeamMemberModel.unavailableDates). Overrides the weekly workingHours —
+  /// the salon is treated as closed on these dates across every booking surface.
+  final List<String> closedDates;
   final List<Map<String, dynamic>> services;
   final List<String> serviceCategories;
   final double? latitude;
@@ -56,6 +62,23 @@ class SalonModel {
   // settings sheet later. Default kept for legacy salons created before
   // this field existed.
   final String timezone;
+
+  // ── Cart-wide deposit policy (Stripe Connect) ──────────────────────────
+  // When set AND no per-service paymentMode requires payment, the booking
+  // CF charges `cartDepositAmount` as a deposit if the appointment total
+  // reaches `cartDepositThreshold`. Both 0/null = policy disabled.
+  // Replaces the legacy per-service `fixed_above` mode which was
+  // semantically a cart-level rule.
+  final double cartDepositThreshold;
+  final double cartDepositAmount;
+
+  // ── No-show risky-client deposit (Stripe Connect) ──────────────────────
+  // When > 0, clients flagged as risky by `clientReputation` get charged a
+  // deposit of `noShowDepositRate%` on every booking, even on services
+  // configured with `paymentMode: 'none'`. If the service already has a
+  // percentage deposit, the effective rate is the max of the two. Stored as
+  // a percentage (0-100). 0 = feature disabled.
+  final double noShowDepositRate;
 
   // ── Subscription plan (source of truth) ────────────────────────────────
   // 'free'      → team capped at 2 members (owner + 1), no videos
@@ -129,6 +152,10 @@ class SalonModel {
     this.freeCapGraceEndsAt,
     this.paidPlanEverActivated = false,
     this.timezone = 'Africa/Casablanca',
+    this.cartDepositThreshold = 0,
+    this.cartDepositAmount = 0,
+    this.noShowDepositRate = 0,
+    this.closedDates = const [],
   });
 
   /// Client-side predictor of whether this salon would get the 3-month
@@ -148,6 +175,15 @@ class SalonModel {
   bool get isFree => plan == 'free';
   bool get isEssentiel => plan == 'essentiel';
   bool get isBusiness => plan == 'business';
+
+  /// True if [date]'s calendar day is a salon-wide closure (holiday /
+  /// exceptional). Compared as a local ISO "YYYY-MM-DD" string, matching how
+  /// closedDates are stored (salon local calendar).
+  bool isClosedOnDate(DateTime date) {
+    final iso = '${date.year}-${date.month.toString().padLeft(2, '0')}'
+        '-${date.day.toString().padLeft(2, '0')}';
+    return closedDates.contains(iso);
+  }
 
   factory SalonModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
@@ -222,6 +258,13 @@ class SalonModel {
       timezone: (data['timezone'] as String?)?.trim().isNotEmpty == true
           ? data['timezone'] as String
           : 'Africa/Casablanca',
+      cartDepositThreshold:
+          (data['cartDepositThreshold'] as num?)?.toDouble() ?? 0,
+      cartDepositAmount:
+          (data['cartDepositAmount'] as num?)?.toDouble() ?? 0,
+      noShowDepositRate:
+          (data['noShowDepositRate'] as num?)?.toDouble() ?? 0,
+      closedDates: List<String>.from(data['closedDates'] ?? []),
     );
   }
 
@@ -257,6 +300,10 @@ class SalonModel {
       'salonType': salonType,
       'plan': plan,
       'timezone': timezone,
+      'cartDepositThreshold': cartDepositThreshold,
+      'cartDepositAmount': cartDepositAmount,
+      'noShowDepositRate': noShowDepositRate,
+      'closedDates': closedDates,
     };
   }
 }

@@ -6,6 +6,7 @@ import '../models/review_reward_model.dart';
 import '../services/database_service.dart';
 import '../services/message_service.dart';
 import '../utils/timezone_helper.dart';
+import 'auth_providers.dart';
 import 'owner_providers.dart';
 
 final _db = DatabaseService();
@@ -13,6 +14,7 @@ final _db = DatabaseService();
 enum OwnerTaskType {
   messages,
   pendingOrders,
+  ordersToDeliver, // confirmed, deliveryMethod='delivery'
   noShowRisk,
   badReviews,
   pendingRewards,
@@ -67,22 +69,49 @@ class OwnerTask {
 // ── Individual counters ──────────────────────────────────────────────────────
 
 /// Unread messages (client → salon) across all conversations of this salon.
-final unreadMessagesCountProvider = StreamProvider<int>((ref) {
+///
+/// Owner-only: the `conversations where ownerId == uid` rule denies
+/// employees (uid = emp_X_Y ≠ salonId), so we short-circuit here to
+/// avoid spamming PERMISSION_DENIED in the logs and opening a doomed
+/// Firestore listener.
+final unreadMessagesCountProvider = StreamProvider.autoDispose<int>((ref) {
+  if (ref.watch(employeeSessionProvider).value != null) return Stream.value(0);
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value(0);
   return MessageService().getOwnerUnreadCount(salon.id);
 });
 
-/// Orders still waiting for owner confirmation (status == 'pending').
+/// Orders still waiting for owner confirmation. Card orders awaiting
+/// payment are excluded — the owner can't validate them (only cancel),
+/// so surfacing them as a "to confirm" task would mislead. They flip to
+/// confirmed automatically via the Stripe webhook once paid.
 final pendingOrdersCountProvider = Provider<int>((ref) {
   final orders = ref.watch(ownerOrdersProvider).value ?? [];
-  return orders.where((o) => o.status == 'pending').length;
+  return orders.where((o) {
+    if (o.status != 'pending') return false;
+    if (o.paymentMethod == 'card' && o.paymentStatus != 'paid') return false;
+    return true;
+  }).length;
+});
+
+/// "Stock-taken" predicate shared by both delivery and pickup counters.
+/// Webhook-auto-confirmed paid card orders (status 'pending' +
+/// paymentStatus 'paid') count too so they don't slip through.
+bool _isConfirmedActive(o) =>
+    o.status == 'confirmed' ||
+    (o.status == 'pending' && o.paymentStatus == 'paid');
+
+final ordersToDeliverCountProvider = Provider<int>((ref) {
+  final orders = ref.watch(ownerOrdersProvider).value ?? [];
+  return orders
+      .where((o) => _isConfirmedActive(o) && o.deliveryMethod == 'delivery')
+      .length;
 });
 
 /// Bad reviews (rating ≤ 2) posted in the last 7 days.
 /// Server-side filtered by `createdAt` — rating is filtered client-side
 /// because the dataset is bounded by the 7-day window.
-final badReviewsCountProvider = StreamProvider<int>((ref) {
+final badReviewsCountProvider = StreamProvider.autoDispose<int>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value(0);
   final cutoff = DateTime.now().subtract(const Duration(days: 7));
@@ -92,7 +121,10 @@ final badReviewsCountProvider = StreamProvider<int>((ref) {
 });
 
 /// Google review rewards waiting for owner validation.
-final pendingRewardsCountProvider = StreamProvider<int>((ref) {
+///
+/// Owner-only: `reviewRewards where salonId` rule denies employees.
+final pendingRewardsCountProvider = StreamProvider.autoDispose<int>((ref) {
+  if (ref.watch(employeeSessionProvider).value != null) return Stream.value(0);
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value(0);
   return _db
@@ -311,6 +343,7 @@ final agendaRiskClientsProvider =
 final ownerTasksProvider = Provider<List<OwnerTask>>((ref) {
   final unread = ref.watch(unreadMessagesCountProvider).value ?? 0;
   final orders = ref.watch(pendingOrdersCountProvider);
+  final toDeliver = ref.watch(ordersToDeliverCountProvider);
   final noShowRisks = ref.watch(noShowRiskCountProvider);
   final badReviews = ref.watch(badReviewsCountProvider).value ?? 0;
   final rewards = ref.watch(pendingRewardsCountProvider).value ?? 0;
@@ -321,6 +354,11 @@ final ownerTasksProvider = Provider<List<OwnerTask>>((ref) {
       OwnerTask(type: OwnerTaskType.messages, count: unread, priority: 1),
     if (orders > 0)
       OwnerTask(type: OwnerTaskType.pendingOrders, count: orders, priority: 2),
+    if (toDeliver > 0)
+      OwnerTask(
+          type: OwnerTaskType.ordersToDeliver,
+          count: toDeliver,
+          priority: 2),
     if (noShowRisks > 0)
       OwnerTask(
           type: OwnerTaskType.noShowRisk, count: noShowRisks, priority: 3),

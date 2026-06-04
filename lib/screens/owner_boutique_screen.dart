@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,7 +18,11 @@ import '../utils/media_compressor.dart';
 final _db = DatabaseService();
 
 class OwnerBoutiqueScreen extends ConsumerStatefulWidget {
-  const OwnerBoutiqueScreen({super.key});
+  /// Initial tab to land on. 0 = Produits, 1 = Commandes. Used by the
+  /// dashboard "X commandes à confirmer" shortcut so the owner doesn't
+  /// land on Produits and have to swipe over.
+  final int initialTab;
+  const OwnerBoutiqueScreen({super.key, this.initialTab = 0});
 
   @override
   ConsumerState<OwnerBoutiqueScreen> createState() =>
@@ -31,7 +36,11 @@ class _OwnerBoutiqueScreenState extends ConsumerState<OwnerBoutiqueScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 1),
+    );
   }
 
   @override
@@ -266,13 +275,20 @@ class _ProductCard extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.secondary100),
       ),
-      child: Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _handleAction(context, ref, 'edit'),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
         children: [
           // Image
           ClipRRect(
@@ -350,6 +366,8 @@ class _ProductCard extends ConsumerWidget {
           ),
           // Actions
           PopupMenuButton<String>(
+            // Stops the InkWell tap from racing the menu open.
+            onOpened: () {},
             icon: const Icon(Icons.more_vert_rounded,
                 color: AppColors.secondary400, size: 20),
             shape:
@@ -386,6 +404,9 @@ class _ProductCard extends ConsumerWidget {
             ],
           ),
         ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -446,7 +467,11 @@ class _ProductFormSheet extends StatefulWidget {
   final String salonId;
   final String currency;
   final ProductModel? product;
-  const _ProductFormSheet({required this.salonId, this.currency = 'MAD', this.product});
+  const _ProductFormSheet({
+    required this.salonId,
+    this.currency = 'MAD',
+    this.product,
+  });
 
   @override
   State<_ProductFormSheet> createState() => _ProductFormSheetState();
@@ -462,7 +487,11 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   late TextEditingController _categoryCtrl;
   late TextEditingController _citiesCtrl;
   late TextEditingController _feeCtrl;
+  late TextEditingController _daysCtrl;
   String _deliveryType = 'pickup';
+  // 'card' | 'cod' | 'both'. Only surfaced in UI when delivery enabled AND
+  // salon has Stripe Connect chargesEnabled. Persisted regardless.
+  String _paymentOptions = 'both';
   bool _isActive = true;
   List<String> _imageUrls = [];
   List<File> _newImages = [];
@@ -492,11 +521,14 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _categoryCtrl =
         TextEditingController(text: p?.category ?? _categories.first);
     _deliveryType = p?.deliveryType ?? 'pickup';
+    _paymentOptions = p?.paymentOptions ?? 'both';
     _citiesCtrl = TextEditingController(text: p?.deliveryCities.join(', ') ?? '');
     _feeCtrl = TextEditingController(
         text: p != null && p.deliveryFee > 0
             ? p.deliveryFee.toStringAsFixed(0)
             : '');
+    _daysCtrl = TextEditingController(
+        text: p != null && p.deliveryDays > 0 ? '${p.deliveryDays}' : '');
     _isActive = p?.isActive ?? true;
     _imageUrls = List.from(p?.images ?? []);
   }
@@ -511,6 +543,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _categoryCtrl.dispose();
     _citiesCtrl.dispose();
     _feeCtrl.dispose();
+    _daysCtrl.dispose();
     super.dispose();
   }
 
@@ -582,6 +615,12 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         'deliveryFee': _feeCtrl.text.trim().isEmpty
             ? 0.0
             : double.parse(_feeCtrl.text.trim()),
+        'deliveryDays': _daysCtrl.text.trim().isEmpty
+            ? 0
+            : (int.tryParse(_daysCtrl.text.trim()) ?? 0),
+        // 'pickup' implies COD at the salon — payment options are irrelevant.
+        // For delivery products we persist the salon's chosen options.
+        'paymentOptions': _deliveryType == 'pickup' ? 'cod' : _paymentOptions,
         'isActive': _isActive,
       };
 
@@ -602,6 +641,8 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
           deliveryType: data['deliveryType'] as String,
           deliveryCities: List<String>.from(data['deliveryCities'] as List),
           deliveryFee: data['deliveryFee'] as double,
+          deliveryDays: data['deliveryDays'] as int,
+          paymentOptions: data['paymentOptions'] as String,
           isActive: _isActive,
           createdAt: DateTime.now(),
         ));
@@ -732,6 +773,11 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   _buildField(l?.tr('boutique_description') ?? 'Description', _descCtrl, maxLines: 2),
                   _buildField(l?.tr('boutique_price') ?? 'Prix (${widget.currency})', _priceCtrl,
                       required: true, keyboard: TextInputType.number),
+                  _buildField(
+                      l?.tr('boutique_delivery_days') ??
+                          'Délai de livraison (jours)',
+                      _daysCtrl,
+                      keyboard: TextInputType.number),
 
                   // Category dropdown
                   Text(l?.tr('inventory_category') ?? 'Catégorie',
@@ -808,6 +854,67 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   if (_deliveryType != 'pickup')
                     _buildField('Frais de livraison (${widget.currency})', _feeCtrl,
                         keyboard: TextInputType.number, hint: '0 = gratuit'),
+
+                  // Payment method picker — only when delivery active AND
+                  // the salon can actually accept card payments. For pickup
+                  // products we always implicitly charge cash at the salon.
+                  if (_deliveryType != 'pickup')
+                    StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('salons')
+                          .doc(widget.salonId)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final data = snap.data?.data() ?? {};
+                        final raw = data['stripeConnect'];
+                        final connect = raw is Map
+                            ? Map<String, dynamic>.from(raw)
+                            : <String, dynamic>{};
+                        final chargesEnabled = connect['chargesEnabled'] == true;
+                        if (!chargesEnabled) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l?.tr('boutique_payment_label') ?? 'Mode de paiement accepté',
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _paymentOptions == 'cod'
+                                    ? 'cod'
+                                    : (_paymentOptions == 'card' ? 'card' : 'both'),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: AppColors.brand50,
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 14),
+                                ),
+                                items: [
+                                  DropdownMenuItem(
+                                      value: 'both',
+                                      child: Text(l?.tr('boutique_payment_both') ?? 'Carte ou à la livraison')),
+                                  DropdownMenuItem(
+                                      value: 'card',
+                                      child: Text(l?.tr('boutique_payment_card') ?? 'Carte bancaire uniquement')),
+                                  DropdownMenuItem(
+                                      value: 'cod',
+                                      child: Text(l?.tr('boutique_payment_cod') ?? 'Paiement à la livraison uniquement')),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _paymentOptions = v ?? 'both'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
 
                   const SizedBox(height: 16),
                   SwitchListTile(
@@ -955,11 +1062,84 @@ class _ImageTile extends StatelessWidget {
 
 // ─── Orders Tab ──────────────────────────────────────────────────────────────
 
-class _OrdersTab extends ConsumerWidget {
+enum _OrdersFilter { twoWeeks, month, threeMonths, all }
+
+DateTime? _filterCutoff(_OrdersFilter f) {
+  final now = DateTime.now();
+  switch (f) {
+    case _OrdersFilter.twoWeeks:
+      return now.subtract(const Duration(days: 14));
+    case _OrdersFilter.month:
+      return now.subtract(const Duration(days: 30));
+    case _OrdersFilter.threeMonths:
+      return now.subtract(const Duration(days: 90));
+    case _OrdersFilter.all:
+      return null;
+  }
+}
+
+class _OrdersTab extends ConsumerStatefulWidget {
   const _OrdersTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_OrdersTab> createState() => _OrdersTabState();
+}
+
+class _OrdersTabState extends ConsumerState<_OrdersTab> {
+  _OrdersFilter _filter = _OrdersFilter.twoWeeks;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Strip every non-digit then drop a single leading 0 so the local
+  /// format ("0625111667") matches the stored E.164 form ("+212625111667").
+  /// Country codes longer than 1 digit aren't stripped here — the
+  /// `endsWith` check below absorbs them by matching the trailing digits.
+  String _normalizeDigits(String s) {
+    final digits = s.replaceAll(RegExp(r'\D'), '');
+    return digits.startsWith('0') ? digits.substring(1) : digits;
+  }
+
+  /// Lowercased substring match on client name, phone (digits-only), and
+  /// item names. Returns true when the query is empty so the search field
+  /// doesn't gate the list when idle.
+  bool _matchesSearch(OrderModel o) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    if (o.clientName.toLowerCase().contains(q)) return true;
+    final qDigits = _normalizeDigits(q);
+    if (qDigits.isNotEmpty) {
+      final phoneDigits = _normalizeDigits(o.clientPhone);
+      if (phoneDigits.endsWith(qDigits) || phoneDigits.contains(qDigits)) {
+        return true;
+      }
+    }
+    for (final item in o.items) {
+      if (item.name.toLowerCase().contains(q)) return true;
+    }
+    return false;
+  }
+
+  String _filterLabel(AppLocalizations? l, _OrdersFilter f) {
+    switch (f) {
+      case _OrdersFilter.twoWeeks:
+        return l?.tr('boutique_filter_2weeks') ?? '2 dernières semaines';
+      case _OrdersFilter.month:
+        return l?.tr('boutique_filter_month') ?? 'Ce mois';
+      case _OrdersFilter.threeMonths:
+        return l?.tr('boutique_filter_3months') ?? '3 derniers mois';
+      case _OrdersFilter.all:
+        return l?.tr('boutique_filter_all') ?? 'Toutes les commandes';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final ordersAsync = ref.watch(ownerOrdersProvider);
 
@@ -967,32 +1147,126 @@ class _OrdersTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e')),
       data: (orders) {
-        if (orders.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.receipt_long_outlined,
-                    size: 64, color: AppColors.secondary300),
-                const SizedBox(height: 16),
-                Text(
-                  l?.tr('boutique_no_orders') ?? 'Aucune commande',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.secondary400,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+        // Server-side filter via ownerOrdersCutoffProvider — the stream
+        // already only returns docs within the window. The search query
+        // is the only client-side narrowing on top.
+        final filtered = _searchQuery.trim().isEmpty
+            ? orders
+            : orders.where(_matchesSearch).toList();
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(20),
-          itemCount: orders.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _OrderCard(order: orders[i], currency: ref.read(ownerSalonProvider).value?.currency ?? 'MAD'),
+        return Column(
+          children: [
+            // Search row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _searchQuery = v),
+                decoration: InputDecoration(
+                  hintText: l?.tr('boutique_orders_search_hint') ??
+                      'Rechercher : client, téléphone, produit…',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.secondary200),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppColors.secondary200),
+                  ),
+                  suffixIcon: _searchQuery.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        ),
+                ),
+              ),
+            ),
+            // Filter row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<_OrdersFilter>(
+                      value: _filter,
+                      isDense: true,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: AppColors.secondary200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: AppColors.secondary200),
+                        ),
+                      ),
+                      items: _OrdersFilter.values
+                          .map((f) => DropdownMenuItem(
+                                value: f,
+                                child: Text(_filterLabel(l, f),
+                                    style: const TextStyle(fontSize: 13)),
+                              ))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => _filter = v);
+                        // Re-subscribe the Firestore stream to the new window.
+                        ref.read(ownerOrdersCutoffProvider.notifier).state =
+                            _filterCutoff(v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 64, color: AppColors.secondary300),
+                          const SizedBox(height: 16),
+                          Text(
+                            l?.tr('boutique_no_orders') ?? 'Aucune commande',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.secondary400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _OrderCard(
+                          order: filtered[i],
+                          currency: ref
+                                  .read(ownerSalonProvider)
+                                  .value
+                                  ?.currency ??
+                              'MAD'),
+                    ),
+            ),
+          ],
         );
       },
     );
@@ -1004,8 +1278,18 @@ class _OrderCard extends StatelessWidget {
   final String currency;
   const _OrderCard({required this.order, this.currency = 'MAD'});
 
+  /// Effective status for display: legacy paid-pending orders (created
+  /// before the webhook auto-confirms paid card orders) are presented as
+  /// "Confirmée" so the owner doesn't see a misleading "En attente" badge.
+  String get _effectiveStatus {
+    if (order.status == 'pending' && order.paymentStatus == 'paid') {
+      return 'confirmed';
+    }
+    return order.status;
+  }
+
   Color get _statusColor {
-    switch (order.status) {
+    switch (_effectiveStatus) {
       case 'pending':
         return const Color(0xFFF59E0B);
       case 'confirmed':
@@ -1016,6 +1300,24 @@ class _OrderCard extends StatelessWidget {
         return const Color(0xFFDC2626);
       default:
         return AppColors.secondary400;
+    }
+  }
+
+  String _statusLabelLocalized(AppLocalizations? l) {
+    switch (_effectiveStatus) {
+      case 'pending':
+        return l?.tr('boutique_status_pending') ?? 'En attente';
+      case 'confirmed':
+        return l?.tr('boutique_status_confirmed') ?? 'Confirmée';
+      case 'delivered':
+        // Pickup orders are "récupérées" by the client, not "livrées".
+        return order.deliveryMethod == 'pickup'
+            ? (l?.tr('boutique_status_picked_up') ?? 'Récupérée')
+            : (l?.tr('boutique_status_delivered') ?? 'Livrée');
+      case 'cancelled':
+        return l?.tr('boutique_status_cancelled') ?? 'Annulée';
+      default:
+        return order.statusLabel;
     }
   }
 
@@ -1046,9 +1348,64 @@ class _OrderCard extends StatelessWidget {
                             color: AppColors.brand950)),
                     const SizedBox(height: 2),
                     Text(
-                      '${order.createdAt.day}/${order.createdAt.month}/${order.createdAt.year} · ${order.deliveryLabel}',
+                      '${order.createdAt.day}/${order.createdAt.month}/${order.createdAt.year}',
                       style: TextStyle(
                           fontSize: 12, color: AppColors.secondary400),
+                    ),
+                    const SizedBox(height: 6),
+                    // Delivery + payment pills. Two pills side by side so the
+                    // owner gets the answer to both "where" and "how he pays"
+                    // at a glance, without parsing a long subtitle string.
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _OrderPill(
+                          icon: order.deliveryMethod == 'delivery'
+                              ? Icons.delivery_dining_outlined
+                              : Icons.store_outlined,
+                          label: order.deliveryMethod == 'delivery'
+                              ? (l?.tr('boutique_delivery_short') ?? 'Livraison')
+                              : (l?.tr('boutique_pickup_short') ?? 'Retrait'),
+                          bg: const Color(0xFFE0F2FE),
+                          fg: const Color(0xFF0369A1),
+                        ),
+                        Builder(builder: (_) {
+                          final isCard = order.paymentMethod == 'card';
+                          final isPaid = order.paymentStatus == 'paid' ||
+                              order.paymentStatus == 'deposit_paid';
+                          if (isCard && isPaid) {
+                            return _OrderPill(
+                              icon: Icons.check_circle,
+                              label: l?.tr('order_pay_card_paid') ?? 'Payé par carte',
+                              bg: const Color(0xFFDCFCE7),
+                              fg: const Color(0xFF16A34A),
+                            );
+                          }
+                          if (isCard) {
+                            return _OrderPill(
+                              icon: Icons.credit_card,
+                              label: l?.tr('order_pay_card_pending') ?? 'Carte — en attente',
+                              bg: const Color(0xFFFEF3C7),
+                              fg: const Color(0xFFB45309),
+                            );
+                          }
+                          if (order.deliveryMethod == 'delivery') {
+                            return _OrderPill(
+                              icon: Icons.payments_outlined,
+                              label: l?.tr('order_pay_cod_delivery') ?? 'Paiement à la livraison',
+                              bg: AppColors.secondary100,
+                              fg: AppColors.secondary500,
+                            );
+                          }
+                          return _OrderPill(
+                            icon: Icons.payments_outlined,
+                            label: l?.tr('order_pay_at_salon') ?? 'Paiement au salon',
+                            bg: AppColors.secondary100,
+                            fg: AppColors.secondary500,
+                          );
+                        }),
+                      ],
                     ),
                   ],
                 ),
@@ -1061,7 +1418,7 @@ class _OrderCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  order.statusLabel,
+                  _statusLabelLocalized(l),
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1115,16 +1472,29 @@ class _OrderCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: AppColors.brand950)),
               const Spacer(),
-              if (order.status == 'pending')
+              // "Confirmer" is only shown for COD/pickup pending orders.
+              // - Card unpaid: hidden (owner can't validate an order whose
+              //   payment hasn't landed yet — they only get Annuler).
+              // - Card already paid: hidden too (auto-confirmed by webhook;
+              //   legacy paid-pending docs flow straight to "Livrée").
+              if (order.status == 'pending' &&
+                  order.paymentMethod != 'card')
                 _ActionBtn(
                   label: l?.tr('boutique_confirm') ?? 'Confirmer',
                   color: AppColors.brand600,
                   onTap: () =>
                       _db.updateOrderStatus(order.id, 'confirmed'),
                 ),
-              if (order.status == 'confirmed')
+              if (order.status == 'confirmed' ||
+                  (order.status == 'pending' && order.paymentStatus == 'paid'))
                 _ActionBtn(
-                  label: l?.tr('boutique_delivered') ?? 'Livrée',
+                  // Label adapts to the delivery method: "Livrée" only
+                  // makes sense when the salon actually delivers. For
+                  // in-store pickup the action is the client coming to
+                  // collect it → "Récupérée".
+                  label: order.deliveryMethod == 'pickup'
+                      ? (l?.tr('boutique_picked_up') ?? 'Récupérée')
+                      : (l?.tr('boutique_delivered') ?? 'Livrée'),
                   color: const Color(0xFF16A34A),
                   onTap: () =>
                       _db.updateOrderStatus(order.id, 'delivered'),
@@ -1139,6 +1509,17 @@ class _OrderCard extends StatelessWidget {
                       _db.updateOrderStatus(order.id, 'cancelled'),
                 ),
               ],
+              // Failed-delivery return: only delivered + delivery method
+              // orders get this. Owner ticks which items came back in good
+              // shape → those get +stock, the rest stay deducted as lost.
+              if (order.status == 'delivered' &&
+                  order.deliveryMethod == 'delivery')
+                _ActionBtn(
+                  label: l?.tr('boutique_mark_returned_short') ?? 'Retourné',
+                  color: const Color(0xFFB45309),
+                  outlined: true,
+                  onTap: () => _showReturnDialog(context, order),
+                ),
             ],
           ),
           // Address if delivery
@@ -1168,6 +1549,244 @@ class _OrderCard extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 12, color: AppColors.secondary500)),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReturnDialog(BuildContext context, OrderModel o) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _ReturnOrderDialog(order: o),
+    );
+  }
+}
+
+class _ReturnOrderDialog extends StatefulWidget {
+  const _ReturnOrderDialog({required this.order});
+  final OrderModel order;
+
+  @override
+  State<_ReturnOrderDialog> createState() => _ReturnOrderDialogState();
+}
+
+class _ReturnOrderDialogState extends State<_ReturnOrderDialog> {
+  // Default everything to "returned in good condition" so the common case
+  // (full successful return) takes one tap. Owner unchecks lost/damaged.
+  late final Set<String> _returnedIds = widget.order.items
+      .map((i) => i.productId)
+      .where((id) => id.isNotEmpty)
+      .toSet();
+  bool _saving = false;
+
+  Future<void> _confirm() async {
+    setState(() => _saving = true);
+    try {
+      await _db.markOrderReturned(widget.order.id, _returnedIds.toList());
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        final l = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e'),
+        ));
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.assignment_return_outlined,
+                      size: 18, color: Color(0xFFB45309)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l?.tr('boutique_return_dialog_title') ??
+                        'Retour de livraison',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brand950,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l?.tr('boutique_return_dialog_body') ??
+                  'Cochez les produits revenus en bon état — leur stock sera restauré.',
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.secondary500, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            // Item checkboxes — capped height for many-item carts.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: ListView(
+                shrinkWrap: true,
+                children: widget.order.items
+                    .where((i) => i.productId.isNotEmpty)
+                    .map((item) {
+                  final checked = _returnedIds.contains(item.productId);
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (checked) {
+                          _returnedIds.remove(item.productId);
+                        } else {
+                          _returnedIds.add(item.productId);
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: checked
+                            ? const Color(0xFFF0FDF4)
+                            : AppColors.secondary50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: checked
+                              ? const Color(0xFF16A34A)
+                              : AppColors.secondary100,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            checked
+                                ? Icons.check_box_rounded
+                                : Icons.check_box_outline_blank_rounded,
+                            size: 20,
+                            color: checked
+                                ? const Color(0xFF16A34A)
+                                : AppColors.secondary400,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${item.quantity}× ${item.name}',
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _returnedIds.isEmpty
+                  ? (l?.tr('boutique_return_dialog_none') ??
+                      'Aucun produit ne sera ré-attribué au stock.')
+                  : (l?.tr('boutique_return_dialog_some') ??
+                          '{count} produit(s) seront ré-attribué(s) au stock.')
+                      .replaceAll('{count}', '${_returnedIds.length}'),
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.secondary500),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed:
+                      _saving ? null : () => Navigator.pop(context),
+                  child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+                ),
+                const SizedBox(width: 6),
+                ElevatedButton(
+                  onPressed: _saving ? null : _confirm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFB45309),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          l?.tr('boutique_return_dialog_confirm') ??
+                              'Confirmer le retour',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color bg;
+  final Color fg;
+  const _OrderPill({
+    required this.icon,
+    required this.label,
+    required this.bg,
+    required this.fg,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: fg,
+            ),
           ),
         ],
       ),

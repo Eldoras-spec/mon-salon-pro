@@ -45,6 +45,11 @@ class OrderModel {
   final double totalPrice;
   final double deliveryFee;
   final String deliveryMethod; // 'pickup' or 'delivery'
+  // 'card' = paid online via Stripe; 'cod' = pay on delivery / at salon.
+  final String paymentMethod;
+  final String? paymentStatus;
+  final double? paymentAmount;
+  final String? paymentIntentId;
   final String status; // 'pending', 'confirmed', 'delivered', 'cancelled'
   final DateTime createdAt;
 
@@ -59,6 +64,10 @@ class OrderModel {
     required this.totalPrice,
     this.deliveryFee = 0,
     required this.deliveryMethod,
+    this.paymentMethod = 'cod',
+    this.paymentStatus,
+    this.paymentAmount,
+    this.paymentIntentId,
     this.status = 'pending',
     required this.createdAt,
   });
@@ -100,6 +109,10 @@ class OrderModel {
       totalPrice: (d['totalPrice'] as num?)?.toDouble() ?? 0,
       deliveryFee: (d['deliveryFee'] as num?)?.toDouble() ?? 0,
       deliveryMethod: d['deliveryMethod'] ?? 'pickup',
+      paymentMethod: (d['paymentMethod'] as String?) ?? 'cod',
+      paymentStatus: d['paymentStatus'] as String?,
+      paymentAmount: (d['paymentAmount'] as num?)?.toDouble(),
+      paymentIntentId: d['paymentIntentId'] as String?,
       status: d['status'] ?? 'pending',
       createdAt: d['createdAt'] != null
           ? (d['createdAt'] as Timestamp).toDate()
@@ -115,8 +128,13 @@ class OrderModel {
         if (clientAddress != null) 'clientAddress': clientAddress,
         'items': items.map((e) => e.toMap()).toList(),
         'totalPrice': totalPrice,
+        'price': totalPrice,
         'deliveryFee': deliveryFee,
         'deliveryMethod': deliveryMethod,
+        'paymentMethod': paymentMethod,
+        if (paymentStatus != null) 'paymentStatus': paymentStatus,
+        if (paymentAmount != null) 'paymentAmount': paymentAmount,
+        if (paymentIntentId != null) 'paymentIntentId': paymentIntentId,
         'status': status,
         'createdAt': Timestamp.fromDate(createdAt),
       };
@@ -132,6 +150,10 @@ class OrderModel {
         totalPrice: totalPrice,
         deliveryFee: deliveryFee,
         deliveryMethod: deliveryMethod,
+        paymentMethod: paymentMethod,
+        paymentStatus: paymentStatus,
+        paymentAmount: paymentAmount,
+        paymentIntentId: paymentIntentId,
         status: status ?? this.status,
         createdAt: createdAt,
       );

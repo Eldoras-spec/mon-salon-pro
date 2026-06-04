@@ -13,7 +13,10 @@ import '../widgets/service_form_dialog.dart';
 import '../utils/currency_helper.dart';
 
 class OwnerServicesScreen extends ConsumerStatefulWidget {
-  const OwnerServicesScreen({super.key});
+  const OwnerServicesScreen({super.key, this.initialTab = 0});
+
+  /// Tab to open on: 0 = Services, 1 = Packs, 2 = Priority.
+  final int initialTab;
 
   @override
   ConsumerState<OwnerServicesScreen> createState() => _OwnerServicesScreenState();
@@ -32,7 +35,11 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 2),
+    );
     _tabController.addListener(() => setState(() {}));
   }
 
@@ -102,6 +109,9 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
         galleryStorageUsed: salon.galleryStorageUsed,
         salonType: salon.salonType,
         timezone: salon.timezone,
+        cartDepositThreshold: salon.cartDepositThreshold,
+        cartDepositAmount: salon.cartDepositAmount,
+        closedDates: salon.closedDates,
       );
       await DatabaseService().saveSalon(updated);
 
@@ -831,6 +841,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
   late final TextEditingController _priceCtrl;
   late final TextEditingController _descCtrl;
   late Set<String> _selectedServices;
+  String? _serviceCategoryFilter; // null = all categories
 
   @override
   void initState() {
@@ -888,6 +899,33 @@ class _PackFormDialogState extends State<_PackFormDialog> {
     widget.onSave(entry);
   }
 
+  Widget _categoryChip(String label, bool selected, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brand600 : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? AppColors.brand600 : AppColors.secondary200,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.brand950,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -930,32 +968,88 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     const SizedBox(height: 14),
                     _label(l?.tr('pack_select_services') ?? 'Services inclus *'),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: widget.availableServices.map((svc) {
-                        final name = (svc['name'] ?? svc['title'] ?? '') as String;
-                        final isSelected = _selectedServices.contains(name);
-                        return GestureDetector(
-                          onTap: () => setState(() {
-                            if (isSelected) { _selectedServices.remove(name); } else { _selectedServices.add(name); }
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? AppColors.brand100 : Colors.white,
-                              border: Border.all(color: isSelected ? AppColors.brand400 : AppColors.secondary200),
-                              borderRadius: BorderRadius.circular(20),
+                    Builder(builder: (context) {
+                      final categories = widget.availableServices
+                          .map((s) => (s['category'] as String? ?? '').trim())
+                          .where((c) => c.isNotEmpty)
+                          .toSet()
+                          .toList()
+                        ..sort();
+                      final visibleServices =
+                          widget.availableServices.where((s) {
+                        if (_serviceCategoryFilter == null) return true;
+                        return (s['category'] as String? ?? '').trim() ==
+                            _serviceCategoryFilter;
+                      }).toList();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (categories.length > 1) ...[
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(children: [
+                                _categoryChip(
+                                  l?.tr('common_all') ?? 'Tous',
+                                  _serviceCategoryFilter == null,
+                                  () => setState(
+                                      () => _serviceCategoryFilter = null),
+                                ),
+                                ...categories.map((c) => _categoryChip(
+                                      c,
+                                      _serviceCategoryFilter == c,
+                                      () => setState(
+                                          () => _serviceCategoryFilter = c),
+                                    )),
+                              ]),
                             ),
-                            child: Text(name, style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                              color: isSelected ? AppColors.brand700 : AppColors.secondary600,
-                            )),
+                            const SizedBox(height: 10),
+                          ],
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: visibleServices.map((svc) {
+                              final name =
+                                  (svc['name'] ?? svc['title'] ?? '') as String;
+                              final isSelected =
+                                  _selectedServices.contains(name);
+                              return GestureDetector(
+                                onTap: () => setState(() {
+                                  if (isSelected) {
+                                    _selectedServices.remove(name);
+                                  } else {
+                                    _selectedServices.add(name);
+                                  }
+                                }),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.brand100
+                                        : Colors.white,
+                                    border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.brand400
+                                            : AppColors.secondary200),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(name,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: isSelected
+                                            ? AppColors.brand700
+                                            : AppColors.secondary600,
+                                      )),
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        );
-                      }).toList(),
-                    ),
+                        ],
+                      );
+                    }),
                     if (_selectedServices.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(

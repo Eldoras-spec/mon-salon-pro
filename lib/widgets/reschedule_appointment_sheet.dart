@@ -104,6 +104,8 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
   }
 
   Map<String, dynamic>? _hoursForDate(DateTime d) {
+    // Salon-wide closure overrides weekly hours (no slots that day).
+    if (widget.salon.isClosedOnDate(d)) return null;
     final key = _dayKeys[d.weekday - 1];
     return widget.salon.workingHours[key] as Map<String, dynamic>?;
   }

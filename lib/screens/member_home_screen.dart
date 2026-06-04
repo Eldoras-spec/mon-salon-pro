@@ -13,6 +13,9 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
+import '../models/notification_model.dart';
+import 'notifications_screen.dart';
+import '../widgets/country_phone_field.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/reschedule_appointment_sheet.dart';
 import '../theme/app_colors.dart';
@@ -69,9 +72,7 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
       ),
     );
     if (confirm != true) return;
-    await ref.read(authServiceProvider).signOut();
-    ref.invalidate(authStateProvider);
-    ref.invalidate(userModelProvider);
+    await signOutAll(ref);
   }
 
   @override
@@ -81,6 +82,12 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
     if (member == null) return const SizedBox.shrink();
 
     final salonAsync = ref.watch(ownerSalonProvider);
+
+    // Member's synthetic notif id (same key the CF writes assignment notifs to).
+    // Used instead of currentUserId, which equals the OWNER's uid in
+    // profile-selector mode.
+    final memberNotifId =
+        'emp_${salonAsync.valueOrNull?.id ?? ''}_${member.id}';
 
     final l = AppLocalizations.of(context);
 
@@ -128,6 +135,63 @@ class _MemberHomeScreenState extends ConsumerState<MemberHomeScreen>
                 ),
                 const SizedBox(width: 8),
               ],
+              // Notifications bell with unread badge.
+              // Keyed by the member's synthetic notif id (`emp_<salonId>_<memberId>`,
+              // what the CF writes) — NOT currentUserId, which equals the OWNER's
+              // uid when the member is in profile-selector mode. This way the member
+              // sees only THEIR assignment notifs in both login modes.
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => NotificationsScreen(userId: memberNotifId),
+                  ));
+                },
+                child: StreamBuilder<List<NotificationModel>>(
+                  stream: DatabaseService().getNotifications(memberNotifId),
+                  builder: (context, snap) {
+                    final unreadCount =
+                        snap.data?.where((n) => !n.isRead).length ?? 0;
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary50,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.secondary200),
+                          ),
+                          child: const Icon(Icons.notifications_rounded,
+                              size: 16, color: AppColors.secondary400),
+                        ),
+                        if (unreadCount > 0)
+                          Positioned(
+                            top: -2, right: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                  minWidth: 16, minHeight: 16),
+                              child: Text(
+                                '$unreadCount',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: _signOut,
                 child: Container(
@@ -1229,6 +1293,13 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                     ],
                   ],
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  AppLocalizations.of(context)
+                          ?.tr('unavailability_today_subtitle') ??
+                      'Touchez une heure pour vous marquer indisponible (créneaux du jour)',
+                  style: TextStyle(fontSize: 11, color: AppColors.secondary400),
+                ),
                 if (_isTodayFullyUnavailable) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -1310,6 +1381,36 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_month_rounded,
+                        size: 18, color: AppColors.brand600),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        AppLocalizations.of(context)
+                                ?.tr('unavailability_calendar_title') ??
+                            'Indisponibilités par jour',
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brand950),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    AppLocalizations.of(context)
+                            ?.tr('unavailability_calendar_subtitle') ??
+                        'Touchez un jour pour le marquer indisponible (journée entière)',
+                    style:
+                        TextStyle(fontSize: 11, color: AppColors.secondary400),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 // Month navigation
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1536,6 +1637,10 @@ class _MemberAddAppointmentSheetState
   ];
 
   final _clientNameCtrl = TextEditingController();
+  /// E.164 phone for the client — fed to the appointment so the CF
+  /// `onNewAppointment` can WhatsApp the booking confirmation (same
+  /// flow as owner-created appointments).
+  String? _clientWhatsappE164;
   final List<Map<String, dynamic>> _selectedServices = [];
   Map<String, dynamic>? _selectedService;
   Map<String, dynamic>? _selectedPack;
@@ -1695,6 +1800,8 @@ class _MemberAddAppointmentSheetState
   }
 
   Map<String, dynamic>? _getHoursForDate(DateTime date) {
+    // Salon-wide closure overrides weekly hours (no slots, unselectable).
+    if (widget.salon.isClosedOnDate(date)) return null;
     final dayKey = _dayKeys[date.weekday - 1];
     return widget.salon.workingHours[dayKey] as Map<String, dynamic>?;
   }
@@ -1896,6 +2003,10 @@ class _MemberAddAppointmentSheetState
             createdAt: DateTime.now(),
             durationMinutes: svcDur,
             clientName: clientName,
+            clientPhone: (_clientWhatsappE164 != null &&
+                    _clientWhatsappE164!.isNotEmpty)
+                ? _clientWhatsappE164
+                : null,
             assignedMemberId: widget.member.id,
             assignedMemberName: widget.member.name,
           ));
@@ -1916,6 +2027,10 @@ class _MemberAddAppointmentSheetState
           createdAt: DateTime.now(),
           durationMinutes: duration,
           clientName: clientName,
+          clientPhone: (_clientWhatsappE164 != null &&
+                  _clientWhatsappE164!.isNotEmpty)
+              ? _clientWhatsappE164
+              : null,
           assignedMemberId: widget.member.id,
           assignedMemberName: widget.member.name,
         ));
@@ -2254,6 +2369,20 @@ class _MemberAddAppointmentSheetState
               style:
                   const TextStyle(fontSize: 14, color: AppColors.brand950),
               decoration: _inputDecoration(l?.tr('appointments_client_name_hint') ?? 'ex. Mohamed Alami'),
+            ),
+            const SizedBox(height: 16),
+
+            // Client WhatsApp — used by onNewAppointment CF to send the booking
+            // confirmation, same as owner-created appointments.
+            _label(l?.tr('appointments_client_whatsapp') ?? 'WhatsApp'),
+            const SizedBox(height: 6),
+            CountryPhoneField(
+              initialE164: _clientWhatsappE164,
+              onChanged: (e164) {
+                setState(() {
+                  _clientWhatsappE164 = e164;
+                });
+              },
             ),
             const SizedBox(height: 16),
 

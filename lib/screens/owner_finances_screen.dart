@@ -338,6 +338,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
   String _category = 'Fixe';
   String _type = 'Autre';
   bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -375,7 +376,18 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
     final label = _labelCtrl.text.trim();
     final amount =
         double.tryParse(_amountCtrl.text.replaceAll(',', '.'));
-    if (label.isEmpty || amount == null || amount <= 0) return;
+    final l = AppLocalizations.of(context);
+    String? error;
+    if (label.isEmpty) {
+      error = l?.tr('finances_label_required') ?? 'Veuillez saisir un libellé.';
+    } else if (amount == null || amount <= 0) {
+      error = l?.tr('finances_amount_required') ?? 'Veuillez saisir un montant valide.';
+    }
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    setState(() => _error = null);
 
     setState(() => _saving = true);
     try {
@@ -385,7 +397,7 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
         label: label,
         category: _category,
         type: _type,
-        amount: amount,
+        amount: amount!,
         month: widget.month,
         year: widget.year,
         createdAt: DateTime.now(),
@@ -526,6 +538,32 @@ class _AddChargeSheetState extends State<_AddChargeSheet> {
               ),
             ),
           ]),
+          if (_error != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.error_outline_rounded,
+                    size: 18, color: Color(0xFFDC2626)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFFB91C1C),
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ]),
+            ),
+          ],
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,

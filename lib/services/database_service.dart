@@ -105,6 +105,9 @@ class DatabaseService {
       salonType: salon.salonType,
       plan: salon.plan,
       timezone: salon.timezone,
+      cartDepositThreshold: salon.cartDepositThreshold,
+      cartDepositAmount: salon.cartDepositAmount,
+      closedDates: salon.closedDates,
     );
 
     // Build the write map manually so we never overwrite server-controlled
@@ -229,19 +232,24 @@ class DatabaseService {
     await batch.commit();
   }
 
-  /// Dual-source hydration: for each appointment doc, merge PII into the
-  /// model. For appointments with a real `clientId` (registered user), we
-  /// resolve name + phone via the in-session user cache instead of the
-  /// `private/contact` subcoll — this saves ~1 read per appointment per
-  /// query, which is the dominant per-appt cost on agenda/home/RDV list.
+  // Session-scope cache of PII (name+phone) keyed by clientId. Populated
+  // from `appointments/{id}/private/contact` on first read of any RDV for
+  // that client — subsequent RDVs of the same client hit the cache so we
+  // stay at ~5 supp reads for a 100-RDV / 5-client salon. Cleared on
+  // signout via `clearUserCache()`.
+  static final Map<String, ({String? name, String? phone})> _apptPiiCache = {};
+
+  /// PII hydration: for each appointment doc, merge `clientName` +
+  /// `clientPhone` from the `private/contact` subcollection into the
+  /// model. The PII is denormalized into that subcoll at booking time
+  /// (cf `createAppointment`) — the rule allows owner + employee + client
+  /// themselves to read it.
   ///
-  /// Trade-off: the owner sees the user's CURRENT profile name/phone rather
-  /// than the snapshot taken at booking time. In practice clients rarely
-  /// rename themselves and this matches what they want owners to see.
+  /// Caches by `clientId` so N RDVs of the same registered client only
+  /// trigger 1 subcoll read per session.
   ///
-  /// Walk-in bookings (`clientId == 'walk-in'`) and other anonymous flows
-  /// have no user doc to fall back on, so we still read the subcoll.
-  /// Falls back gracefully if subcol is absent (legacy flat docs).
+  /// Falls back gracefully for legacy flat-format docs (PII on the main
+  /// doc) and for appointments where the subcoll wasn't written.
   Future<List<AppointmentModel>> _enrichWithPrivate(
       Iterable<DocumentSnapshot<Map<String, dynamic>>> docs) async {
     return Future.wait(docs.map((doc) async {
@@ -250,19 +258,17 @@ class DatabaseService {
       if (appt.clientName != null || appt.clientPhone != null) {
         return appt;
       }
-      // Registered client → cheap path via cached user doc.
+      // Registered client → check the by-clientId cache first.
       if (appt.clientId.isNotEmpty && appt.clientId != 'walk-in') {
-        final user = await getCachedUser(appt.clientId);
-        if (user != null) {
-          final name = user.fullName.trim();
-          final wa = user.whatsapp.trim();
+        final cached = _apptPiiCache[appt.clientId];
+        if (cached != null) {
           return appt.copyWith(
-            clientName: name.isNotEmpty ? name : null,
-            clientPhone: wa.isNotEmpty ? wa : null,
+            clientName: cached.name,
+            clientPhone: cached.phone,
           );
         }
       }
-      // Walk-in or user doc missing → read the private subcoll.
+      // Cache miss → read the private subcoll.
       try {
         final priv = await doc.reference
             .collection('private')
@@ -270,9 +276,15 @@ class DatabaseService {
             .get();
         if (priv.exists) {
           final data = priv.data()!;
+          final name = data['clientName'] as String?;
+          final phone = data['clientPhone'] as String?;
+          // Cache for next RDV of the same registered client.
+          if (appt.clientId.isNotEmpty && appt.clientId != 'walk-in') {
+            _apptPiiCache[appt.clientId] = (name: name, phone: phone);
+          }
           return appt.copyWith(
-            clientName: data['clientName'] as String?,
-            clientPhone: data['clientPhone'] as String?,
+            clientName: name,
+            clientPhone: phone,
             managementToken: data['managementToken'] as String?,
           );
         }
@@ -536,8 +548,10 @@ class DatabaseService {
   static void clearUserCache([String? uid]) {
     if (uid == null) {
       _userCache.clear();
+      _apptPiiCache.clear();
     } else {
       _userCache.remove(uid);
+      _apptPiiCache.remove(uid);
     }
   }
 
@@ -890,14 +904,39 @@ class DatabaseService {
         .update(data);
   }
 
-  /// Delete a team member.
+  /// Delete a team member AND remove their name from every
+  /// `salon.services[*].assignedMembers` so no stale reference remains.
+  /// Atomic via a single transaction — either both writes apply or neither.
   Future<void> deleteTeamMember(String salonId, String memberId) async {
-    await _firestore
-        .collection('salons')
-        .doc(salonId)
-        .collection('teamMembers')
-        .doc(memberId)
-        .delete();
+    final salonRef = _firestore.collection('salons').doc(salonId);
+    final memberRef = salonRef.collection('teamMembers').doc(memberId);
+    await _firestore.runTransaction((tx) async {
+      // Firestore requires ALL reads before any write in a transaction.
+      final memberSnap = await tx.get(memberRef);
+      if (!memberSnap.exists) return; // already deleted, nothing to clean
+      final memberName = (memberSnap.data()?['name'] as String?)?.trim() ?? '';
+      final salonSnap = await tx.get(salonRef);
+
+      tx.delete(memberRef);
+
+      if (memberName.isEmpty || !salonSnap.exists) return;
+      final salonData = salonSnap.data() ?? {};
+      final services = (salonData['services'] as List?) ?? const [];
+      var changed = false;
+      final cleaned = services.map((raw) {
+        final svc = Map<String, dynamic>.from(raw as Map);
+        final assigned = (svc['assignedMembers'] as List?) ?? const [];
+        if (assigned.contains(memberName)) {
+          svc['assignedMembers'] =
+              assigned.where((n) => n != memberName).toList();
+          changed = true;
+        }
+        return svc;
+      }).toList();
+      if (changed) {
+        tx.update(salonRef, {'services': cleaned});
+      }
+    });
   }
 
   /// Get upcoming appointments assigned to a member (one-shot).
@@ -1226,15 +1265,24 @@ class DatabaseService {
 
   // --- Orders (Boutique) ---
 
-  Stream<List<OrderModel>> getSalonOrders(String salonId) {
-    return _firestore
+  /// Stream the salon's orders. When [since] is provided we narrow the
+  /// query server-side via a `createdAt >= since` filter so the listener
+  /// only pays for the visible window — important on heavy stores where
+  /// "all-time" would mean re-streaming hundreds of docs on every change.
+  Stream<List<OrderModel>> getSalonOrders(
+    String salonId, {
+    DateTime? since,
+  }) {
+    Query<Map<String, dynamic>> q = _firestore
         .collection('orders')
-        .where('salonId', isEqualTo: salonId)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => OrderModel.fromFirestore(d))
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+        .where('salonId', isEqualTo: salonId);
+    if (since != null) {
+      q = q.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since));
+    }
+    return q.snapshots().map((snap) => snap.docs
+        .map((d) => OrderModel.fromFirestore(d))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
   }
 
   Stream<List<OrderModel>> getClientOrders(String clientId) {
@@ -1249,14 +1297,21 @@ class DatabaseService {
   }
 
   Future<String> createOrder(OrderModel order) async {
+    // Stock is intentionally NOT decremented on creation. See the client
+    // app's createOrder comment for the rationale (pending orders must not
+    // reserve inventory).
     final ref = await _firestore.collection('orders').add(order.toMap());
-    // Decrement stock for each item
-    for (final item in order.items) {
-      await decrementProductStock(item.productId, item.quantity);
-    }
     return ref.id;
   }
 
+  /// Status transitions own the stock effect:
+  ///   • anything → confirmed   : decrement stock (-qty) ONCE
+  ///   • confirmed/delivered → cancelled : restore stock (+qty)
+  ///   • pending → cancelled    : no stock change (nothing was taken yet)
+  ///
+  /// Idempotency: a stock-affecting transition only fires when the previous
+  /// status doesn't match the same bucket (confirmed/delivered both count
+  /// as "stock taken").
   Future<void> updateOrderStatus(String orderId, String status) async {
     final orderRef = _firestore.collection('orders').doc(orderId);
     await _firestore.runTransaction((tx) async {
@@ -1265,11 +1320,17 @@ class DatabaseService {
       final prevStatus = (snap.data()?['status'] ?? '') as String;
       if (prevStatus == status) return;
 
-      // Transitioning INTO cancelled from a non-cancelled state → restore stock.
-      // Read all product docs first (Firestore transactions require reads before writes),
-      // skip any that have been deleted since the order was placed.
-      final toRestore = <DocumentReference, int>{};
-      if (status == 'cancelled' && prevStatus != 'cancelled') {
+      final stockTakenBefore =
+          prevStatus == 'confirmed' || prevStatus == 'delivered';
+      final stockTakenAfter =
+          status == 'confirmed' || status == 'delivered';
+
+      final stockDelta = <DocumentReference, int>{};
+      // Take stock when moving from "not taken" → "taken".
+      // Restore stock when moving from "taken" → "not taken" (i.e. cancel).
+      final shouldDecrement = !stockTakenBefore && stockTakenAfter;
+      final shouldRestore = stockTakenBefore && !stockTakenAfter;
+      if (shouldDecrement || shouldRestore) {
         final items = (snap.data()?['items'] as List?) ?? const [];
         for (final raw in items) {
           final map = raw as Map<String, dynamic>;
@@ -1278,14 +1339,65 @@ class DatabaseService {
           if (productId == null || productId.isEmpty || qty <= 0) continue;
           final productRef = _firestore.collection('products').doc(productId);
           final productSnap = await tx.get(productRef);
-          if (productSnap.exists) toRestore[productRef] = qty;
+          if (!productSnap.exists) continue;
+          stockDelta[productRef] = shouldDecrement ? -qty : qty;
         }
       }
 
-      for (final entry in toRestore.entries) {
+      for (final entry in stockDelta.entries) {
         tx.update(entry.key, {'stock': FieldValue.increment(entry.value)});
       }
       tx.update(orderRef, {'status': status});
+    });
+  }
+
+  /// Mark a delivered order as returned. The order moves to 'cancelled' so
+  /// downstream filters (revenue, finance) treat it like any other cancel,
+  /// but we stamp `returnedAt` + `returnedItemIds` so the history shows it
+  /// was a delivery-failure return rather than a pre-shipment cancel.
+  ///
+  /// Stock is restored ONLY for the item productIds the owner ticked as
+  /// "returned in good condition". Items NOT in that list stay deducted —
+  /// the product was lost / damaged in transit.
+  ///
+  /// Idempotent: subsequent calls on an already-cancelled order are no-ops.
+  Future<void> markOrderReturned(
+    String orderId,
+    List<String> returnedItemProductIds,
+  ) async {
+    final orderRef = _firestore.collection('orders').doc(orderId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(orderRef);
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      final prevStatus = (data['status'] ?? '') as String;
+      // Only delivered orders can be returned. Confirmed-but-not-delivered
+      // owners should use the regular cancel flow.
+      if (prevStatus != 'delivered') return;
+
+      final restoreSet = returnedItemProductIds.toSet();
+      final items = (data['items'] as List?) ?? const [];
+      final stockDelta = <DocumentReference, int>{};
+      for (final raw in items) {
+        final map = raw as Map<String, dynamic>;
+        final productId = map['productId'] as String?;
+        final qty = (map['quantity'] as num?)?.toInt() ?? 0;
+        if (productId == null || productId.isEmpty || qty <= 0) continue;
+        if (!restoreSet.contains(productId)) continue;
+        final productRef = _firestore.collection('products').doc(productId);
+        final productSnap = await tx.get(productRef);
+        if (!productSnap.exists) continue;
+        stockDelta[productRef] = qty;
+      }
+
+      for (final entry in stockDelta.entries) {
+        tx.update(entry.key, {'stock': FieldValue.increment(entry.value)});
+      }
+      tx.update(orderRef, {
+        'status': 'cancelled',
+        'returnedAt': FieldValue.serverTimestamp(),
+        'returnedItemIds': returnedItemProductIds,
+      });
     });
   }
 

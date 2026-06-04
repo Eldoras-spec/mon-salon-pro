@@ -262,7 +262,11 @@ class _MemberTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
-    final requiresPin = member.role == 'gerant';
+    // New gérant accounts have no PIN (they authenticate on their own
+    // device via the WhatsApp login code). Old accounts created before
+    // that change still carry a `pinHash` — keep prompting for them so
+    // existing setups don't suddenly bypass the lock.
+    final requiresPin = member.role == 'gerant' && member.pinHash.isNotEmpty;
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       decoration: BoxDecoration(

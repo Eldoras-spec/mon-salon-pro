@@ -205,9 +205,11 @@ class _TaskTile extends ConsumerWidget {
         );
         break;
       case OwnerTaskType.pendingOrders:
+      case OwnerTaskType.ordersToDeliver:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const OwnerBoutiqueScreen()),
+          MaterialPageRoute(
+              builder: (_) => const OwnerBoutiqueScreen(initialTab: 1)),
         );
         break;
       case OwnerTaskType.noShowRisk:
@@ -292,6 +294,17 @@ class _TaskTile extends ConsumerWidget {
                   '{count} commande(s) à confirmer')
               .replaceAll('{count}', '$count'),
           subtitle: l?.tr('owner_tasks_orders_sub') ?? 'Boutique — attente validation',
+        );
+      case OwnerTaskType.ordersToDeliver:
+        return _TaskMeta(
+          icon: Icons.local_shipping_outlined,
+          fg: const Color(0xFF0EA5E9),
+          bg: const Color(0xFFE0F2FE),
+          title: (l?.tr('owner_tasks_orders_to_deliver_title') ??
+                  '{count} commande(s) à livrer')
+              .replaceAll('{count}', '$count'),
+          subtitle: l?.tr('owner_tasks_orders_to_deliver_sub') ??
+              'Boutique — confirmées, en attente d\'expédition',
         );
       case OwnerTaskType.noShowRisk:
         return _TaskMeta(

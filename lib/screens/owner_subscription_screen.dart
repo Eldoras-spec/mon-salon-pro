@@ -20,8 +20,8 @@ import 'owner_upgrade_screen.dart';
 ///
 /// This screen is read-mostly; the upgrade/downgrade actions route to
 /// `OwnerUpgradeScreen` (currently a dev bypass — real billing is wired
-/// later via RevenueCat). "Gérer mon paiement" is shown but disabled
-/// until RevenueCat is integrated.
+/// later via RevenueCat). Payment method management is handled natively
+/// by the App Store / Play Store through RevenueCat, no Mon Salon UI needed.
 class OwnerSubscriptionScreen extends ConsumerWidget {
   const OwnerSubscriptionScreen({super.key});
 
@@ -182,7 +182,7 @@ class _Body extends StatelessWidget {
             title: l?.tr('stripe_connect.tile_title') ??
                 'Stripe Connect Express',
             subtitle: l?.tr('stripe_connect.tile_subtitle') ??
-                'Acomptes et paiements lors de la réservation',
+                'Configurer les paiements par carte bancaire',
             onTap: () {
               Navigator.push(
                 context,
@@ -191,29 +191,6 @@ class _Body extends StatelessWidget {
                 ),
               );
             },
-          ),
-          const SizedBox(height: 16),
-          // ── Manage payment (disabled until RevenueCat) ────────
-          Opacity(
-            opacity: 0.5,
-            child: _ActionTile(
-              icon: Icons.credit_card_rounded,
-              color: AppColors.secondary500,
-              title: l?.tr('subscription.manage_payment') ??
-                  'Gérer mon paiement',
-              subtitle: l?.tr('subscription.manage_payment_desc') ??
-                  'Bientôt disponible',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      l?.tr('subscription.billing_coming_soon') ??
-                          'La gestion du paiement sera disponible après l\'intégration du billing.',
-                    ),
-                  ),
-                );
-              },
-            ),
           ),
         ],
       ),

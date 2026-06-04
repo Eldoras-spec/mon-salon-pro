@@ -779,7 +779,10 @@ class _MemberCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
         children: [
           // Avatar with photo support (disabled when cap-deactivated)
           GestureDetector(
@@ -871,11 +874,14 @@ class _MemberCard extends StatelessWidget {
                     if (member.phone != null &&
                         member.phone!.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Text(
-                        member.phone!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.secondary500,
+                      Flexible(
+                        child: Text(
+                          member.phone!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.secondary500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -942,6 +948,43 @@ class _MemberCard extends StatelessWidget {
                   size: 18, color: Color(0xFFDC2626)),
               onPressed: onDelete,
               tooltip: l?.tr('common_delete') ?? 'Supprimer',
+            ),
+          ],
+        ],
+      ),
+          // Share login code — owner-only action (hidden for gérant viewers
+          // and cap-deactivated members), surfaced directly on the card so
+          // it's more discoverable than only on the profile selector.
+          if (!isGerant && !isCapDeactivated) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => showEmployeeCodeSheet(
+                  context: context,
+                  salonId: salonId,
+                  memberId: member.id,
+                  memberName: member.name,
+                  initialCode: member.loginCode,
+                  employeeWhatsapp: member.phone,
+                ),
+                icon: const Icon(Icons.key_rounded, size: 16),
+                label: Text(
+                  l?.tr('selector_share_code') ??
+                      'Partager le code de connexion',
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brand600,
+                  side: BorderSide(
+                      color: AppColors.brand600.withValues(alpha: 0.4),
+                      width: 1),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
             ),
           ],
         ],
@@ -1045,18 +1088,15 @@ class _MemberFormSheet extends StatefulWidget {
 class _MemberFormSheetState extends State<_MemberFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _pinCtrl;
-  late final TextEditingController _pinConfirmCtrl;
   /// E.164 phone emitted by [CountryPhoneField] (e.g. "+212612345678").
   /// `null` when the local part is empty — saved as null on the doc.
   String? _phoneE164;
   String _role = 'member';
   bool _saving = false;
-  bool _showPin = false;
-  bool _showPinConfirm = false;
   late Set<String> _selectedServices;
   bool _servicesError = false;
   int? _agendaColorIndex;
+  String? _serviceCategoryFilter; // null = all categories
 
   bool get _isEditing => widget.existing != null;
 
@@ -1068,8 +1108,6 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
     _phoneE164 = (m?.phone != null && m!.phone!.trim().isNotEmpty)
         ? m.phone!.trim()
         : null;
-    _pinCtrl = TextEditingController();
-    _pinConfirmCtrl = TextEditingController();
     _role = m?.role ?? 'member';
     _selectedServices = Set<String>.from(m?.assignedServiceNames ?? []);
     _agendaColorIndex = m?.agendaColorIndex;
@@ -1078,8 +1116,6 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _pinCtrl.dispose();
-    _pinConfirmCtrl.dispose();
     super.dispose();
   }
 
@@ -1116,12 +1152,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           'assignedServiceNames': _selectedServices.toList(),
           'agendaColorIndex': _agendaColorIndex,
         };
-        // Only update pinHash for gérant if a new PIN was entered
-        if (_role == 'gerant' && _pinCtrl.text.isNotEmpty) {
-          updates['pinHash'] = hashPin(_pinCtrl.text.trim());
-        } else if (_role == 'member') {
-          updates['pinHash'] = ''; // employees have no PIN
-        }
+        // Both gérant and member now authenticate via WhatsApp login
+        // code; no PIN is collected at edit time.
+        updates['pinHash'] = '';
         await db.updateTeamMember(
             widget.salonId, widget.existing!.id, updates);
       } else {
@@ -1130,9 +1163,7 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           salonId: widget.salonId,
           name: _nameCtrl.text.trim(),
           role: _role,
-          pinHash: _role == 'gerant'
-              ? hashPin(_pinCtrl.text.trim())
-              : '', // employees have no PIN
+          pinHash: '', // both roles authenticate via the WhatsApp login code
           phone: _phoneE164,
           isActive: true,
           createdAt: DateTime.now(),
@@ -1269,69 +1300,12 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                   ),
                 const SizedBox(height: 16),
 
-                // PIN — only for gérant
-                if (_role == 'gerant') ...[
-                  _label(_isEditing
-                      ? (l?.tr('team_pin_label_edit') ?? 'Nouveau PIN 6 chiffres (laisser vide = inchangé)')
-                      : (l?.tr('team_pin_label_new') ?? 'PIN 6 chiffres *')),
-                  TextFormField(
-                    controller: _pinCtrl,
-                    obscureText: !_showPin,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    decoration: _inputDeco('••••••').copyWith(
-                      suffixIcon: IconButton(
-                        icon: Icon(_showPin
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
-                        onPressed: () =>
-                            setState(() => _showPin = !_showPin),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (_isEditing && (v == null || v.isEmpty)) return null;
-                      if (v == null || v.length != 6) {
-                        return l?.tr('team_pin_error_length') ?? 'Le PIN doit contenir exactement 6 chiffres';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Confirm PIN
-                  _label(_isEditing
-                      ? (l?.tr('team_pin_confirm_edit') ?? 'Confirmer le nouveau PIN')
-                      : (l?.tr('team_pin_confirm_new') ?? 'Confirmer le PIN *')),
-                  TextFormField(
-                    controller: _pinConfirmCtrl,
-                    obscureText: !_showPinConfirm,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    decoration: _inputDeco('••••••').copyWith(
-                      suffixIcon: IconButton(
-                        icon: Icon(_showPinConfirm
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
-                        onPressed: () => setState(
-                            () => _showPinConfirm = !_showPinConfirm),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (_isEditing && _pinCtrl.text.isEmpty) return null;
-                      if (v != _pinCtrl.text) {
-                        return l?.tr('team_pin_error_mismatch') ?? 'Les PINs ne correspondent pas';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                // PIN removed — gérants now authenticate on their own device
+                // via the WhatsApp login code (same flow as members). The
+                // legacy PIN-on-owner-device flow is kept backward-compatible
+                // in the profile selector (PIN dialog still shows for old
+                // gérants whose `pinHash` is non-empty), but new accounts no
+                // longer need one.
 
                 // Services maîtrisés
                 if (widget.services.isNotEmpty) ...[
@@ -1361,65 +1335,101 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
                       ),
                     ),
                   ),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _servicesError
-                            ? const Color(0xFFDC2626)
-                            : AppColors.secondary200,
-                      ),
-                    ),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: widget.services.map((s) {
-                        final name = s['name'] as String? ?? '';
-                        final selected = _selectedServices.contains(name);
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (selected) {
-                                _selectedServices.remove(name);
-                              } else {
-                                _selectedServices.add(name);
-                              }
-                              _servicesError = false;
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? AppColors.brand600
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: selected
-                                    ? AppColors.brand600
-                                    : AppColors.secondary200,
+                  Builder(builder: (ctx) {
+                    final categories = widget.services
+                        .map((s) => (s['category'] as String? ?? '').trim())
+                        .where((c) => c.isNotEmpty)
+                        .toSet()
+                        .toList()
+                      ..sort();
+                    final visibleServices = widget.services.where((s) {
+                      if (_serviceCategoryFilter == null) return true;
+                      final cat = (s['category'] as String? ?? '').trim();
+                      return cat == _serviceCategoryFilter;
+                    }).toList();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (categories.length > 1) ...[
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(children: [
+                              _categoryChip(
+                                l?.tr('common_all') ?? 'Tous',
+                                _serviceCategoryFilter == null,
+                                () => setState(() => _serviceCategoryFilter = null),
                               ),
-                            ),
-                            child: Text(
-                              name,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: selected
-                                    ? Colors.white
-                                    : AppColors.secondary600,
-                              ),
+                              ...categories.map((c) => _categoryChip(
+                                    c,
+                                    _serviceCategoryFilter == c,
+                                    () => setState(() => _serviceCategoryFilter = c),
+                                  )),
+                            ]),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _servicesError
+                                  ? const Color(0xFFDC2626)
+                                  : AppColors.secondary200,
                             ),
                           ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: visibleServices.map((s) {
+                              final name = s['name'] as String? ?? '';
+                              final selected = _selectedServices.contains(name);
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedServices.remove(name);
+                                    } else {
+                                      _selectedServices.add(name);
+                                    }
+                                    _servicesError = false;
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? AppColors.brand600
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: selected
+                                          ? AppColors.brand600
+                                          : AppColors.secondary200,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: selected
+                                          ? Colors.white
+                                          : AppColors.secondary600,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 16),
                 ],
 
@@ -1530,6 +1540,33 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: AppColors.secondary700,
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryChip(String label, bool selected, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.brand600 : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? AppColors.brand600 : AppColors.secondary200,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.brand950,
+            ),
+          ),
         ),
       ),
     );

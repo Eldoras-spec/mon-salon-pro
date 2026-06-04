@@ -12,8 +12,12 @@ final clientConversationsProvider =
 });
 
 /// 50 most recent conversations for a salon (owner view). Filter by ownerId.
+/// `autoDispose` so the listener dies the moment the conversations screen
+/// (or any owner-mode container) unmounts — avoids a leftover snapshot
+/// firing PERMISSION_DENIED right after the owner signs out under the new
+/// (null / employee) auth.
 final ownerConversationsProvider =
-    StreamProvider.family<List<ConversationModel>, String>((ref, ownerId) {
+    StreamProvider.autoDispose.family<List<ConversationModel>, String>((ref, ownerId) {
   return MessageService().getOwnerConversations(ownerId);
 });
 

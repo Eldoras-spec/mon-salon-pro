@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -42,6 +44,40 @@ class TimezoneHelper {
     if (_tzInitialized) return;
     tzdata.initializeTimeZones();
     _tzInitialized = true;
+  }
+
+  /// Best-effort IP-based timezone detection via GeoJS (free, no key,
+  /// no rate limit — same provider used for currency detection). Returns
+  /// the IANA name reported for the visitor's IP (e.g. "Africa/Casablanca").
+  /// Cached for the app session. Falls back to `detectDeviceTimezone()`
+  /// when the lookup fails or returns an unknown IANA.
+  static String? _cachedIpTimezone;
+  static Future<String> detectTimezoneByIp({Duration timeout =
+      const Duration(seconds: 4)}) async {
+    if (_cachedIpTimezone != null) return _cachedIpTimezone!;
+    try {
+      final resp = await http
+          .get(Uri.parse('https://get.geojs.io/v1/ip/geo.json'))
+          .timeout(timeout);
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        final iana = (data['timezone'] as String?)?.trim();
+        if (iana != null && iana.contains('/')) {
+          // Validate against the tzdata DB so an exotic IANA the picker
+          // doesn't know still surfaces correctly in salonNow() and the
+          // label fallback in `labelFor`. We don't restrict to the curated
+          // list — the picker shows the raw IANA as label if needed.
+          _ensureTzInitialized();
+          try {
+            tz.getLocation(iana);
+            _cachedIpTimezone = iana;
+            return iana;
+          } catch (_) { /* unknown IANA, fall through */ }
+        }
+      }
+    } catch (_) { /* network/parse error, fall through */ }
+    _cachedIpTimezone = detectDeviceTimezone();
+    return _cachedIpTimezone!;
   }
 
   /// Best-effort device timezone detection.

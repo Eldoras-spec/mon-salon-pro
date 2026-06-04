@@ -60,6 +60,8 @@ void main() async {
   // Initialize locale data for intl date formatting
   await initializeDateFormatting('fr_FR', null);
   await initializeDateFormatting('en_US', null);
+  await initializeDateFormatting('es_ES', null);
+  await initializeDateFormatting('ar', null);
 
   // Register background message handler before NotificationService init
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -134,7 +136,10 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
       final prevUser = previous?.value;
       final nextUser = next.value;
       if (prevUser == null && nextUser != null) {
-        ref.read(profileSelectedProvider.notifier).state = false;
+        // Open straight on the owner home (employees log in via their own
+        // account now). The selector only appears when the owner taps the
+        // profile-switcher button, which flips this back to false.
+        ref.read(profileSelectedProvider.notifier).state = true;
         ref.read(activeTeamMemberProvider.notifier).state = null;
         // Drop any cached `null` from a previous orphan-user session.
         // userModelAsync.when uses skipLoadingOnReload, so without this
@@ -227,7 +232,23 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
           // Employee session check (user authenticated via code exchange).
           // Employees don't have a `users/{uid}` doc; they have custom claims
           // { employee: true, salonId, memberId, role } on their Firebase Auth token.
+          //
+          // CRITICAL: wait for the FutureProvider to settle for the current
+          // user before deciding the route. Without this, when a new
+          // employee signs in via custom token, employeeSessionProvider
+          // briefly transitions through isLoading with .value == null;
+          // the router would fall through to userModelProvider, which
+          // tries to load users/{emp_X_Y}, fails after 9s of retries,
+          // and the orphan-auth branch below force-signs-out the user —
+          // making employee login appear broken right after owner logout.
           final employeeAsync = ref.watch(employeeSessionProvider);
+          if (employeeAsync.isLoading) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(color: AppColors.brand600),
+              ),
+            );
+          }
           final employeeSession = employeeAsync.value;
           if (employeeSession != null) {
             return _EmployeeHome(session: employeeSession);
@@ -245,15 +266,27 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
             skipLoadingOnReload: true,
             data: (model) {
               if (model == null) {
+                // Employees have no `users/{uid}` doc by design — their
+                // identity lives in their custom claims + the team member
+                // doc. If the auth user's uid starts with `emp_`, the
+                // employee claim is still propagating (token refresh in
+                // flight inside `employeeSessionProvider`). Show a spinner
+                // instead of triggering signOut, otherwise we'd kick the
+                // freshly-signed-in employee right back to the LoginScreen.
+                if (user.uid.startsWith('emp_')) {
+                  return const Scaffold(
+                    body: Center(
+                      child: CircularProgressIndicator(color: AppColors.brand600),
+                    ),
+                  );
+                }
                 // Orphan auth user — `users/{uid}` doesn't exist after the
                 // 3-retry / 9s wait inside userModelProvider. Sign out
                 // immediately so the user lands cleanly on the login screen
                 // instead of staring at "Profil introuvable" for 3 more secs.
                 Future.microtask(() {
                   if (ref.read(authStateProvider).value != null) {
-                    ref.read(authServiceProvider).signOut();
-                    ref.invalidate(authStateProvider);
-                    ref.invalidate(userModelProvider);
+                    signOutAll(ref);
                   }
                 });
 
@@ -357,8 +390,7 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
                         child: Text(l?.tr('main_retry') ?? 'Réessayer'),
                       ),
                       TextButton(
-                        onPressed: () =>
-                            ref.read(authServiceProvider).signOut(),
+                        onPressed: () => signOutAll(ref),
                         child: Text(l?.tr('main_logout') ?? 'Se déconnecter'),
                       ),
                     ],
@@ -393,28 +425,27 @@ class _EmployeeHome extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
-    return FutureBuilder<List<dynamic>>(
-      future: Future.wait<dynamic>([
-        // Owner UserModel (used by MainAppScaffold for salonId).
-        AuthService().getUserModel(session.salonId),
-        // Team member doc (to detect revocation + seed activeTeamMemberProvider).
-        TeamMembersRepo.fetchOne(session.salonId, session.memberId),
-      ]),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+    // The team-member doc is the source of truth for revocation. The
+    // owner's UserModel (`users/{ownerUid}`) is ONLY needed when the
+    // employee is a `gerant` and we render `MainAppScaffold` — a `member`
+    // routes to `MemberHomeScreen` and doesn't need it. We used to fetch
+    // both in parallel, but since the `users` rule was tightened to only
+    // allow self-read (2026-05-27), an employee can no longer read the
+    // owner's user doc — that would short-circuit to the "revoked" branch
+    // for every employee, even active ones. Fetch the member first; only
+    // fetch the owner's UserModel when actually needed.
+    return FutureBuilder<TeamMemberModel?>(
+      future: TeamMembersRepo.fetchOne(session.salonId, session.memberId),
+      builder: (context, memberSnap) {
+        if (memberSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator(color: AppColors.brand600)),
           );
         }
-        final ownerModel = snap.data?[0] as UserModel?;
-        final member = snap.data?[1];
-        if (ownerModel == null || member == null) {
-          // Member revoked or data missing → force logout.
-          Future.microtask(() async {
-            await ref.read(authServiceProvider).signOut();
-            ref.invalidate(authStateProvider);
-            ref.invalidate(employeeSessionProvider);
-          });
+        final member = memberSnap.data;
+        if (member == null) {
+          // Team member doc gone — owner deleted the employee. Real revocation.
+          Future.microtask(() => signOutAll(ref));
           return Scaffold(
             body: Center(
               child: Padding(
@@ -443,7 +474,37 @@ class _EmployeeHome extends ConsumerWidget {
         if (session.role == 'member') {
           return const MemberHomeScreen();
         }
-        return MainAppScaffold(userModel: ownerModel);
+        // Gerant path — needs the owner's UserModel for the dashboard.
+        // The rule denies cross-user reads, so this is best-effort and
+        // depends on either a future rule relaxation for in-salon employees
+        // or a CF-backed fetch. For now, surface a clear error if it fails.
+        return FutureBuilder<UserModel?>(
+          future: AuthService().getUserModel(session.salonId),
+          builder: (context, ownerSnap) {
+            if (ownerSnap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator(color: AppColors.brand600)),
+              );
+            }
+            final ownerModel = ownerSnap.data;
+            if (ownerModel == null) {
+              Future.microtask(() => signOutAll(ref));
+              return Scaffold(
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      l?.tr('emp_session_revoked') ??
+                          'Votre accès a été retiré. Contactez votre propriétaire.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              );
+            }
+            return MainAppScaffold(userModel: ownerModel);
+          },
+        );
       },
     );
   }

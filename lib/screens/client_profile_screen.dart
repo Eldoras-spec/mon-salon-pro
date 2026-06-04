@@ -82,9 +82,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   }
 
   Future<void> _signOut() async {
-    await ref.read(authServiceProvider).signOut();
-    ref.invalidate(authStateProvider);
-    ref.invalidate(userModelProvider);
+    await signOutAll(ref);
     if (mounted) {
       Navigator.of(context, rootNavigator: true)
           .popUntil((route) => route.isFirst);
@@ -146,6 +144,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       if (mounted) {
         ref.invalidate(authStateProvider);
         ref.invalidate(userModelProvider);
+        ref.invalidate(employeeSessionProvider);
         Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
@@ -1168,20 +1167,23 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
             ),
             const Divider(height: 1, indent: 46),
 
-            // ── Abonnement (propriétaire uniquement) ────────────────────
-            _SettingsRow(
-              icon: Icons.workspace_premium_rounded,
-              iconColor: const Color(0xFFB45309),
-              iconBg: const Color(0xFFFEF3C7),
-              label: l?.tr('menu_subscription') ?? 'Mon abonnement',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const OwnerSubscriptionScreen(),
+            // ── Abonnement (propriétaire uniquement — pas pour les gérants
+            // qui partagent la session owner via custom token) ──────────
+            if (ref.watch(employeeSessionProvider).value == null) ...[
+              _SettingsRow(
+                icon: Icons.workspace_premium_rounded,
+                iconColor: const Color(0xFFB45309),
+                iconBg: const Color(0xFFFEF3C7),
+                label: l?.tr('menu_subscription') ?? 'Mon abonnement',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OwnerSubscriptionScreen(),
+                  ),
                 ),
               ),
-            ),
-            const Divider(height: 1, indent: 46),
+              const Divider(height: 1, indent: 46),
+            ],
 
             // ── Assistant BOT (propriétaire uniquement, gate Business in-screen) ─
             _SettingsRow(
@@ -1554,16 +1556,17 @@ class _SupportSheetState extends State<_SupportSheet> {
     if (msg.isEmpty) return;
     setState(() => _loading = true);
     try {
-      await FirebaseFirestore.instance.collection('reports').add({
-        'userId': widget.user.id,
-        'userEmail': widget.user.email,
-        'userName': widget.user.fullName,
-        'userType':
-            widget.user.userType == UserType.owner ? 'owner' : 'client',
-        'category': _category,
+      await FirebaseFirestore.instance.collection('contactMessages').add({
+        'profile': 'pro',
+        'name': widget.user.fullName.isNotEmpty ? widget.user.fullName : 'Utilisateur',
+        'email': widget.user.email,
+        'salon': '',
+        'subject': '[$_category] (via app)',
         'message': msg,
-        'status': 'open',
+        'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
+        'userAgent': 'mon_salon_pro',
+        'lang': Localizations.localeOf(context).languageCode,
       });
       if (mounted) setState(() { _sent = true; _loading = false; });
     } catch (e) {

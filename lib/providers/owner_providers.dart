@@ -25,7 +25,7 @@ final currentSalonIdProvider = Provider<String?>((ref) {
 });
 
 /// Live stream of the owner's salon document.
-final ownerSalonProvider = StreamProvider<SalonModel?>((ref) {
+final ownerSalonProvider = StreamProvider.autoDispose<SalonModel?>((ref) {
   final salonId = ref.watch(currentSalonIdProvider);
   if (salonId == null) return Stream.value(null);
   return _db.getOwnerSalon(salonId);
@@ -40,7 +40,7 @@ final ownerSalonProvider = StreamProvider<SalonModel?>((ref) {
 ///   - [ownerHomeAppointmentsProvider] — last 7d + next 7d (home dashboard)
 ///   - [ownerNoShowWindowAppointmentsProvider] — last 6 months (no-show risk)
 ///   - [ownerAppointmentsRangeProvider] — period-selector driven (RDV list)
-final ownerAppointmentsProvider = StreamProvider<List<AppointmentModel>>((ref) {
+final ownerAppointmentsProvider = StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getSalonAppointments(salon.id);
@@ -51,7 +51,7 @@ final ownerAppointmentsProvider = StreamProvider<List<AppointmentModel>>((ref) {
 /// week stats + a recent-5 fallback. Uses a server-side `dateTime` filter
 /// so reads scale with current activity, not lifetime salon history.
 final ownerHomeAppointmentsProvider =
-    StreamProvider<List<AppointmentModel>>((ref) {
+    StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final now = DateTime.now();
@@ -71,7 +71,7 @@ final ownerHomeAppointmentsProvider =
 /// reads (no full-history scan). The +7d forward window costs ~3% extra
 /// reads vs today-only and is negligible.
 final ownerNoShowWindowAppointmentsProvider =
-    StreamProvider<List<AppointmentModel>>((ref) {
+    StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final now = DateTime.now();
@@ -90,7 +90,7 @@ final ownerNoShowWindowAppointmentsProvider =
 /// Wall-clock comparisons elsewhere (appointment.dateTime is wall-clock-
 /// UTC) match these bounds without TZ conversion.
 final ownerCurrentMonthAppointmentsProvider =
-    StreamProvider<List<AppointmentModel>>((ref) {
+    StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final now = DateTime.now();
@@ -100,21 +100,25 @@ final ownerCurrentMonthAppointmentsProvider =
 });
 
 /// Live stream of inventory items for the owner's salon.
-final ownerInventoryProvider = StreamProvider<List<InventoryModel>>((ref) {
+///
+/// Owner-only: the `inventory where salonId` rule denies employees,
+/// so we short-circuit before opening a doomed Firestore listener.
+final ownerInventoryProvider = StreamProvider.autoDispose<List<InventoryModel>>((ref) {
+  if (ref.watch(employeeSessionProvider).value != null) return Stream.value([]);
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getInventory(salon.id);
 });
 
 /// Live stream of all promotions for the owner's salon.
-final ownerPromotionsProvider = StreamProvider<List<PromotionModel>>((ref) {
+final ownerPromotionsProvider = StreamProvider.autoDispose<List<PromotionModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getPromotions(salon.id);
 });
 
 /// Live stream of all team members for the owner's salon.
-final ownerTeamProvider = StreamProvider<List<TeamMemberModel>>((ref) {
+final ownerTeamProvider = StreamProvider.autoDispose<List<TeamMemberModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getTeamMembers(salon.id);
@@ -122,24 +126,37 @@ final ownerTeamProvider = StreamProvider<List<TeamMemberModel>>((ref) {
 
 /// Live stream of Before/After items for the owner's salon.
 final ownerBeforeAfterProvider =
-    StreamProvider<List<Map<String, dynamic>>>((ref) {
+    StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getBeforeAfterStream(salon.id);
 });
 
 /// Live stream of all products for the owner's salon.
-final ownerProductsProvider = StreamProvider<List<ProductModel>>((ref) {
+final ownerProductsProvider = StreamProvider.autoDispose<List<ProductModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   return _db.getProducts(salon.id);
 });
 
-/// Live stream of all orders for the owner's salon.
-final ownerOrdersProvider = StreamProvider<List<OrderModel>>((ref) {
+/// Filter cutoff for the owner's orders stream. `null` = no cutoff (all
+/// orders). The Boutique → Commandes tab drives this via its dropdown so
+/// the underlying Firestore listener only loads the visible window.
+final ownerOrdersCutoffProvider = StateProvider<DateTime?>((ref) {
+  // Default = last 14 days. Matches the dropdown's default selection.
+  return DateTime.now().subtract(const Duration(days: 14));
+});
+
+/// Live stream of orders for the owner's salon, narrowed to
+/// `createdAt >= ownerOrdersCutoffProvider`.
+///
+/// Owner-only: the `orders where salonId` rule denies employees.
+final ownerOrdersProvider = StreamProvider.autoDispose<List<OrderModel>>((ref) {
+  if (ref.watch(employeeSessionProvider).value != null) return Stream.value([]);
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
-  return _db.getSalonOrders(salon.id);
+  final since = ref.watch(ownerOrdersCutoffProvider);
+  return _db.getSalonOrders(salon.id, since: since);
 });
 
 /// Owner salon's revenue for the CURRENT calendar month.
@@ -179,7 +196,7 @@ final appointmentsPeriodProvider =
 /// Replaces [ownerAppointmentsProvider] for the RDV list + member dashboard —
 /// no hard limit, server-side filtered by dateTime.
 final ownerAppointmentsRangeProvider =
-    StreamProvider<List<AppointmentModel>>((ref) {
+    StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final period = ref.watch(appointmentsPeriodProvider);
@@ -246,7 +263,7 @@ final statisticsPeriodProvider =
 /// Live stream of appointments for the statistics screen.
 /// Server-side filtered by [statisticsPeriodProvider] — no limit.
 final ownerStatisticsAppointmentsProvider =
-    StreamProvider<List<AppointmentModel>>((ref) {
+    StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final period = ref.watch(statisticsPeriodProvider);
@@ -265,7 +282,7 @@ final clientsPeriodProvider =
 /// Live stream of the `clientSummaries` ledger for the owner's salon,
 /// filtered by the selected period. Nothing is recomputed client-side.
 final ownerClientSummariesProvider =
-    StreamProvider<List<ClientSummaryModel>>((ref) {
+    StreamProvider.autoDispose<List<ClientSummaryModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final period = ref.watch(clientsPeriodProvider);

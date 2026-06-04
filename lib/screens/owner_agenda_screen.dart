@@ -185,15 +185,24 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     return _appointments.where((a) => a.assignedMemberId == null).toList();
   }
 
+  String _intlLocale(BuildContext ctx) {
+    switch (Localizations.localeOf(ctx).languageCode) {
+      case 'fr': return 'fr_FR';
+      case 'es': return 'es_ES';
+      case 'ar': return 'ar';
+      default: return 'en_US';
+    }
+  }
+
   String get _fullDateLabel {
-    final f = DateFormat('EEE d MMMM', 'fr_FR').format(_selectedDate);
+    final f = DateFormat('EEE d MMMM', _intlLocale(context)).format(_selectedDate);
     return f[0].toUpperCase() + f.substring(1);
   }
 
   Future<void> _shareAgenda() async {
     final l = AppLocalizations.of(context);
     final dateLabel =
-        DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(_selectedDate);
+        DateFormat('EEEE d MMMM yyyy', _intlLocale(context)).format(_selectedDate);
     final buf = StringBuffer();
     buf.writeln('📅 Planning du $dateLabel');
     buf.writeln('─────────────────────');
@@ -345,13 +354,19 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     final startWeekday = firstDay.weekday; // 1=Mon ... 7=Sun
     final daysInMonth = lastDay.day;
 
-    final isFr = Localizations.localeOf(context).languageCode == 'fr';
-    final monthNames = isFr
-        ? ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
-        : ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
-    final dayHeaders = isFr
-        ? ['L', 'M', 'M', 'J', 'V', 'S', 'D']
-        : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final lang = Localizations.localeOf(context).languageCode;
+    final monthNames = switch (lang) {
+      'fr' => const ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'],
+      'es' => const ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sept.', 'oct.', 'nov.', 'dic.'],
+      'ar' => const ['ينا.', 'فبر.', 'مار.', 'أبر.', 'مايو', 'يون.', 'يول.', 'أغس.', 'سبت.', 'أكت.', 'نوف.', 'ديس.'],
+      _ => const ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'],
+    };
+    final dayHeaders = switch (lang) {
+      'fr' => const ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
+      'es' => const ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
+      'ar' => const ['إ', 'ث', 'أ', 'خ', 'ج', 'س', 'ح'],
+      _ => const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+    };
 
     return Container(
       color: Colors.white,
@@ -887,7 +902,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     final l = AppLocalizations.of(context);
     final endTime = appt.dateTime.add(Duration(minutes: appt.durationMinutes));
     final dateStr =
-        DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(appt.dateTime);
+        DateFormat('EEEE d MMMM yyyy', _intlLocale(context)).format(appt.dateTime);
     final capitalDate = dateStr[0].toUpperCase() + dateStr.substring(1);
 
     final color = colorIndex < _members.length
@@ -1057,6 +1072,34 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
               Icons.monetization_on_outlined,
               CurrencyHelper.format(appt.price, widget.currency),
             ),
+            if (appt.paymentStatus == 'paid' ||
+                appt.paymentStatus == 'deposit_paid') ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 26),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: appt.paymentStatus == 'paid'
+                        ? const Color(0xFFDCFCE7)
+                        : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    appt.paymentStatus == 'paid'
+                        ? (l?.tr('appt_paid_badge') ?? 'Payé')
+                        : '${l?.tr('appt_deposit_badge') ?? 'Acompte'} ${CurrencyHelper.format(appt.paymentAmount ?? 0, widget.currency)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: appt.paymentStatus == 'paid'
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFB45309),
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             _detailRow(
               Icons.info_outline,
@@ -1066,6 +1109,115 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                       ? (l?.tr('appointments_status_completed') ?? 'Terminé')
                       : (l?.tr('appointments_status_cancelled') ?? 'Annulé'),
             ),
+            // Assign-employee CTA — only for unassigned upcoming RDV with
+            // at least one active team member. The live day stream refreshes
+            // the agenda automatically after the write.
+            if (appt.assignedMemberId == null &&
+                appt.status == 'upcoming' &&
+                _members.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showAssignMemberPicker(appt);
+                  },
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: Text(
+                      l?.tr('agenda_assign_member') ?? 'Assigner un employé'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brand600,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet to pick a team member for an unassigned appointment.
+  /// Writes via `assignAppointment`; the live day stream reflects the
+  /// change without a manual reload.
+  void _showAssignMemberPicker(AppointmentModel appt) {
+    final l = AppLocalizations.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.secondary200,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  l?.tr('agenda_assign_member') ?? 'Assigner un employé',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brand950,
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ..._members.map((m) => ListTile(
+                  leading: MemberAvatar(
+                    name: m.name,
+                    photoUrl: m.photoUrl,
+                    radius: 20,
+                  ),
+                  title: Text(m.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    m.role == 'gerant'
+                        ? (l?.tr('team_role_manager') ?? 'Gérant(e)')
+                        : (l?.tr('team_role_member') ?? 'Employé(e)'),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    try {
+                      await _db.assignAppointment(appt.id, m.id, m.name);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(
+                              '${l?.tr('agenda_assigned_to') ?? 'RDV assigné à'} ${m.name}'),
+                          backgroundColor: AppColors.brand600,
+                        ));
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(
+                              '${l?.tr('common_error_short') ?? 'Erreur'} : $e'),
+                          backgroundColor: Colors.red,
+                        ));
+                      }
+                    }
+                  },
+                )),
+            const SizedBox(height: 8),
           ],
         ),
       ),

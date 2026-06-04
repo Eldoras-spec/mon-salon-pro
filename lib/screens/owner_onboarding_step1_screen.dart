@@ -69,10 +69,12 @@ class _OwnerOnboardingStep1ScreenState
     // Auto-detect currency via GeoJS (IP geolocation). The user can still
     // override manually via the dropdown — we only prime the default.
     _autoDetectCurrency();
-    // Pick up the device's IANA timezone for the same reason — owners are
-    // typically onboarding from inside their salon, so their device's TZ
-    // matches the salon's TZ. Picker below allows manual override.
+    // Prime with device TZ for an instant value, then refine via GeoJS
+    // (matches the currency source so currency + TZ stay geo-coherent
+    // when the device clock disagrees with the visitor's IP — e.g. on an
+    // emulator running UTC). Picker below allows manual override.
     _selectedTimezone = TimezoneHelper.detectDeviceTimezone();
+    _autoDetectTimezone();
   }
 
   Future<void> _autoDetectCurrency() async {
@@ -84,6 +86,19 @@ class _OwnerOnboardingStep1ScreenState
         setState(() => _selectedCurrency = detected);
       }
     } catch (_) { /* best effort, fallback to MAD */ }
+  }
+
+  Future<void> _autoDetectTimezone() async {
+    try {
+      final deviceTz = TimezoneHelper.detectDeviceTimezone();
+      final ipTz = await TimezoneHelper.detectTimezoneByIp();
+      if (!mounted) return;
+      // Only overwrite if the user hasn't picked manually since init —
+      // we compare against the device-detection value (the priming default).
+      if (_selectedTimezone == deviceTz && ipTz != deviceTz) {
+        setState(() => _selectedTimezone = ipTz);
+      }
+    } catch (_) { /* best effort, keep device fallback */ }
   }
 
   @override

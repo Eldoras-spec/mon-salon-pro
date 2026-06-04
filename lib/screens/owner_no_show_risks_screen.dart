@@ -1,12 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers/owner_providers.dart';
 import '../providers/owner_tasks_provider.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
+import 'owner_stripe_connect_screen.dart';
 
 class OwnerNoShowRisksScreen extends ConsumerWidget {
   const OwnerNoShowRisksScreen({super.key});
@@ -39,18 +42,19 @@ class OwnerNoShowRisksScreen extends ConsumerWidget {
         error: (_, __) => _buildEmpty(context, l),
         data: (clients) => clients.isEmpty
             ? _buildEmpty(context, l)
-            : Column(
-                children: [
-                  _buildInfoBanner(context, l),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: clients.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) => _RiskClientCard(client: clients[i]),
-                    ),
-                  ),
-                ],
+            // Banners live INSIDE the scroll view (as leading items) so they
+            // scroll away with the list instead of staying pinned at the top.
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: clients.length + 2,
+                // No gap between deposit (i=0) and info (i=1) banners — each
+                // carries its own bottom margin when visible; 12px elsewhere.
+                separatorBuilder: (_, i) => SizedBox(height: i == 0 ? 0 : 12),
+                itemBuilder: (context, i) {
+                  if (i == 0) return const _EnableDepositBanner();
+                  if (i == 1) return _buildInfoBanner(context, l);
+                  return _RiskClientCard(client: clients[i - 2]);
+                },
               ),
       ),
     );
@@ -58,7 +62,6 @@ class OwnerNoShowRisksScreen extends ConsumerWidget {
 
   Widget _buildInfoBanner(BuildContext context, AppLocalizations? l) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFFEF3C7),
@@ -137,6 +140,102 @@ class OwnerNoShowRisksScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Promotes the "Risky-client deposit" feature on the at-risk screen.
+/// Shows ONLY when card payments are active (Stripe chargesEnabled) AND the
+/// deposit isn't configured yet (`noShowDepositRate == 0`) — so the owner
+/// can fix the no-show problem at its root in one tap. Hidden otherwise.
+class _EnableDepositBanner extends ConsumerWidget {
+  const _EnableDepositBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final salon = ref.watch(ownerSalonProvider).value;
+    if (salon == null) return const SizedBox.shrink();
+    // Already configured → nothing to promote.
+    if (salon.noShowDepositRate > 0) return const SizedBox.shrink();
+
+    // `chargesEnabled` lives under salons/{id}.stripeConnect (billing-only,
+    // not on SalonModel), so read it once here.
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance.collection('salons').doc(salon.id).get(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final connect = snap.data?.data()?['stripeConnect'];
+        final chargesEnabled =
+            connect is Map && connect['chargesEnabled'] == true;
+        if (!chargesEnabled) return const SizedBox.shrink();
+
+        final l = AppLocalizations.of(context);
+        return Container(
+          // Bottom margin separates the CTA from the info banner below;
+          // collapses to nothing when this banner is hidden (SizedBox above).
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF065F46), Color(0xFF047857)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.shield_moon_outlined,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l?.tr('noshow_deposit_cta_title') ??
+                          'Sécurisez ces RDV automatiquement',
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                l?.tr('noshow_deposit_cta_desc') ??
+                    'Vos paiements par carte sont actifs. Activez l\'acompte automatique pour exiger une avance des clients à risque — sans bloquer les clients fiables.',
+                style: const TextStyle(
+                    fontSize: 12, color: Colors.white, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const OwnerStripeConnectScreen()),
+                  ),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: Text(l?.tr('noshow_deposit_cta_button') ??
+                      'Activer l\'acompte risky'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF047857),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

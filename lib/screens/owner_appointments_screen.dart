@@ -927,7 +927,9 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    a.serviceName,
+                    a.serviceName.length > 21
+                        ? '${a.serviceName.substring(0, 21)}…'
+                        : a.serviceName,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -982,6 +984,30 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                     color: AppColors.brand950,
                   ),
                 ),
+                if (a.paymentStatus == 'paid' || a.paymentStatus == 'deposit_paid') ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: a.paymentStatus == 'paid'
+                          ? const Color(0xFFDCFCE7)
+                          : const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      a.paymentStatus == 'paid'
+                          ? (l?.tr('appt_paid_badge') ?? 'Payé')
+                          : '${l?.tr('appt_deposit_badge') ?? 'Acompte'} ${CurrencyHelper.format(a.paymentAmount ?? 0, ref.read(ownerSalonProvider).value?.currency ?? 'MAD')}',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: a.paymentStatus == 'paid'
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFFB45309),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 _updating
                     ? const SizedBox(
@@ -1368,6 +1394,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
 
   /// Get the working hours data for a given date.
   Map<String, dynamic>? _getHoursForDate(DateTime date) {
+    // Salon-wide closure (holiday / exceptional) overrides the weekly hours →
+    // the day is treated as closed (no slots, unselectable in the picker).
+    if (widget.salon.isClosedOnDate(date)) return null;
     final dayKey = _dayKeys[date.weekday - 1]; // weekday: 1=Mon
     return widget.salon.workingHours[dayKey] as Map<String, dynamic>?;
   }

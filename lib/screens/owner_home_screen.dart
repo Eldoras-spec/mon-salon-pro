@@ -23,6 +23,8 @@ import '../utils/currency_helper.dart';
 import '../utils/timezone_helper.dart';
 import 'owner_subscription_screen.dart';
 import 'conversations_screen.dart';
+import 'notifications_screen.dart';
+import '../models/notification_model.dart';
 import '../widgets/owner_tasks_card.dart';
 import '../widgets/owner_setup_card.dart';
 import '../providers/owner_tasks_provider.dart';
@@ -158,7 +160,11 @@ class OwnerHomeScreen extends ConsumerWidget {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        userName,
+                                        userName.length > 13
+                                            ? '${userName.substring(0, 13)}…'
+                                            : userName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.dmSans(
                                           fontSize: 24,
                                           fontWeight: FontWeight.bold,
@@ -196,6 +202,56 @@ class OwnerHomeScreen extends ConsumerWidget {
                                   const SizedBox(width: 8),
                                 ],
                                 // Security & Account
+                                // Notifications bell with unread badge
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(context, MaterialPageRoute(
+                                      builder: (_) => const NotificationsScreen(),
+                                    ));
+                                  },
+                                  child: StreamBuilder<List<NotificationModel>>(
+                                    stream: DatabaseService().getNotifications(
+                                        ref.read(authStateProvider).value?.uid ?? ''),
+                                    builder: (context, snap) {
+                                      final unreadCount =
+                                          snap.data?.where((n) => !n.isRead).length ?? 0;
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.15),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                                Icons.notifications_rounded,
+                                                size: 18,
+                                                color: Colors.white),
+                                          ),
+                                          if (unreadCount > 0)
+                                            Positioned(
+                                              top: -4, right: -4,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.red,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                                                child: Text(
+                                                  '$unreadCount',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 // Messages shortcut with unread badge
                                 GestureDetector(
                                   onTap: () {
@@ -288,11 +344,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                                       ),
                                     );
                                     if (confirm != true) return;
-                                    await ref
-                                        .read(authServiceProvider)
-                                        .signOut();
-                                    ref.invalidate(authStateProvider);
-                                    ref.invalidate(userModelProvider);
+                                    await signOutAll(ref);
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.all(10),

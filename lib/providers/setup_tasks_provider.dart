@@ -7,6 +7,7 @@ enum SetupTaskKey {
   googleReview,
   firstPromo,
   firstProduct,
+  firstPack,
   salonImages,
   team,
   loyalty,
@@ -64,18 +65,20 @@ final setupTasksProvider = Provider<List<SetupTask>>((ref) {
       const SetupTask(key: SetupTaskKey.firstPromo, priority: 2),
     if (products.isEmpty)
       const SetupTask(key: SetupTaskKey.firstProduct, priority: 3),
+    if (salon.servicePacks.isEmpty)
+      const SetupTask(key: SetupTaskKey.firstPack, priority: 4),
     if (salon.images.length < 3)
-      const SetupTask(key: SetupTaskKey.salonImages, priority: 4),
+      const SetupTask(key: SetupTaskKey.salonImages, priority: 5),
     if (team.isEmpty)
-      const SetupTask(key: SetupTaskKey.team, priority: 5),
+      const SetupTask(key: SetupTaskKey.team, priority: 6),
     if (needsClassification)
-      const SetupTask(key: SetupTaskKey.classifyEmployees, priority: 6),
+      const SetupTask(key: SetupTaskKey.classifyEmployees, priority: 7),
     if (beforeAfter.isEmpty)
-      const SetupTask(key: SetupTaskKey.beforeAfter, priority: 7),
+      const SetupTask(key: SetupTaskKey.beforeAfter, priority: 8),
     if (!salon.rewardPointsEnabled)
-      const SetupTask(key: SetupTaskKey.loyalty, priority: 8),
+      const SetupTask(key: SetupTaskKey.loyalty, priority: 9),
     if (!salon.aiPromosEnabled)
-      const SetupTask(key: SetupTaskKey.smartPromotions, priority: 9),
+      const SetupTask(key: SetupTaskKey.smartPromotions, priority: 10),
   ];
 
   return all.where((t) => !dismissed.contains(t.key.name)).toList()

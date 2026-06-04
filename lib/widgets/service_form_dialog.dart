@@ -65,10 +65,12 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   List<Map<String, dynamic>> _optionSteps = [];
 
   // ── Online card payment (Stripe Connect) ──
-  /// 'none' | 'full' | 'percentage' | 'fixed_above'
+  /// 'none' | 'full' | 'percentage'
+  /// (Legacy 'fixed_above' is silently migrated to 'none' on load — the
+  /// cart-wide deposit policy lives on the salon doc instead, configured
+  /// from the Stripe Connect screen.)
   String _paymentMode = 'none';
   late final TextEditingController _paymentValueCtrl;
-  late final TextEditingController _paymentThresholdCtrl;
 
   @override
   void initState() {
@@ -94,14 +96,11 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         (e!['options'] as List).map((o) => Map<String, dynamic>.from(o as Map)),
       );
     }
-    _paymentMode = (e?['paymentMode'] as String?) ?? 'none';
+    final rawMode = (e?['paymentMode'] as String?) ?? 'none';
+    _paymentMode = rawMode == 'fixed_above' ? 'none' : rawMode;
     final pv = e?['paymentValue'];
     _paymentValueCtrl = TextEditingController(
       text: pv is num && pv > 0 ? pv.toStringAsFixed(0) : '',
-    );
-    final pt = e?['paymentThreshold'];
-    _paymentThresholdCtrl = TextEditingController(
-      text: pt is num && pt > 0 ? pt.toStringAsFixed(0) : '',
     );
   }
 
@@ -111,7 +110,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _priceCtrl.dispose();
     _descCtrl.dispose();
     _paymentValueCtrl.dispose();
-    _paymentThresholdCtrl.dispose();
     super.dispose();
   }
 
@@ -136,12 +134,9 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       'assignedMembers': _selectedMembers.toList(),
       'isComplex': _isComplex,
       'paymentMode': _paymentMode,
-      if (_paymentMode == 'percentage' || _paymentMode == 'fixed_above')
+      if (_paymentMode == 'percentage')
         'paymentValue':
             double.tryParse(_paymentValueCtrl.text.trim()) ?? 0.0,
-      if (_paymentMode == 'fixed_above')
-        'paymentThreshold':
-            double.tryParse(_paymentThresholdCtrl.text.trim()) ?? 0.0,
     };
     if (_isComplex && _optionSteps.isNotEmpty) {
       entry['options'] = _optionSteps.map((step) {
@@ -245,7 +240,18 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                                   child: DropdownButton<int>(
                                     isExpanded: true,
                                     value: _duration,
-                                    items: const [15, 30, 45, 60, 90, 120, 150, 180, 240]
+                                    // Always include the current `_duration` in
+                                    // the item set. A complex/gallery service can
+                                    // legitimately have a base duration of 0 (the
+                                    // duration comes from its options), and other
+                                    // surfaces (desktop, web) can store arbitrary
+                                    // values. Without this guard, a value absent
+                                    // from the fixed list (e.g. 0) makes the
+                                    // DropdownButton assert "exactly one item with
+                                    // value: X" and crash the form (red screen).
+                                    items: (<int>{15, 30, 45, 60, 90, 120, 150, 180, 240, _duration}
+                                            .toList()
+                                          ..sort())
                                         .map((d) => DropdownMenuItem(value: d, child: Text('$d min')))
                                         .toList(),
                                     onChanged: (val) {
@@ -469,7 +475,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
           // No connect account → don't expose the payment options at all.
           return const SizedBox.shrink();
         }
-        final symbol = CurrencyHelper.symbol(widget.currency);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -503,13 +508,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                     subtitle: l?.tr('payment.mode_percentage_desc') ??
                         'Le client paie un % du prix à la réservation',
                   ),
-                  _paymentRadio(
-                    value: 'fixed_above',
-                    title: l?.tr('payment.mode_fixed_above') ??
-                        'Acompte fixe au-delà d\'un montant',
-                    subtitle: l?.tr('payment.mode_fixed_above_desc') ??
-                        'Acompte fixe demandé si le prix dépasse un seuil',
-                  ),
                 ],
               ),
             ),
@@ -519,40 +517,6 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
               const SizedBox(height: 6),
               _field(_paymentValueCtrl, '20',
                   keyboardType: TextInputType.number),
-            ],
-            if (_paymentMode == 'fixed_above') ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _label((l?.tr('payment.fixed_amount_label') ??
-                                'Acompte ({symbol})')
-                            .replaceAll('{symbol}', symbol)),
-                        const SizedBox(height: 6),
-                        _field(_paymentValueCtrl, '100',
-                            keyboardType: TextInputType.number),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _label((l?.tr('payment.threshold_label') ??
-                                'Seuil ({symbol})')
-                            .replaceAll('{symbol}', symbol)),
-                        const SizedBox(height: 6),
-                        _field(_paymentThresholdCtrl, '500',
-                            keyboardType: TextInputType.number),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
             ],
             const SizedBox(height: 14),
           ],
@@ -1111,7 +1075,10 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                       itemCount: items.length,
                       itemBuilder: (_, i) {
                         final item = items[i];
-                        return Container(
+                        return GestureDetector(
+                          onTap: () => _editGalleryItem(
+                              ctx, setModalState, items, i, ch, choiceIdx, stepIdx, l),
+                          child: Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.secondary200),
@@ -1161,6 +1128,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                               ),
                             ],
                           ),
+                        ),
                         );
                       },
                     ),
@@ -1218,6 +1186,86 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
         ),
       ),
     );
+  }
+
+  /// Re-open the details dialog for an EXISTING gallery item so the owner can
+  /// edit its name, price modifier and duration modifier. The underlying media
+  /// (url / thumbnailUrl / isVideo) is preserved.
+  Future<void> _editGalleryItem(
+    BuildContext ctx,
+    void Function(VoidCallback) setModalState,
+    List<Map<String, dynamic>> items,
+    int index,
+    List<Map<String, dynamic>> ch,
+    int choiceIdx,
+    int stepIdx,
+    AppLocalizations? l,
+  ) async {
+    final item = items[index];
+    final labelCtrl =
+        TextEditingController(text: item['label']?.toString() ?? '');
+    final priceCtrl =
+        TextEditingController(text: '${item['priceModifier'] ?? 0}');
+    final durationCtrl =
+        TextEditingController(text: '${item['durationModifier'] ?? 0}');
+    final previewUrl = (item['thumbnailUrl'] ?? item['url'] ?? '') as String;
+    final isVideo = item['isVideo'] == true;
+
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      builder: (dc) => AlertDialog(
+        title: Text(l?.tr('salon_service_gallery_item_title') ?? 'Détails du design'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 120, width: 280,
+              child: Stack(fit: StackFit.expand, children: [
+                Image.network(previewUrl, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: AppColors.secondary100,
+                    child: const Icon(Icons.image, color: AppColors.secondary300, size: 40))),
+                if (isVideo)
+                  const Center(child: Icon(Icons.play_circle_filled, size: 40, color: Colors.white70)),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(controller: labelCtrl,
+            decoration: InputDecoration(labelText: l?.tr('salon_service_gallery_item_label') ?? 'Nom du design',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: TextField(controller: priceCtrl, keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: '+${CurrencyHelper.symbol(widget.currency)}', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: durationCtrl, keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: '+min', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))))),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l?.tr('common_cancel') ?? 'Annuler')),
+          ElevatedButton(onPressed: () => Navigator.pop(dc, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brand600),
+            child: Text(l?.tr('common_save') ?? 'Enregistrer', style: const TextStyle(color: Colors.white))),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setModalState(() {
+        items[index] = {
+          ...item,
+          'label': labelCtrl.text.trim().isEmpty
+              ? (item['label'] ?? 'Design ${index + 1}')
+              : labelCtrl.text.trim(),
+          'priceModifier': int.tryParse(priceCtrl.text) ?? 0,
+          'durationModifier': int.tryParse(durationCtrl.text) ?? 0,
+        };
+        ch[choiceIdx]['galleryItems'] = items;
+        _optionSteps[stepIdx]['choices'] = ch;
+      });
+      setState(() {});
+    }
   }
 
   void _showVideoPremiumDialog(BuildContext ctx, AppLocalizations? l) {

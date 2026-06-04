@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,49 +9,29 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
+import '../utils/currency_helper.dart';
+
+// Stripe Connect API codes (snake.dot.case) → human-readable i18n keys.
+// Falls back to the raw code if no translation exists, so unknown new
+// Stripe codes surface as the raw string instead of being silently dropped.
+String _translateDisabledReason(String code, AppLocalizations? l) {
+  final key = 'stripe_connect.disabled_reason.${code.replaceAll('.', '_')}';
+  final tr = l?.tr(key);
+  return (tr == null || tr == key)
+      ? 'Stripe : $code'
+      : tr;
+}
+
+String _translateRequirement(String code, AppLocalizations? l) {
+  final key = 'stripe_connect.requirement.${code.replaceAll('.', '_')}';
+  final tr = l?.tr(key);
+  return (tr == null || tr == key) ? code : tr;
+}
 
 const String _kSupportWhatsapp = '212663322420';
-const String _kSupportLlcMessage =
-    'Bonjour, je souhaite recevoir de l\'aide pour la création d\'une LLC US '
-    'afin d\'activer les paiements par carte sur Mon Salon.';
-
-/// Pays acceptés par Stripe Connect Express où l'onboarding peut aboutir
-/// directement avec le pays renseigné par l'owner. Pour les autres
-/// (notamment Maroc), on affiche le CTA aide LLC.
-const Set<String> _kStripeSupportedCountriesLower = {
-  'france',
-  'spain',
-  'espagne',
-  'germany',
-  'allemagne',
-  'united kingdom',
-  'royaume-uni',
-  'england',
-  'united states',
-  'etats-unis',
-  'italy',
-  'italie',
-  'portugal',
-  'netherlands',
-  'pays-bas',
-  'belgium',
-  'belgique',
-  'canada',
-  'australia',
-  'australie',
-  'japan',
-  'japon',
-  'singapore',
-  'uae',
-  'emirats arabes unis',
-};
-
-bool _isCountrySupported(String? raw) {
-  final s = (raw ?? '').trim().toLowerCase();
-  if (s.isEmpty) return false;
-  if (s.length == 2) return true; // Already an ISO code — let Stripe decide
-  return _kStripeSupportedCountriesLower.contains(s);
-}
+const String _kSupportMessage =
+    'Bonjour, je souhaite recevoir de l\'aide pour configurer les paiements '
+    'par carte sur mon salon.';
 
 /// Stripe Connect Express management screen for owners.
 ///
@@ -92,8 +73,8 @@ class OwnerStripeConnectScreen extends ConsumerWidget {
           }
           return _Body(
             salonId: salon.id,
-            country: salon.country,
             plan: salon.plan,
+            currency: salon.currency,
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -105,12 +86,12 @@ class OwnerStripeConnectScreen extends ConsumerWidget {
 
 class _Body extends StatefulWidget {
   final String salonId;
-  final String country;
   final String plan;
+  final String currency;
   const _Body({
     required this.salonId,
-    required this.country,
     required this.plan,
+    required this.currency,
   });
 
   @override
@@ -119,6 +100,27 @@ class _Body extends StatefulWidget {
 
 class _BodyState extends State<_Body> {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Verify the Connect status against Stripe on open so a cached "Active"
+    // flag that is stale (e.g. a test account after the live switch) is
+    // self-corrected: getConnectAccountStatus clears the flags server-side on
+    // resource_missing, and the Firestore stream then flips the UI to
+    // "not connected". Silent + best-effort — the cached flags stay if it fails.
+    _syncStatusSilently();
+  }
+
+  Future<void> _syncStatusSilently() async {
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('getConnectAccountStatus')
+          .call();
+    } catch (_) {
+      // Non-fatal: the streamed cached flags remain on transient errors.
+    }
+  }
 
   Future<void> _onboard() async {
     final l = AppLocalizations.of(context);
@@ -179,9 +181,9 @@ class _BodyState extends State<_Body> {
     }
   }
 
-  Future<void> _contactSupportLlc() async {
+  Future<void> _contactSupport() async {
     final url = Uri.parse(
-        'https://wa.me/$_kSupportWhatsapp?text=${Uri.encodeComponent(_kSupportLlcMessage)}');
+        'https://wa.me/$_kSupportWhatsapp?text=${Uri.encodeComponent(_kSupportMessage)}');
     final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +195,6 @@ class _BodyState extends State<_Body> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final supported = _isCountrySupported(widget.country);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -201,13 +202,6 @@ class _BodyState extends State<_Body> {
         children: [
           _Intro(l: l),
           const SizedBox(height: 14),
-          if (!supported)
-            _LlcHelpCard(
-              l: l,
-              country: widget.country,
-              onContact: _contactSupportLlc,
-            ),
-          if (!supported) const SizedBox(height: 14),
           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('salons')
@@ -236,17 +230,48 @@ class _BodyState extends State<_Body> {
               final due = dueRaw is List
                   ? dueRaw.map((e) => e.toString()).toList()
                   : <String>[];
-              return _StatusCard(
-                l: l,
-                accountId: accountId,
-                detailsSubmitted: detailsSubmitted,
-                chargesEnabled: chargesEnabled,
-                payoutsEnabled: payoutsEnabled,
-                disabledReason: disabledReason,
-                requirementsDue: due,
-                busy: _busy,
-                onOnboard: _onboard,
-                onRefresh: _refresh,
+              final cartThreshold =
+                  (data['cartDepositThreshold'] as num?)?.toDouble() ?? 0;
+              final cartAmount =
+                  (data['cartDepositAmount'] as num?)?.toDouble() ?? 0;
+              final noShowRate =
+                  (data['noShowDepositRate'] as num?)?.toDouble() ?? 0;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _StatusCard(
+                    l: l,
+                    accountId: accountId,
+                    detailsSubmitted: detailsSubmitted,
+                    chargesEnabled: chargesEnabled,
+                    payoutsEnabled: payoutsEnabled,
+                    disabledReason: disabledReason,
+                    requirementsDue: due,
+                    busy: _busy,
+                    onOnboard: _onboard,
+                    onRefresh: _refresh,
+                  ),
+                  if (!chargesEnabled) ...[
+                    const SizedBox(height: 14),
+                    _SupportHelpCard(l: l, onContact: _contactSupport),
+                  ],
+                  if (chargesEnabled) ...[
+                    const SizedBox(height: 14),
+                    _CartDepositCard(
+                      l: l,
+                      salonId: widget.salonId,
+                      currency: widget.currency,
+                      initialThreshold: cartThreshold,
+                      initialAmount: cartAmount,
+                    ),
+                    const SizedBox(height: 14),
+                    _NoShowDepositCard(
+                      l: l,
+                      salonId: widget.salonId,
+                      initialRate: noShowRate,
+                    ),
+                  ],
+                ],
               );
             },
           ),
@@ -312,12 +337,10 @@ class _Intro extends StatelessWidget {
   }
 }
 
-class _LlcHelpCard extends StatelessWidget {
+class _SupportHelpCard extends StatelessWidget {
   final AppLocalizations? l;
-  final String country;
   final VoidCallback onContact;
-  const _LlcHelpCard(
-      {required this.l, required this.country, required this.onContact});
+  const _SupportHelpCard({required this.l, required this.onContact});
 
   @override
   Widget build(BuildContext context) {
@@ -333,13 +356,13 @@ class _LlcHelpCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.info_outline,
+              Icon(Icons.support_agent_rounded,
                   color: Colors.amber.shade800, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  l?.tr('stripe_connect.llc_title') ??
-                      'Stripe non disponible dans votre pays',
+                  l?.tr('stripe_connect.support_title') ??
+                      'Besoin d\'aide pour la configuration ?',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -351,11 +374,10 @@ class _LlcHelpCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            (l?.tr('stripe_connect.llc_body') ??
-                    'Stripe ne supporte pas encore "{country}". Nous pouvons vous '
-                        'aider à créer une LLC américaine en quelques jours pour '
-                        'activer les paiements par carte. Contactez-nous sur WhatsApp.')
-                .replaceAll('{country}', country),
+            l?.tr('stripe_connect.support_body') ??
+                'Si vous souhaitez de l\'aide pour configurer les paiements '
+                    'par carte sur votre salon, notre équipe vous accompagne sur '
+                    'WhatsApp.',
             style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.secondary600,
@@ -368,8 +390,8 @@ class _LlcHelpCard extends StatelessWidget {
               onPressed: onContact,
               icon: const Icon(Icons.chat_bubble_outline, size: 18),
               label: Text(
-                l?.tr('stripe_connect.llc_cta') ??
-                    'Demander de l\'aide LLC',
+                l?.tr('stripe_connect.support_cta') ??
+                    'Contacter le support',
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF25D366),
@@ -441,7 +463,7 @@ class _StatusCard extends StatelessWidget {
       statusTitle = l?.tr('stripe_connect.status_pending') ??
           'Configuration en cours';
       statusSubtitle = disabledReason != null
-          ? 'Stripe : $disabledReason'
+          ? _translateDisabledReason(disabledReason!, l)
           : (l?.tr('stripe_connect.status_pending_sub') ??
               'Complétez les informations demandées par Stripe.');
     }
@@ -520,7 +542,7 @@ class _StatusCard extends StatelessWidget {
                   ...requirementsDue.take(6).map((r) => Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '• $r',
+                          '• ${_translateRequirement(r, l)}',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.orange.shade900,
@@ -552,24 +574,25 @@ class _StatusCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (!notConnected) const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: busy ? null : onOnboard,
-                  icon: busy
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.open_in_new_rounded, size: 16),
-                  label: Text(
-                    notConnected
-                        ? (l?.tr('stripe_connect.connect') ??
-                            'Connecter Stripe')
-                        : (l?.tr('stripe_connect.continue_onboarding') ??
-                            'Continuer la configuration'),
+              if (!notConnected && !fullyOk) const SizedBox(width: 8),
+              if (notConnected || !fullyOk)
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: busy ? null : onOnboard,
+                    icon: busy
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text(
+                      notConnected
+                          ? (l?.tr('stripe_connect.connect') ??
+                              'Connecter Stripe')
+                          : (l?.tr('stripe_connect.continue_onboarding') ??
+                              'Continuer la configuration'),
                     style: const TextStyle(fontSize: 12),
                   ),
                   style: FilledButton.styleFrom(
@@ -632,3 +655,397 @@ class _FeesNote extends StatelessWidget {
   }
 }
 
+class _CartDepositCard extends StatefulWidget {
+  final AppLocalizations? l;
+  final String salonId;
+  final String currency;
+  final double initialThreshold;
+  final double initialAmount;
+  const _CartDepositCard({
+    required this.l,
+    required this.salonId,
+    required this.currency,
+    required this.initialThreshold,
+    required this.initialAmount,
+  });
+
+  @override
+  State<_CartDepositCard> createState() => _CartDepositCardState();
+}
+
+class _CartDepositCardState extends State<_CartDepositCard> {
+  late final TextEditingController _thresholdCtrl;
+  late final TextEditingController _amountCtrl;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _thresholdCtrl = TextEditingController(
+      text: widget.initialThreshold > 0
+          ? widget.initialThreshold.toStringAsFixed(0)
+          : '',
+    );
+    _amountCtrl = TextEditingController(
+      text: widget.initialAmount > 0
+          ? widget.initialAmount.toStringAsFixed(0)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _thresholdCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final l = widget.l;
+    final threshold = double.tryParse(_thresholdCtrl.text.trim()) ?? 0;
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    // Either both set (enable policy) or both empty/0 (disable). Reject the
+    // half-configured case so the cart-deposit fallback can't fire by accident.
+    final bothSet = threshold > 0 && amount > 0;
+    final bothCleared = threshold == 0 && amount == 0;
+    if (!bothSet && !bothCleared) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l?.tr('stripe_connect.cart_deposit.invalid') ??
+            'Renseigne le seuil ET l\'acompte, ou laisse les deux vides pour désactiver.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+    if (bothSet && amount > threshold) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l?.tr('stripe_connect.cart_deposit.amount_over_threshold') ??
+            'L\'acompte ne peut pas dépasser le seuil.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.salonId)
+          .update({
+        'cartDepositThreshold': threshold,
+        'cartDepositAmount': amount,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l?.tr('stripe_connect.cart_deposit.saved') ??
+              'Politique d\'acompte enregistrée.'),
+        ));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = widget.l;
+    final symbol = CurrencyHelper.symbol(widget.currency);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.secondary100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l?.tr('stripe_connect.cart_deposit.title') ??
+                'Politique d\'acompte panier',
+            style: GoogleFonts.dmSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.brand950,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l?.tr('stripe_connect.cart_deposit.subtitle') ??
+                'Acompte fixe demandé si le total de la réservation atteint le seuil. Laisse vide pour désactiver.',
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.secondary600, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (l?.tr('stripe_connect.cart_deposit.threshold_label') ??
+                              'Seuil ({symbol})')
+                          .replaceAll('{symbol}', symbol),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.secondary600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _thresholdCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '500',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (l?.tr('stripe_connect.cart_deposit.amount_label') ??
+                              'Acompte ({symbol})')
+                          .replaceAll('{symbol}', symbol),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.secondary600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _amountCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '100',
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _saving ? null : _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brand600,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(
+                      l?.tr('stripe_connect.cart_deposit.save') ??
+                          'Enregistrer',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _NoShowDepositCard extends StatefulWidget {
+  final AppLocalizations? l;
+  final String salonId;
+  final double initialRate;
+  const _NoShowDepositCard({
+    required this.l,
+    required this.salonId,
+    required this.initialRate,
+  });
+
+  @override
+  State<_NoShowDepositCard> createState() => _NoShowDepositCardState();
+}
+
+class _NoShowDepositCardState extends State<_NoShowDepositCard> {
+  late bool _enabled = widget.initialRate > 0;
+  late final TextEditingController _rateCtrl = TextEditingController(
+      text: widget.initialRate > 0
+          ? widget.initialRate.toStringAsFixed(0)
+          : '10');
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _rateCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final l = widget.l;
+    final raw = _rateCtrl.text.trim();
+    final rate = double.tryParse(raw.replaceAll(',', '.')) ?? 0;
+    if (_enabled && (rate <= 0 || rate > 100)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l?.tr('no_show_deposit.invalid_rate') ??
+            'Le pourcentage doit être entre 1 et 100.'),
+      ));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.salonId)
+          .update({'noShowDepositRate': _enabled ? rate : 0});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFF16A34A),
+        content: Text(l?.tr('common_saved') ?? 'Enregistré ✅'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${l?.tr('common_error_short') ?? 'Erreur'}: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = widget.l;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.secondary100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded,
+                    size: 16, color: Color(0xFFB45309)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l?.tr('no_show_deposit.title') ??
+                      'Acompte clients à risque',
+                  style: GoogleFonts.dmSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppColors.brand950),
+                ),
+              ),
+              Switch(
+                value: _enabled,
+                onChanged: (v) => setState(() => _enabled = v),
+                activeColor: AppColors.brand600,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l?.tr('no_show_deposit.body') ??
+                'Un acompte est demandé aux clients identifiés comme risqués (taux d\'annulation élevé), même sur des prestations sans acompte. Si la prestation a déjà un %, on garde le plus grand.',
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.secondary500, height: 1.45),
+          ),
+          if (_enabled) ...[
+            const SizedBox(height: 14),
+            Text(
+              l?.tr('no_show_deposit.rate_label') ?? 'Pourcentage (%)',
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _rateCtrl,
+              keyboardType: TextInputType.number,
+              // Digits 0-9 only, then a custom formatter clamps to [0, 100].
+              // Pasting "150" or typing "999" is auto-truncated to 100.
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+                TextInputFormatter.withFunction((old, fresh) {
+                  if (fresh.text.isEmpty) return fresh;
+                  final n = int.tryParse(fresh.text);
+                  if (n == null) return old;
+                  if (n > 100) {
+                    return const TextEditingValue(
+                      text: '100',
+                      selection: TextSelection.collapsed(offset: 3),
+                    );
+                  }
+                  return fresh;
+                }),
+              ],
+              decoration: InputDecoration(
+                hintText: '10',
+                suffixText: '%',
+                filled: true,
+                fillColor: AppColors.brand50,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brand600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(l?.tr('common_save') ?? 'Enregistrer'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

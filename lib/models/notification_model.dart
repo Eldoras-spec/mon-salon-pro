@@ -8,6 +8,10 @@ class NotificationModel {
   final String type; // 'appointment', 'promotion', 'payment', 'general'
   final bool isRead;
   final DateTime createdAt;
+  // Set on bot_handover notifications so the owner sees who needs them and
+  // can tap to open the WhatsApp chat with the client (wa.me/<digits>).
+  final String? clientPhone;
+  final String? clientName;
 
   NotificationModel({
     required this.id,
@@ -17,6 +21,8 @@ class NotificationModel {
     required this.type,
     required this.isRead,
     required this.createdAt,
+    this.clientPhone,
+    this.clientName,
   });
 
   factory NotificationModel.fromFirestore(DocumentSnapshot doc) {
@@ -31,6 +37,8 @@ class NotificationModel {
       createdAt: data['createdAt'] != null
           ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
+      clientPhone: data['clientPhone'] as String?,
+      clientName: data['clientName'] as String?,
     );
   }
 

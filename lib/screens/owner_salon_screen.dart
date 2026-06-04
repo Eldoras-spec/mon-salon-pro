@@ -9,14 +9,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../theme/app_colors.dart';
-import '../theme/app_constants.dart';
 import '../models/salon_model.dart';
-import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../utils/media_compressor.dart';
-import '../widgets/service_form_dialog.dart';
 import 'owner_onboarding_step1_screen.dart';
 import '../utils/currency_helper.dart';
 import '../utils/timezone_helper.dart';
@@ -220,25 +217,10 @@ class _SalonBody extends StatelessWidget {
               // ── Avant / Après ──────────────────────────────────────────
               _BeforeAfterSection(salonId: salon.id),
 
-              const SizedBox(height: 8),
-
-              // ── Services ──────────────────────────────────────────────────
-              _SectionCard(
-                title: (l?.tr('salon_section_services') ?? 'Services ({count})').replaceAll('{count}', '${salon.services.length}'),
-                actionLabel: l?.tr('salon_manage') ?? 'Gérer',
-                onAction: () => _showServicesSheet(context, salon),
-                child: _ServicesPreview(services: salon.services, currency: salon.currency),
-              ),
-
-              const SizedBox(height: 8),
-
-              // ── Packs ──────────────────────────────────────────────────────
-              _SectionCard(
-                title: (l?.tr('salon_section_packs') ?? 'Packs ({count})').replaceAll('{count}', '${salon.servicePacks.length}'),
-                actionLabel: l?.tr('salon_manage') ?? 'Gérer',
-                onAction: () => _showPacksSheet(context, salon),
-                child: _PacksPreview(packs: salon.servicePacks, currency: salon.currency),
-              ),
+              // Services & Packs are managed exclusively from the dedicated
+              // "Services & Packs" screen (OwnerServicesScreen) — the inline
+              // sections here were a non-synced duplicate, removed to avoid
+              // confusion.
 
               const SizedBox(height: 32),
             ],
@@ -354,31 +336,6 @@ class _SalonBody extends StatelessWidget {
     );
   }
 
-  // ── Manage services ───────────────────────────────────────────────────────
-
-  void _showServicesSheet(BuildContext context, SalonModel salon) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _ServicesSheet(salon: salon, onSaved: _invalidate),
-    );
-  }
-
-  // ── Manage packs ────────────────────────────────────────────────────────────
-
-  void _showPacksSheet(BuildContext context, SalonModel salon) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _PacksSheet(salon: salon, onSaved: _invalidate),
-    );
-  }
 }
 
 // ── Identity card (logo + name + stats) ─────────────────────────────────────
@@ -681,73 +638,6 @@ class _HoursRows extends StatelessWidget {
   }
 }
 
-// ── Services preview ─────────────────────────────────────────────────────────
-
-class _ServicesPreview extends StatelessWidget {
-  const _ServicesPreview({required this.services, required this.currency});
-  final List<Map<String, dynamic>> services;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    if (services.isEmpty) {
-      return Text(
-        l?.tr('salon_no_services') ?? 'Aucun service ajouté',
-        style: const TextStyle(color: AppColors.secondary400, fontSize: 13),
-      );
-    }
-    final preview = services.take(4).toList();
-    return Column(
-      children: [
-        ...preview.map((s) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.brand50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.content_cut_rounded,
-                        color: AppColors.brand400, size: 15),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      s['name'] as String? ?? '',
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.brand950),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0, currency),
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.brand700),
-                  ),
-                ],
-              ),
-            )),
-        if (services.length > 4)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              (l?.tr('salon_more_services') ?? '+ {count} autres services').replaceAll('{count}', '${services.length - 4}'),
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.secondary400),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 // ── Edit info sheet ───────────────────────────────────────────────────────────
 
 class _EditInfoSheet extends StatefulWidget {
@@ -952,6 +842,7 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         servicePacks: widget.salon.servicePacks,
         latitude: lat,
         longitude: lng,
+        closedDates: widget.salon.closedDates,
         createdAt: widget.salon.createdAt,
         socialLinks: widget.salon.socialLinks,
         rewardPointsEnabled: widget.salon.rewardPointsEnabled,
@@ -1147,6 +1038,8 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
 
   late Map<String, Map<String, dynamic>> _hours;
   late String _timezone;
+  late Set<String> _closedDates; // ISO "YYYY-MM-DD" salon-wide closures
+  String? _closedDateError; // inline error (e.g. day has booked appointments)
   bool _loading = false;
 
   @override
@@ -1168,6 +1061,52 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
     final isCurated = TimezoneHelper.commonTimezones
         .any((t) => t.iana == stored);
     _timezone = isCurated ? stored : TimezoneHelper.defaultTimezone;
+    // Drop past closures (salon TZ) — once a day passes it's auto-removed here
+    // (and persisted on the next save).
+    final tzNow = TimezoneHelper.salonNow(_timezone);
+    final todayIso = '${tzNow.year}-${tzNow.month.toString().padLeft(2, '0')}'
+        '-${tzNow.day.toString().padLeft(2, '0')}';
+    _closedDates = Set<String>.from(
+        widget.salon.closedDates.where((d) => d.compareTo(todayIso) >= 0));
+  }
+
+  Future<void> _addClosedDate() async {
+    final now = TimezoneHelper.salonNow(_timezone);
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: today,
+      lastDate: DateTime(today.year + 2, 12, 31),
+    );
+    if (picked == null || !mounted) return;
+    final iso =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    if (_closedDates.contains(iso)) return;
+    // Refuse to mark a day closed when it already has booked appointments —
+    // the owner must cancel/move them first.
+    final appts = await DatabaseService()
+        .getSalonAppointmentsForDate(widget.salon.id, picked);
+    if (!mounted) return;
+    if (appts.isNotEmpty) {
+      final l = AppLocalizations.of(context);
+      setState(() {
+        _closedDateError = (l?.tr('salon_closed_days_has_appts') ??
+                'Des rendez-vous sont déjà programmés le {date}. Annulez-les avant de fermer ce jour.')
+            .replaceAll('{date}', _formatClosedDate(iso));
+      });
+      return;
+    }
+    setState(() {
+      _closedDateError = null;
+      _closedDates.add(iso);
+    });
+  }
+
+  String _formatClosedDate(String iso) {
+    final parts = iso.split('-');
+    if (parts.length != 3) return iso;
+    return '${parts[2]}/${parts[1]}/${parts[0]}';
   }
 
   Future<void> _pickTime(String day, String field) async {
@@ -1218,6 +1157,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         galleryStorageUsed: widget.salon.galleryStorageUsed,
         salonType: widget.salon.salonType,
         timezone: _timezone,
+        closedDates: _closedDates.toList(),
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1231,6 +1171,79 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Widget _buildClosedDatesSection(AppLocalizations? l) {
+    final sorted = _closedDates.toList()..sort();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l?.tr('salon_closed_days_title') ?? 'Jours de fermeture',
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.brand950),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l?.tr('salon_closed_days_hint') ??
+                'Jours fériés ou fermetures exceptionnelles. Le salon sera fermé ces jours-là, en plus des horaires hebdomadaires.',
+            style: const TextStyle(
+                fontSize: 11, color: AppColors.secondary400),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _addClosedDate,
+            icon: const Icon(Icons.event_busy_outlined, size: 18),
+            label: Text(l?.tr('salon_closed_days_add') ?? 'Ajouter un jour'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brand600,
+              side: const BorderSide(color: AppColors.brand200),
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          if (_closedDateError != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.error_outline,
+                    size: 15, color: Color(0xFFDC2626)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(_closedDateError!,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFFDC2626))),
+                ),
+              ],
+            ),
+          ],
+          if (sorted.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: sorted
+                  .map((iso) => Chip(
+                        label: Text(_formatClosedDate(iso),
+                            style: const TextStyle(fontSize: 12)),
+                        backgroundColor: AppColors.brand50,
+                        side: const BorderSide(color: AppColors.brand200),
+                        deleteIcon: const Icon(Icons.close, size: 15),
+                        onDeleted: () =>
+                            setState(() => _closedDates.remove(iso)),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ))
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -1280,6 +1293,11 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
               controller: controller,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               children: [
+                // ── Closure days (holidays / exceptional) ──
+                _buildClosedDatesSection(l),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
                 // Timezone picker — drives how working hours are interpreted
                 // by Zayna's availability and the reminders. Same field is
                 // captured at onboarding step1; this is the in-app override.
@@ -1447,434 +1465,6 @@ class _TimeButton extends StatelessWidget {
     );
   }
 }
-
-// ── Services sheet ────────────────────────────────────────────────────────────
-
-class _ServicesSheet extends ConsumerStatefulWidget {
-  const _ServicesSheet({required this.salon, required this.onSaved});
-  final SalonModel salon;
-  final VoidCallback onSaved;
-
-  @override
-  ConsumerState<_ServicesSheet> createState() => _ServicesSheetState();
-}
-
-class _ServicesSheetState extends ConsumerState<_ServicesSheet> {
-  late List<Map<String, dynamic>> _services;
-  bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _services = List<Map<String, dynamic>>.from(
-        widget.salon.services.map((s) => Map<String, dynamic>.from(s)));
-  }
-
-  /// Build a map: serviceName → Set<memberName> from team members' assignedServiceNames
-  Map<String, Set<String>> _buildServiceMemberMap(List<TeamMemberModel> members) {
-    final map = <String, Set<String>>{};
-    for (final m in members) {
-      for (final sName in m.assignedServiceNames) {
-        map.putIfAbsent(sName, () => {}).add(m.name);
-      }
-    }
-    return map;
-  }
-
-  Future<void> _save() async {
-    setState(() => _loading = true);
-    try {
-      final categories = _services
-          .map((s) => s['category'] as String? ?? '')
-          .where((c) => c.isNotEmpty)
-          .toSet()
-          .toList();
-
-      final updated = SalonModel(
-        id: widget.salon.id,
-        ownerId: widget.salon.ownerId,
-        name: widget.salon.name,
-        city: widget.salon.city,
-        country: widget.salon.country,
-        address: widget.salon.address,
-        description: widget.salon.description,
-        category: widget.salon.category,
-        rating: widget.salon.rating,
-        reviewCount: widget.salon.reviewCount,
-        images: widget.salon.images,
-        logoUrl: widget.salon.logoUrl,
-        phone: widget.salon.phone,
-        workingHours: widget.salon.workingHours,
-        services: _services,
-        serviceCategories: categories,
-        servicePacks: widget.salon.servicePacks,
-        latitude: widget.salon.latitude,
-        longitude: widget.salon.longitude,
-        createdAt: widget.salon.createdAt,
-        socialLinks: widget.salon.socialLinks,
-        currency: widget.salon.currency,
-        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
-        aiPromosEnabled: widget.salon.aiPromosEnabled,
-        aiPromoConfig: widget.salon.aiPromoConfig,
-        googleReviewReward: widget.salon.googleReviewReward,
-        slug: widget.salon.slug,
-        isPremium: widget.salon.isPremium,
-        galleryStorageUsed: widget.salon.galleryStorageUsed,
-        salonType: widget.salon.salonType,
-        timezone: widget.salon.timezone,
-      );
-      await DatabaseService().saveSalon(updated);
-
-      // Update each team member's assignedServiceNames
-      // Only update if assignedMembers field is present in any service
-      final hasAssignments = _services.any((s) =>
-          (s['assignedMembers'] as List?)?.isNotEmpty == true);
-      if (hasAssignments) {
-        final teamMembers = ref.read(ownerTeamProvider).value ?? [];
-        for (final member in teamMembers) {
-          final assignedServices = _services
-              .where((s) {
-                final members = List<String>.from(s['assignedMembers'] ?? []);
-                return members.contains(member.name);
-              })
-              .map((s) => s['name'] as String)
-              .toList();
-          await DatabaseService().updateTeamMember(
-            widget.salon.id,
-            member.id,
-            {'assignedServiceNames': assignedServices},
-          );
-        }
-      }
-
-      widget.onSaved();
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  void _delete(int index) {
-    final serviceName = _services[index]['name'] as String? ?? '';
-    // Check if this service belongs to any pack
-    final packUsingService = widget.salon.servicePacks.where((pack) {
-      final packServices = List<String>.from(pack['services'] ?? []);
-      return packServices.contains(serviceName);
-    }).toList();
-
-    if (packUsingService.isNotEmpty) {
-      final packName = packUsingService.first['name'] ?? 'Pack';
-      final l = AppLocalizations.of(context);
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(l?.tr('common_error_short') ?? 'Erreur'),
-          content: Text(
-            (l?.tr('salon_service_delete_pack_error') ?? 'Ce service fait partie du pack "{pack}". Supprimez d\'abord le pack.')
-                .replaceAll('{pack}', packName),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(l?.tr('common_ok') ?? 'OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    // Clean up gallery files from Storage
-    final service = _services[index];
-    if (service['isComplex'] == true && service['options'] != null) {
-      for (final step in (service['options'] as List)) {
-        for (final choice in (step['choices'] as List? ?? [])) {
-          if (choice['isGallery'] == true && choice['galleryItems'] != null) {
-            for (final item in (choice['galleryItems'] as List)) {
-              final url = item['url'] as String?;
-              final thumbUrl = item['thumbnailUrl'] as String?;
-              if (url != null && url.isNotEmpty) {
-                try { FirebaseStorage.instance.refFromURL(url).delete(); } catch (_) {}
-              }
-              if (thumbUrl != null && thumbUrl.isNotEmpty) {
-                try { FirebaseStorage.instance.refFromURL(thumbUrl).delete(); } catch (_) {}
-              }
-            }
-          }
-        }
-      }
-    }
-    setState(() => _services.removeAt(index));
-  }
-
-  void _showServiceDialog(int? index) {
-    final teamMembers = ref.read(ownerTeamProvider).value ?? [];
-    final serviceMemberMap = _buildServiceMemberMap(teamMembers);
-
-    final isNew = index == null;
-    final existing = isNew ? null : _services[index];
-
-    // For existing services, get assigned members from the map or from the service data
-    Set<String> currentAssigned = {};
-    if (existing != null) {
-      final fromData = existing['assignedMembers'];
-      if (fromData != null) {
-        currentAssigned = Set<String>.from(fromData);
-      } else {
-        currentAssigned = serviceMemberMap[existing['name']] ?? {};
-      }
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ServiceFormDialog(
-          existing: existing,
-          assignedMembers: currentAssigned,
-          teamMembers: teamMembers,
-          salonId: widget.salon.id,
-          salonType: widget.salon.salonType,
-          isPremium: widget.salon.isPremium,
-          galleryStorageUsed: widget.salon.galleryStorageUsed,
-          currency: widget.salon.currency,
-          onSave: (entry) {
-            setState(() {
-              if (isNew) {
-                _services.add(entry);
-              } else {
-                _services[index] = entry;
-              }
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final teamMembers = ref.watch(ownerTeamProvider).value ?? [];
-    final serviceMemberMap = _buildServiceMemberMap(teamMembers);
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.8,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (_, controller) {
-        final l = AppLocalizations.of(context);
-        return Column(
-        children: [
-          _SheetHandle(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    (l?.tr('salon_services_title') ?? 'Services ({count})').replaceAll('{count}', '${_services.length}'),
-                    style: GoogleFonts.dmSans(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brand950),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => _showServiceDialog(null),
-                  icon: const Icon(Icons.add, size: 16,
-                      color: AppColors.brand600),
-                  label: Text(l?.tr('salon_services_add') ?? 'Ajouter',
-                      style: const TextStyle(
-                          color: AppColors.brand600,
-                          fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 4),
-                TextButton(
-                  onPressed: _loading ? null : _save,
-                  child: _loading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              color: AppColors.brand600, strokeWidth: 2))
-                      : Text(l?.tr('common_save') ?? 'Enregistrer',
-                          style: const TextStyle(
-                              color: AppColors.brand600,
-                              fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _services.isEmpty
-                ? Center(
-                    child: Text(
-                      l?.tr('salon_services_empty') ?? 'Aucun service. Appuyez sur + pour en ajouter.',
-                      style: const TextStyle(
-                          color: AppColors.secondary400, fontSize: 13),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ListView.separated(
-                    controller: controller,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _services.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, indent: 20),
-                    itemBuilder: (_, i) {
-                      final s = _services[i];
-                      final category = s['category'] as String? ?? '';
-                      final duration = s['duration'] as int? ?? 30;
-                      final assignedFromData = s['assignedMembers'];
-                      final assigned = assignedFromData != null
-                          ? Set<String>.from(assignedFromData)
-                          : (serviceMemberMap[s['name']] ?? <String>{});
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        s['name'] as String? ?? '',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                          color: AppColors.brand950,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          if (category.isNotEmpty)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.brand100,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                category,
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.brand600,
-                                                ),
-                                              ),
-                                            ),
-                                          if (category.isNotEmpty)
-                                            const SizedBox(width: 8),
-                                          Text(
-                                            '$duration min',
-                                            style: const TextStyle(
-                                              color: AppColors.secondary500,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            CurrencyHelper.format((s['price'] as num?)?.toDouble() ?? 0, widget.salon.currency),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: AppColors.brand700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () => _showServiceDialog(i),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(Icons.edit_outlined,
-                                        size: 16,
-                                        color: AppColors.secondary400),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                InkWell(
-                                  onTap: () => _delete(i),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(Icons.delete_outline_rounded,
-                                        size: 16, color: Color(0xFFDC2626)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (assigned.isNotEmpty) ...[
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: assigned.map((name) {
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.brand50,
-                                      border: Border.all(
-                                          color: AppColors.brand200),
-                                      borderRadius:
-                                          BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.person_outline,
-                                            size: 12,
-                                            color: AppColors.brand600),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.brand700,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      );
-      },
-    );
-  }
-}
-
 
 // Service form dialog moved to widgets/service_form_dialog.dart (ServiceFormDialog)
 
@@ -2667,737 +2257,5 @@ class _BeforeAfterSectionState extends State<_BeforeAfterSection> {
       ),
     );
   }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── Packs Preview ────────────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _PacksPreview extends StatelessWidget {
-  const _PacksPreview({required this.packs, required this.currency});
-  final List<Map<String, dynamic>> packs;
-  final String currency;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    if (packs.isEmpty) {
-      return Text(
-        l?.tr('salon_packs_empty') ?? 'Aucun pack créé',
-        style: const TextStyle(color: AppColors.secondary400, fontSize: 13),
-      );
-    }
-    final preview = packs.take(3).toList();
-    return Column(
-      children: [
-        ...preview.map((p) {
-          final name = p['name'] as String? ?? '';
-          final price = (p['price'] as num?)?.toDouble() ?? 0;
-          final services = List<String>.from(p['services'] ?? []);
-          final originalPrice = (p['originalPrice'] as num?)?.toDouble() ?? 0;
-          final discount = originalPrice > 0
-              ? ((1 - price / originalPrice) * 100).round()
-              : 0;
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.brand100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.inventory_2_outlined,
-                      color: AppColors.brand600, size: 15),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                            fontSize: 13, color: AppColors.brand950,
-                            fontWeight: FontWeight.w600),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        (l?.tr('salon_packs_services_count') ?? '{count} services').replaceAll('{count}', '${services.length}'),
-                        style: const TextStyle(
-                            fontSize: 11, color: AppColors.secondary400),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      CurrencyHelper.format(price, currency),
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.brand700),
-                    ),
-                    if (discount > 0)
-                      Text(
-                        '-$discount%',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF16A34A)),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }),
-        if (packs.length > 3)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              (l?.tr('salon_packs_more') ?? '+ {count} autres packs').replaceAll('{count}', '${packs.length - 3}'),
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.secondary400),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── Packs Sheet (manage packs) ───────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _PacksSheet extends StatefulWidget {
-  const _PacksSheet({required this.salon, required this.onSaved});
-  final SalonModel salon;
-  final VoidCallback onSaved;
-
-  @override
-  State<_PacksSheet> createState() => _PacksSheetState();
-}
-
-class _PacksSheetState extends State<_PacksSheet> {
-  late List<Map<String, dynamic>> _packs;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _packs = List<Map<String, dynamic>>.from(
-      widget.salon.servicePacks.map((p) => Map<String, dynamic>.from(p)),
-    );
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      await DatabaseService().updateSalonField(
-        widget.salon.id,
-        'servicePacks',
-        _packs,
-      );
-      widget.onSaved();
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${AppLocalizations.of(context)?.tr('common_error_short') ?? 'Erreur'} : $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  void _addOrEditPack({Map<String, dynamic>? existing, int? index}) async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _PackFormDialog(
-        services: widget.salon.services,
-        existing: existing,
-        currency: widget.salon.currency,
-      ),
-    );
-    if (result == null) return;
-    setState(() {
-      if (index != null) {
-        _packs[index] = result;
-      } else {
-        _packs.add(result);
-      }
-    });
-  }
-
-  void _deletePack(int index) {
-    setState(() => _packs.removeAt(index));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return FractionallySizedBox(
-      heightFactor: 0.85,
-      child: Column(
-        children: [
-          // ── Handle ──
-          const SizedBox(height: 12),
-          Container(
-            width: 40, height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.secondary200,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── Header ──
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    l?.tr('salon_packs_manage') ?? 'Gérer les packs',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brand950,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => _addOrEditPack(),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(l?.tr('common_add') ?? 'Ajouter'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.brand600,
-                    textStyle: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // ── List ──
-          Expanded(
-            child: _packs.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.inventory_2_outlined,
-                            size: 48, color: AppColors.secondary300),
-                        const SizedBox(height: 12),
-                        Text(
-                          l?.tr('salon_packs_empty_title') ?? 'Aucun pack',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.secondary400,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          l?.tr('salon_packs_empty_subtitle') ?? 'Créez des packs de services\nà prix réduit pour vos clients',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 13, color: AppColors.secondary400),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: _packs.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: AppColors.secondary100),
-                    itemBuilder: (_, i) {
-                      final pack = _packs[i];
-                      final name = pack['name'] as String? ?? '';
-                      final price = (pack['price'] as num?)?.toDouble() ?? 0;
-                      final services = List<String>.from(pack['services'] ?? []);
-                      final originalPrice =
-                          (pack['originalPrice'] as num?)?.toDouble() ?? 0;
-                      final discount = originalPrice > 0
-                          ? ((1 - price / originalPrice) * 100).round()
-                          : 0;
-
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: AppColors.brand50,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.inventory_2_outlined,
-                              color: AppColors.brand500, size: 20),
-                        ),
-                        title: Text(
-                          name,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.brand950),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              services.join(' • '),
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.secondary400),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
-                                  CurrencyHelper.format(price, widget.salon.currency),
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.brand700),
-                                ),
-                                if (discount > 0) ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    CurrencyHelper.format(originalPrice, widget.salon.currency),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.secondary400,
-                                      decoration: TextDecoration.lineThrough,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFDCFCE7),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '-$discount%',
-                                      style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF16A34A)),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined,
-                                  size: 18, color: AppColors.secondary400),
-                              onPressed: () =>
-                                  _addOrEditPack(existing: pack, index: i),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  size: 18, color: Colors.redAccent),
-                              onPressed: () => _deletePack(i),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-
-          // ── Save button ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saving ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand700,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(l?.tr('common_save') ?? 'Enregistrer'),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── Pack Form Dialog ─────────────────────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _PackFormDialog extends StatefulWidget {
-  const _PackFormDialog({required this.services, this.existing, required this.currency});
-  final List<Map<String, dynamic>> services;
-  final Map<String, dynamic>? existing;
-  final String currency;
-
-  @override
-  State<_PackFormDialog> createState() => _PackFormDialogState();
-}
-
-class _PackFormDialogState extends State<_PackFormDialog> {
-  final _nameCtrl = TextEditingController();
-  final _priceCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  final _selectedServices = <String>{};
-  double _originalPrice = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.existing != null) {
-      _nameCtrl.text = widget.existing!['name'] as String? ?? '';
-      _priceCtrl.text =
-          (widget.existing!['price'] as num?)?.toStringAsFixed(0) ?? '';
-      _descCtrl.text = widget.existing!['description'] as String? ?? '';
-      _selectedServices.addAll(
-        List<String>.from(widget.existing!['services'] ?? []),
-      );
-    }
-    _recalcOriginalPrice();
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _priceCtrl.dispose();
-    _descCtrl.dispose();
-    super.dispose();
-  }
-
-  void _recalcOriginalPrice() {
-    double total = 0;
-    for (final s in widget.services) {
-      if (_selectedServices.contains(s['name'] as String? ?? '')) {
-        total += (s['price'] as num?)?.toDouble() ?? 0;
-      }
-    }
-    setState(() => _originalPrice = total);
-  }
-
-  void _toggleService(String name) {
-    setState(() {
-      if (_selectedServices.contains(name)) {
-        _selectedServices.remove(name);
-      } else {
-        _selectedServices.add(name);
-      }
-    });
-    _recalcOriginalPrice();
-  }
-
-  void _submit() {
-    final l = AppLocalizations.of(context);
-    final name = _nameCtrl.text.trim();
-    final priceText = _priceCtrl.text.trim();
-    if (name.isEmpty || priceText.isEmpty || _selectedServices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(l?.tr('salon_pack_form_validation') ?? 'Remplissez le nom, le prix et sélectionnez au moins un service')),
-      );
-      return;
-    }
-    final price = double.tryParse(priceText) ?? 0;
-    Navigator.pop(context, {
-      'name': name,
-      'services': _selectedServices.toList(),
-      'price': price,
-      'originalPrice': _originalPrice,
-      'description': _descCtrl.text.trim(),
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final discount = _originalPrice > 0 && _priceCtrl.text.isNotEmpty
-        ? ((1 - (double.tryParse(_priceCtrl.text) ?? 0) / _originalPrice) * 100)
-            .round()
-        : 0;
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Title ──
-            Text(
-              widget.existing != null
-                  ? (l?.tr('salon_pack_form_edit') ?? 'Modifier le pack')
-                  : (l?.tr('salon_pack_form_new') ?? 'Nouveau pack'),
-              style: GoogleFonts.dmSans(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brand950,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // ── Pack name ──
-            _buildLabel(l?.tr('salon_pack_form_name') ?? 'Nom du pack'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _nameCtrl,
-              decoration: _inputDecoration(l?.tr('salon_pack_form_name_hint') ?? 'Ex: Pack Mariée, Pack Soin Complet'),
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            const SizedBox(height: 16),
-
-            // ── Select services ──
-            _buildLabel(l?.tr('salon_pack_form_services') ?? 'Services inclus'),
-            const SizedBox(height: 8),
-            if (widget.services.isEmpty)
-              Text(
-                l?.tr('salon_pack_form_no_services') ?? 'Aucun service disponible. Ajoutez des services d\'abord.',
-                style: const TextStyle(fontSize: 13, color: AppColors.secondary400),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: widget.services.map((s) {
-                  final sName = s['name'] as String? ?? '';
-                  final sPrice = (s['price'] as num?)?.toDouble() ?? 0;
-                  final selected = _selectedServices.contains(sName);
-                  return GestureDetector(
-                    onTap: () => _toggleService(sName),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? AppColors.brand50
-                            : AppColors.secondary50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.brand500
-                              : AppColors.secondary200,
-                          width: selected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            selected
-                                ? Icons.check_circle
-                                : Icons.circle_outlined,
-                            size: 16,
-                            color: selected
-                                ? AppColors.brand600
-                                : AppColors.secondary300,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            sName,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  selected ? FontWeight.w600 : FontWeight.w400,
-                              color: selected
-                                  ? AppColors.brand700
-                                  : AppColors.secondary500,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            CurrencyHelper.format(sPrice, widget.currency),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: selected
-                                  ? AppColors.brand400
-                                  : AppColors.secondary400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-
-            // ── Original price info ──
-            if (_selectedServices.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary50,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline,
-                        size: 16, color: AppColors.secondary400),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        (l?.tr('salon_pack_form_original_price') ?? 'Prix total séparé : {price}').replaceAll('{price}', CurrencyHelper.format(_originalPrice, widget.currency)),
-                        style: const TextStyle(
-                            fontSize: 13, color: AppColors.secondary500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // ── Pack price ──
-            _buildLabel(l?.tr('salon_pack_form_price') ?? 'Prix du pack (${CurrencyHelper.symbol(widget.currency)})'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _priceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: _inputDecoration(l?.tr('salon_pack_form_price_hint') ?? 'Ex: 250'),
-              onChanged: (_) => setState(() {}),
-            ),
-            if (discount > 0) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  (l?.tr('salon_pack_form_discount') ?? 'Réduction de {discount}% par rapport aux services séparés').replaceAll('{discount}', '$discount'),
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF16A34A)),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // ── Description (optional) ──
-            _buildLabel(l?.tr('salon_pack_form_description') ?? 'Description (optionnel)'),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _descCtrl,
-              maxLines: 2,
-              decoration: _inputDecoration(l?.tr('salon_pack_form_description_hint') ?? 'Description du pack…'),
-              textCapitalization: TextCapitalization.sentences,
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── Buttons ──
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.secondary500,
-                      side: const BorderSide(color: AppColors.secondary200),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: Text(l?.tr('common_cancel') ?? 'Annuler'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brand700,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: Text(
-                        widget.existing != null ? (l?.tr('common_edit') ?? 'Modifier') : (l?.tr('salon_pack_form_create') ?? 'Créer')),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabel(String text) => Text(
-        text,
-        style: GoogleFonts.dmSans(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.brand950,
-        ),
-      );
-
-  InputDecoration _inputDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.secondary400, fontSize: 14),
-        filled: true,
-        fillColor: AppColors.secondary50,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.secondary200),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.secondary200),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.brand400, width: 1.5),
-        ),
-      );
 }
 
