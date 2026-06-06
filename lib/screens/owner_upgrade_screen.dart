@@ -103,18 +103,30 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
       // does — we'd end up with 2 active subs. Pass GoogleProductChangeInfo
       // to instruct Play Billing to replace the old sub with the new one.
       // iOS handles this natively via subscription groups.
+      // Tracks whether the owner already has an active subscription bought
+      // on ANOTHER store (e.g. they subscribed on iOS, then migrated to
+      // Android). Google Play can neither see nor replace a non-Google
+      // sub, so we must NOT build a product-change for it (doing so throws
+      // PURCHASE_INVALID_ERROR — "One or more of the arguments provided
+      // are invalid"). We do a plain Google purchase instead and, on
+      // success, remind the owner to cancel the old store's sub to avoid
+      // being billed twice.
+      bool hadForeignSub = false;
       GoogleProductChangeInfo? changeInfo;
       if (Platform.isAndroid) {
         try {
           final info = await Purchases.getCustomerInfo();
-          // On Google Play Billing 5+, RC returns subscription ids in the
-          // "subId:basePlanId" form (e.g. "essentiel_monthly:p1m"). The
-          // product-change API expects the BARE subscription product id —
-          // passing the combined form makes Play reject the call with
-          // PURCHASE_INVALID_ERROR ("One or more of the arguments provided
-          // are invalid"). Strip the base-plan suffix on both sides.
+          // RC returns Google sub ids as "subId:basePlanId" on Billing 5+;
+          // the product-change API wants the bare id — strip the suffix.
           final newProductId = pkg.storeProduct.identifier.split(':').first;
           for (final ent in info.entitlements.active.values) {
+            // Only a Google-owned sub can be replaced via product change.
+            // A sub from another store (App Store, …) must be left alone —
+            // the upgrade becomes a fresh Google purchase.
+            if (ent.store != Store.playStore) {
+              hadForeignSub = true;
+              continue;
+            }
             final oldProductId = ent.productIdentifier.split(':').first;
             if (oldProductId.isNotEmpty && oldProductId != newProductId) {
               changeInfo = GoogleProductChangeInfo(
@@ -143,10 +155,17 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
           customerInfo.entitlements.active.containsKey(entitlementKey);
       if (!mounted) return;
       if (active) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
-          backgroundColor: Colors.green.shade600,
-        ));
+        if (hadForeignSub) {
+          // Fresh Google sub created while a sub from another store is
+          // still active → remind the owner to cancel the old one.
+          await _showCancelOldSubReminder(l);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
+            backgroundColor: Colors.green.shade600,
+          ));
+        }
+        if (!mounted) return;
         Navigator.pop(context);
       } else {
         // Purchase accepted by Apple but entitlement not yet present in
@@ -163,6 +182,8 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(pendingMsg),
         ));
+        if (hadForeignSub && mounted) await _showCancelOldSubReminder(l);
+        if (!mounted) return;
         Navigator.pop(context);
       }
     } on PlatformException catch (e) {
@@ -184,6 +205,32 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         backgroundColor: Colors.red.shade600,
       ));
     }
+  }
+
+  /// Shown after a successful Google Play purchase when the owner still had
+  /// an active subscription bought on ANOTHER store (e.g. they subscribed
+  /// on iOS, then migrated to Android). Google can't cancel that sub, so we
+  /// remind the owner to cancel it themselves to avoid being billed twice.
+  Future<void> _showCancelOldSubReminder(AppLocalizations? l) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l?.tr('upgrade.old_sub_title') ??
+            'Plan activé — une dernière étape'),
+        content: Text(l?.tr('upgrade.old_sub_body') ??
+            'Votre nouvel abonnement est actif. Vous aviez déjà un '
+                'abonnement souscrit sur un autre store (App Store). Pour '
+                'éviter une double facturation, pensez à le résilier depuis '
+                'votre iPhone (Réglages → Apple ID → Abonnements).'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l?.tr('upgrade.old_sub_ok') ?? 'Compris'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// TEMPORARY — flips `salons/{uid}.plan` directly via Firestore so
