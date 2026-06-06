@@ -1616,6 +1616,8 @@
   "upgrade.secure_note_android": "Paiement sécurisé géré par Google Play. Vous confirmerez avec votre méthode de paiement Google.",
   "upgrade.offering_load_failed": "Impossible de charger l'offre. Vérifiez votre connexion.",
   "upgrade.restore": "Restaurer mes achats",
+  "upgrade.privacy": "Politique de confidentialité",
+  "upgrade.terms": "Conditions d'utilisation",
   "upgrade.restore_success": "Achats restaurés avec succès.",
   "upgrade.restore_empty": "Aucun achat à restaurer.",
 

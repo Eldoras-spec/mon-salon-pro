@@ -13,6 +13,8 @@ import '../services/app_localizations.dart';
 import '../services/plan_config.dart';
 import '../services/revenue_cat_service.dart';
 import '../theme/app_colors.dart';
+import 'privacy_policy_screen.dart';
+import 'terms_screen.dart';
 
 /// TEMPORARY dev bypass — set to false ONCE RevenueCat is live in App
 /// Store + Google Play and we don't want to allow Firestore-only plan
@@ -551,6 +553,68 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
                     color: AppColors.secondary500,
                   ),
                 ),
+              ),
+            ),
+
+            // ── Legal links — required in the subscription purchase flow
+            //    by Apple Guideline 3.1.2(c): functional links to the
+            //    Privacy Policy and Terms of Use (EULA). ──────────────
+            Center(
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      l?.tr('upgrade.privacy') ??
+                          'Politique de confidentialité',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.secondary500,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    '·',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary500,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TermsScreen(),
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      l?.tr('upgrade.terms') ?? 'Conditions d\'utilisation',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.secondary500,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

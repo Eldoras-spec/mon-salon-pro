@@ -1619,6 +1619,8 @@
   "upgrade.secure_note_android": "دفع آمن تتم إدارته بواسطة Google Play. ستؤكد عبر طريقة الدفع الخاصة بك في Google.",
   "upgrade.offering_load_failed": "تعذر تحميل العرض. تحقق من اتصالك.",
   "upgrade.restore": "استعادة مشترياتي",
+  "upgrade.privacy": "سياسة الخصوصية",
+  "upgrade.terms": "شروط الاستخدام",
   "upgrade.restore_success": "تمت استعادة المشتريات بنجاح.",
   "upgrade.restore_empty": "لا توجد مشتريات لاستعادتها.",
 
