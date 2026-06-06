@@ -25,7 +25,7 @@ class LocaleService {
   static Locale _detectLocale() {
     final phoneLang = ui.PlatformDispatcher.instance.locale.languageCode;
     if (['fr', 'en', 'ar', 'es'].contains(phoneLang)) return Locale(phoneLang);
-    return const Locale('fr');
+    return const Locale('en');
   }
 
   /// Save user's manual choice.

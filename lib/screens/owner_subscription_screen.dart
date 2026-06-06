@@ -12,7 +12,6 @@ import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
 import '../widgets/bot_quota_card.dart';
-import 'owner_stripe_connect_screen.dart';
 import 'owner_upgrade_screen.dart';
 
 /// "Mon abonnement" — central place for the owner to see current plan,
@@ -163,35 +162,6 @@ class _Body extends StatelessWidget {
             BotQuotaCard(salonId: salon.id),
             const SizedBox(height: 16),
           ],
-          // ── Card payments (Stripe Connect) ────────────────────
-          // Available on all plans — commission varies (5% Free / 3%
-          // Essentiel / 0% Business), enforced server-side at payout.
-          Text(
-            l?.tr('stripe_connect.section_title') ??
-                'Paiements par carte',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.secondary600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _ActionTile(
-            icon: Icons.credit_card_rounded,
-            color: AppColors.brand600,
-            title: l?.tr('stripe_connect.tile_title') ??
-                'Stripe Connect Express',
-            subtitle: l?.tr('stripe_connect.tile_subtitle') ??
-                'Configurer les paiements par carte bancaire',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const OwnerStripeConnectScreen(),
-                ),
-              );
-            },
-          ),
         ],
       ),
     );

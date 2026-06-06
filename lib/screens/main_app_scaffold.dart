@@ -21,6 +21,7 @@ import 'owner_salon_screen.dart';
 import 'owner_agenda_screen.dart';
 import 'owner_clients_screen.dart';
 import 'owner_statistics_screen.dart';
+import 'owner_stripe_connect_screen.dart';
 import 'owner_subscription_screen.dart';
 import 'owner_team_screen.dart';
 import 'owner_services_screen.dart';
@@ -283,8 +284,8 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                     _buildMenuTile(
                       icon: Icons.calendar_month_outlined,
                       iconBg: const Color(0xFFEFF6FF), iconColor: const Color(0xFF2563EB),
-                      label: l?.tr('menu_today_appointments') ?? 'Rendez-vous du jour',
-                      sub: l?.tr('menu_today_appointments_desc') ?? 'Voir les réservations d\'aujourd\'hui',
+                      label: l?.tr('menu_today_appointments') ?? 'Rendez-vous',
+                      sub: l?.tr('menu_today_appointments_desc') ?? 'Voir et gérer toutes vos réservations',
                       onTap: () {
                         navigator.pop();
                         if (mounted) setState(() => _currentIndex = 1);
@@ -372,11 +373,23 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                         iconColor: const Color(0xFF7C3AED),
                         label: l?.tr('menu_subscription') ?? 'Mon abonnement',
                         sub: l?.tr('menu_subscription_desc') ??
-                            'Plan, trial, paiement',
+                            'Plan et essai',
                         onTap: () {
                           navigator.pop();
                           navigator.pushSlide(
                               const OwnerSubscriptionScreen());
+                        },
+                      ),
+                    if (!isGerant)
+                      _buildMenuTile(
+                        icon: Icons.point_of_sale_outlined,
+                        iconBg: const Color(0xFFF0FDF4),
+                        iconColor: const Color(0xFF16A34A),
+                        label: l?.tr('menu_card_payments') ?? 'Paiements par carte',
+                        sub: l?.tr('menu_card_payments_desc') ?? 'Configurer les paiements par carte',
+                        onTap: () {
+                          navigator.pop();
+                          navigator.pushSlide(const OwnerStripeConnectScreen());
                         },
                       ),
                     const SizedBox(height: 8),

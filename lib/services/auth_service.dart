@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../models/user_model.dart';
 import 'database_service.dart';
+import 'locale_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -48,6 +49,13 @@ class AuthService {
         password: password,
       );
 
+      // Capture the app language (manual choice or device locale) at signup so
+      // server-side messages localize from the very first session — the
+      // locale_provider → users/{uid}.lang sync only runs once authenticated,
+      // which can miss a brand-new owner's first session (e.g. the employee
+      // login-code WhatsApp would otherwise fall back to English).
+      final lang = (await LocaleService.getSavedLocale()).languageCode;
+
       // Create a user document in Firestore
       await _firestore.collection('users').doc(result.user!.uid).set({
         'email': email,
@@ -56,6 +64,7 @@ class AuthService {
         'city': city,
         'userType': isClient ? 'client' : 'owner',
         'whatsappVerified': false,
+        'lang': lang,
         'createdAt': FieldValue.serverTimestamp(),
       });
 

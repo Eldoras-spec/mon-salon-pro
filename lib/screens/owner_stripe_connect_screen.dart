@@ -590,7 +590,7 @@ class _StatusCard extends StatelessWidget {
                     label: Text(
                       notConnected
                           ? (l?.tr('stripe_connect.connect') ??
-                              'Connecter Stripe')
+                              'Créer un compte Stripe Express')
                           : (l?.tr('stripe_connect.continue_onboarding') ??
                               'Continuer la configuration'),
                     style: const TextStyle(fontSize: 12),
