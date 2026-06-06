@@ -98,48 +98,54 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         (planRank[salon?.plan] ?? 0);
     setState(() => _purchasing = true);
     try {
-      // Android only: if the user already has an active paid sub on a
-      // different product, Google Play won't auto-replace it like Apple
-      // does — we'd end up with 2 active subs. Pass GoogleProductChangeInfo
-      // to instruct Play Billing to replace the old sub with the new one.
-      // iOS handles this natively via subscription groups.
-      // Tracks whether the owner already has an active subscription bought
-      // on ANOTHER store (e.g. they subscribed on iOS, then migrated to
-      // Android). Google Play can neither see nor replace a non-Google
-      // sub, so we must NOT build a product-change for it (doing so throws
-      // PURCHASE_INVALID_ERROR — "One or more of the arguments provided
-      // are invalid"). We do a plain Google purchase instead and, on
-      // success, remind the owner to cancel the old store's sub to avoid
-      // being billed twice.
-      bool hadForeignSub = false;
+      // ── Cross-store guard ──────────────────────────────────────────
+      // A subscription is owned by the store where it was bought; neither
+      // store can see or manage the other's sub. If the owner already has
+      // an active sub on the OTHER mobile store (e.g. they subscribed on
+      // iOS, then opened the Android app), purchasing here would create a
+      // SECOND, separately-billed subscription. Block it and point them to
+      // the store that manages their current plan.
+      CustomerInfo? info;
+      try {
+        info = await Purchases.getCustomerInfo();
+      } catch (_) {
+        info = null; // detection failed → fall back to a normal purchase
+      }
+      if (info != null) {
+        final otherStore =
+            Platform.isIOS ? Store.playStore : Store.appStore;
+        final onOtherStore = info.entitlements.active.values
+            .any((e) => e.store == otherStore);
+        if (onOtherStore) {
+          if (!mounted) return;
+          setState(() => _purchasing = false);
+          await _showManageOnOtherStoreDialog(l, otherStore);
+          return;
+        }
+      }
+
+      // Android: when changing plan between two GOOGLE subs, Play won't
+      // auto-replace the old one like Apple does — pass
+      // GoogleProductChangeInfo so Billing replaces it instead of stacking
+      // a 2nd sub. (Cross-store subs were already blocked above, so every
+      // active entitlement here is Play-owned.) iOS handles this natively.
       GoogleProductChangeInfo? changeInfo;
-      if (Platform.isAndroid) {
-        try {
-          final info = await Purchases.getCustomerInfo();
-          // RC returns Google sub ids as "subId:basePlanId" on Billing 5+;
-          // the product-change API wants the bare id — strip the suffix.
-          final newProductId = pkg.storeProduct.identifier.split(':').first;
-          for (final ent in info.entitlements.active.values) {
-            // Only a Google-owned sub can be replaced via product change.
-            // A sub from another store (App Store, …) must be left alone —
-            // the upgrade becomes a fresh Google purchase.
-            if (ent.store != Store.playStore) {
-              hadForeignSub = true;
-              continue;
-            }
-            final oldProductId = ent.productIdentifier.split(':').first;
-            if (oldProductId.isNotEmpty && oldProductId != newProductId) {
-              changeInfo = GoogleProductChangeInfo(
-                oldProductId,
-                prorationMode: isDowngrade
-                    ? GoogleProrationMode.deferred
-                    : GoogleProrationMode.immediateWithTimeProration,
-              );
-              break;
-            }
+      if (Platform.isAndroid && info != null) {
+        // RC returns Google sub ids as "subId:basePlanId" on Billing 5+;
+        // the product-change API wants the bare id — strip the suffix.
+        final newProductId = pkg.storeProduct.identifier.split(':').first;
+        for (final ent in info.entitlements.active.values) {
+          if (ent.store != Store.playStore) continue;
+          final oldProductId = ent.productIdentifier.split(':').first;
+          if (oldProductId.isNotEmpty && oldProductId != newProductId) {
+            changeInfo = GoogleProductChangeInfo(
+              oldProductId,
+              prorationMode: isDowngrade
+                  ? GoogleProrationMode.deferred
+                  : GoogleProrationMode.immediateWithTimeProration,
+            );
+            break;
           }
-        } catch (_) {
-          // Detection failed — fall back to plain purchase.
         }
       }
 
@@ -155,17 +161,10 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
           customerInfo.entitlements.active.containsKey(entitlementKey);
       if (!mounted) return;
       if (active) {
-        if (hadForeignSub) {
-          // Fresh Google sub created while a sub from another store is
-          // still active → remind the owner to cancel the old one.
-          await _showCancelOldSubReminder(l);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
-            backgroundColor: Colors.green.shade600,
-          ));
-        }
-        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
+          backgroundColor: Colors.green.shade600,
+        ));
         Navigator.pop(context);
       } else {
         // Purchase accepted by Apple but entitlement not yet present in
@@ -182,8 +181,6 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(pendingMsg),
         ));
-        if (hadForeignSub && mounted) await _showCancelOldSubReminder(l);
-        if (!mounted) return;
         Navigator.pop(context);
       }
     } on PlatformException catch (e) {
@@ -207,26 +204,35 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
     }
   }
 
-  /// Shown after a successful Google Play purchase when the owner still had
-  /// an active subscription bought on ANOTHER store (e.g. they subscribed
-  /// on iOS, then migrated to Android). Google can't cancel that sub, so we
-  /// remind the owner to cancel it themselves to avoid being billed twice.
-  Future<void> _showCancelOldSubReminder(AppLocalizations? l) async {
+  /// Blocks a purchase when the owner already has an active subscription
+  /// bought on the OTHER mobile store, and tells them where to manage it.
+  /// Stores can't cross-manage each other's subs, so buying here would
+  /// double-bill — we redirect instead.
+  Future<void> _showManageOnOtherStoreDialog(
+      AppLocalizations? l, Store otherStore) async {
     if (!mounted) return;
+    final onApple = otherStore == Store.appStore;
+    final body = onApple
+        ? (l?.tr('upgrade.manage_on_apple') ??
+            'Votre abonnement est géré sur l\'App Store. Pour changer de '
+                'formule, faites-le depuis votre iPhone (la modification '
+                's\'applique partout), ou résiliez-le dans les réglages '
+                'Apple puis revenez ici une fois qu\'il a pris fin.')
+        : (l?.tr('upgrade.manage_on_google') ??
+            'Votre abonnement est géré sur Google Play. Pour changer de '
+                'formule, faites-le depuis un appareil Android ou sur '
+                'play.google.com, ou résiliez-le puis revenez ici une fois '
+                'qu\'il a pris fin.');
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l?.tr('upgrade.old_sub_title') ??
-            'Plan activé — une dernière étape'),
-        content: Text(l?.tr('upgrade.old_sub_body') ??
-            'Votre nouvel abonnement est actif. Vous aviez déjà un '
-                'abonnement souscrit sur un autre store (App Store). Pour '
-                'éviter une double facturation, pensez à le résilier depuis '
-                'votre iPhone (Réglages → Apple ID → Abonnements).'),
+        title: Text(l?.tr('upgrade.manage_title') ??
+            'Abonnement géré sur un autre store'),
+        content: Text(body),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(l?.tr('upgrade.old_sub_ok') ?? 'Compris'),
+            child: Text(l?.tr('upgrade.manage_ok') ?? 'Compris'),
           ),
         ],
       ),
