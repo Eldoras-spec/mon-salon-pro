@@ -107,10 +107,16 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
       if (Platform.isAndroid) {
         try {
           final info = await Purchases.getCustomerInfo();
+          // On Google Play Billing 5+, RC returns subscription ids in the
+          // "subId:basePlanId" form (e.g. "essentiel_monthly:p1m"). The
+          // product-change API expects the BARE subscription product id —
+          // passing the combined form makes Play reject the call with
+          // PURCHASE_INVALID_ERROR ("One or more of the arguments provided
+          // are invalid"). Strip the base-plan suffix on both sides.
+          final newProductId = pkg.storeProduct.identifier.split(':').first;
           for (final ent in info.entitlements.active.values) {
-            final oldProductId = ent.productIdentifier;
-            if (oldProductId.isNotEmpty &&
-                !pkg.storeProduct.identifier.startsWith(oldProductId)) {
+            final oldProductId = ent.productIdentifier.split(':').first;
+            if (oldProductId.isNotEmpty && oldProductId != newProductId) {
               changeInfo = GoogleProductChangeInfo(
                 oldProductId,
                 prorationMode: isDowngrade
