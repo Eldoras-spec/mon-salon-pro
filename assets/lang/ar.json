@@ -519,6 +519,7 @@
   "team_phone_label_create": "هاتف واتساب *",
   "team_phone_label_edit": "هاتف واتساب (اختياري)",
   "team_phone_helper_create": "سنرسل رمز تسجيل الدخول تلقائياً عبر واتساب.",
+  "team_phone_required": "رقم واتساب مطلوب لإرسال رمز تسجيل الدخول إلى الموظف.",
   "team_pin_label": "رمز PIN (6 أرقام)",
   "team_pin_confirm_label": "تأكيد رمز PIN",
   "team_services_label": "الخدمات المتقنة *",

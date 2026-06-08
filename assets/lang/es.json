@@ -519,6 +519,7 @@
   "team_phone_label_create": "Telefono WhatsApp *",
   "team_phone_label_edit": "Telefono WhatsApp (opcional)",
   "team_phone_helper_create": "Enviaremos el codigo de inicio de sesion automaticamente por WhatsApp.",
+  "team_phone_required": "El numero de WhatsApp es obligatorio para enviar el codigo de inicio de sesion al empleado.",
   "team_pin_label": "PIN (6 digitos)",
   "team_pin_confirm_label": "Confirmar PIN",
   "team_services_label": "Servicios dominados *",

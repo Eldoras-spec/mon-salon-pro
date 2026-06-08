@@ -519,6 +519,7 @@
   "team_phone_label_create": "Téléphone WhatsApp *",
   "team_phone_label_edit": "Téléphone WhatsApp (optionnel)",
   "team_phone_helper_create": "On enverra automatiquement le code de connexion par WhatsApp.",
+  "team_phone_required": "Le numéro WhatsApp est obligatoire pour envoyer le code de connexion à l'employé.",
   "team_pin_label": "PIN (6 chiffres)",
   "team_pin_confirm_label": "Confirmer le PIN",
   "team_services_label": "Services maîtrisés *",

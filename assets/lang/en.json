@@ -519,6 +519,7 @@
   "team_phone_label_create": "WhatsApp phone *",
   "team_phone_label_edit": "WhatsApp phone (optional)",
   "team_phone_helper_create": "We'll send the login code automatically via WhatsApp.",
+  "team_phone_required": "A WhatsApp number is required to send the login code to the employee.",
   "team_pin_label": "PIN (6 digits)",
   "team_pin_confirm_label": "Confirm PIN",
   "team_services_label": "Skilled services *",
