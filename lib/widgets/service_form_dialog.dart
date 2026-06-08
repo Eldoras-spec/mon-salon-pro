@@ -64,6 +64,12 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
   bool _isComplex = false;
   List<Map<String, dynamic>> _optionSteps = [];
 
+  // Scroll + section key so a validation error (e.g. no employee assigned)
+  // can be brought into view after the keyboard is dismissed — otherwise on
+  // mobile the keyboard hides the inline error and the owner is confused.
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _memberSectionKey = GlobalKey();
+
   // ── Online card payment (Stripe Connect) ──
   /// 'none' | 'full' | 'percentage'
   /// (Legacy 'fixed_above' is silently migrated to 'none' on load — the
@@ -110,11 +116,15 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _priceCtrl.dispose();
     _descCtrl.dispose();
     _paymentValueCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _submit() {
     final l = AppLocalizations.of(context);
+    // Dismiss the keyboard first so any validation error below isn't hidden
+    // behind it on mobile.
+    FocusScope.of(context).unfocus();
     if (_nameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l?.tr('salon_service_form_name_required') ?? 'Le nom du service est requis')),
@@ -123,6 +133,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     }
     if (_selectedMembers.isEmpty && widget.teamMembers.isNotEmpty) {
       setState(() => _memberError = l?.tr('salon_service_form_assigned_error') ?? 'Assignez au moins un employé');
+      _scrollToMemberError();
       return;
     }
     final entry = <String, dynamic>{
@@ -152,6 +163,20 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     }
     Navigator.pop(context);
     widget.onSave(entry);
+  }
+
+  void _scrollToMemberError() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _memberSectionKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          alignment: 0.1,
+        );
+      }
+    });
   }
 
   @override
@@ -186,6 +211,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
             // Content
             Expanded(
               child: SingleChildScrollView(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -355,6 +381,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
                     // Member assignment
                     if (widget.teamMembers.isNotEmpty) ...[
+                      SizedBox(key: _memberSectionKey, height: 0),
                       _label(l?.tr('salon_service_form_assigned') ?? 'Réalisé par *'),
                       const SizedBox(height: 2),
                       Text(
