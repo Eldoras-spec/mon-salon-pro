@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/team_member_model.dart';
 import '../providers/team_providers.dart';
 import '../services/database_service.dart';
+import '../services/onboarding_progress.dart';
 import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
 import '../services/app_localizations.dart';
@@ -74,6 +75,8 @@ class _OwnerOnboardingStep5ScreenState
       );
       return;
     }
+    OnboardingProgress.save(
+        step: 6, stepName: 'services', data: widget.salonData);
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -409,6 +412,7 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
   final _pinCtrl = TextEditingController();
   final _pinConfirmCtrl = TextEditingController();
   String? _phoneE164;
+  String? _phoneError;
   String _role = 'member';
   bool _saving = false;
   bool _showPin = false;
@@ -428,12 +432,12 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
     // WhatsApp number is mandatory at creation — we use it to wa.me the
     // login code immediately after the member is saved.
     if (_phoneE164 == null || _phoneE164!.length < 6) {
+      // Show the error INSIDE the sheet — a SnackBar from the parent
+      // ScaffoldMessenger renders BEHIND the modal bottom sheet and is
+      // invisible, so the owner saw nothing happen on tap.
       final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(l?.tr('team_phone_required') ??
-            'Le numéro WhatsApp est obligatoire pour envoyer le code de connexion à l\'employé.'),
-        backgroundColor: Colors.redAccent,
-      ));
+      setState(() => _phoneError = l?.tr('team_phone_required') ??
+          'Le numéro WhatsApp est obligatoire pour envoyer le code de connexion à l\'employé.');
       return;
     }
     setState(() => _saving = true);
@@ -550,16 +554,22 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
                 CountryPhoneField(
                   initialE164: _phoneE164,
                   hintText: '612345678',
-                  onChanged: (e164) => setState(() => _phoneE164 = e164),
+                  onChanged: (e164) => setState(() {
+                    _phoneE164 = e164;
+                    _phoneError = null; // clear the error as soon as they type
+                  }),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    l?.tr('team_phone_helper_create') ??
-                        'On enverra automatiquement le code de connexion par WhatsApp.',
+                    _phoneError ??
+                        (l?.tr('team_phone_helper_create') ??
+                            'On enverra automatiquement le code de connexion par WhatsApp.'),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
-                      color: AppColors.secondary500,
+                      color: _phoneError != null
+                          ? Colors.redAccent
+                          : AppColors.secondary500,
                     ),
                   ),
                 ),

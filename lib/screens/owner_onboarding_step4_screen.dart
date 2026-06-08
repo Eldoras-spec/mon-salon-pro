@@ -8,6 +8,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../models/team_member_model.dart';
 import '../theme/app_colors.dart';
 import '../services/database_service.dart';
+import '../services/onboarding_progress.dart';
 import '../services/plan_config.dart';
 import '../services/revenue_cat_service.dart';
 import '../models/salon_model.dart';
@@ -278,6 +279,9 @@ class _OwnerOnboardingStep4ScreenState
       );
 
       await _databaseService.saveSalon(salon);
+      // Salon created → onboarding done. Clear the saved draft so the funnel
+      // signal and resume state don't linger.
+      await OnboardingProgress.clear();
 
       // Update each team member's assignedServiceNames
       for (final member in widget.teamMembers) {

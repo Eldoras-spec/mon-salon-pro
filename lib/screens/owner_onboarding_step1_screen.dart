@@ -22,10 +22,14 @@ import '../services/app_localizations.dart';
 import '../services/plan_config.dart';
 import '../utils/currency_helper.dart';
 import '../utils/timezone_helper.dart';
+import '../services/onboarding_progress.dart';
 import 'owner_onboarding_plan_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
-  const OwnerOnboardingStep1Screen({super.key});
+  const OwnerOnboardingStep1Screen({super.key, this.initialData});
+
+  /// Saved step-1 raw fields to re-fill the form when resuming onboarding.
+  final Map<String, dynamic>? initialData;
 
   @override
   State<OwnerOnboardingStep1Screen> createState() =>
@@ -42,6 +46,7 @@ class _OwnerOnboardingStep1ScreenState
   String? _whatsappE164;
   String? _verifiedWhatsappE164; // last WA number successfully verified this session
   bool _isProcessingNext = false; // guards _handleNext against re-entry
+  Timer? _autosaveTimer; // debounces draft autosave on field edits
 
   // Structured address fields
   final _countryController = TextEditingController(text: 'Maroc');
@@ -61,20 +66,93 @@ class _OwnerOnboardingStep1ScreenState
   @override
   void initState() {
     super.initState();
+    // Restore a saved draft (resume) FIRST — before wiring listeners — so
+    // setting controller text doesn't fire the charCount setState during
+    // initState, and so auto-detect doesn't override the saved currency/TZ.
+    final saved = widget.initialData;
+    if (saved != null) _restoreFromDraft(saved);
+
     _descriptionController.addListener(() {
       setState(() {
         _charCount = _descriptionController.text.length;
       });
     });
-    // Auto-detect currency via GeoJS (IP geolocation). The user can still
-    // override manually via the dropdown — we only prime the default.
-    _autoDetectCurrency();
-    // Prime with device TZ for an instant value, then refine via GeoJS
-    // (matches the currency source so currency + TZ stay geo-coherent
-    // when the device clock disagrees with the visitor's IP — e.g. on an
-    // emulator running UTC). Picker below allows manual override.
-    _selectedTimezone = TimezoneHelper.detectDeviceTimezone();
-    _autoDetectTimezone();
+    // Auto-detect currency via GeoJS (IP geolocation) only when not restored.
+    if (saved == null || saved['currency'] == null) {
+      _autoDetectCurrency();
+    }
+    // Prime with device TZ then refine via GeoJS — unless restored.
+    if (saved == null || saved['timezone'] == null) {
+      _selectedTimezone = TimezoneHelper.detectDeviceTimezone();
+      _autoDetectTimezone();
+    }
+    // Autosave the form (debounced) so a reboot mid-step doesn't lose data.
+    for (final c in [
+      _salonNameController,
+      _descriptionController,
+      _instagramController,
+      _facebookController,
+      _tiktokController,
+      _countryController,
+      _streetController,
+      _cityController,
+      _postalCodeController,
+    ]) {
+      c.addListener(_scheduleAutosave);
+    }
+  }
+
+  void _restoreFromDraft(Map<String, dynamic> d) {
+    String s(String k) => (d[k] as String?) ?? '';
+    _salonNameController.text = s('name');
+    if (d['country'] is String && (d['country'] as String).isNotEmpty) {
+      _countryController.text = d['country'] as String;
+    }
+    _streetController.text = s('street');
+    _cityController.text = s('city');
+    _postalCodeController.text = s('postal');
+    _descriptionController.text = s('description');
+    _instagramController.text = s('instagram');
+    _facebookController.text = s('facebook');
+    _tiktokController.text = s('tiktok');
+    if (d['currency'] is String) _selectedCurrency = d['currency'] as String;
+    if (d['salonType'] is String) _selectedSalonType = d['salonType'] as String;
+    if (d['timezone'] is String) _selectedTimezone = d['timezone'] as String;
+    if (d['whatsapp'] is String && (d['whatsapp'] as String).isNotEmpty) {
+      _whatsappE164 = d['whatsapp'] as String;
+    }
+    if (d['latitude'] is num) _latitude = (d['latitude'] as num).toDouble();
+    if (d['longitude'] is num) _longitude = (d['longitude'] as num).toDouble();
+    _charCount = _descriptionController.text.length;
+  }
+
+  Map<String, dynamic> _buildStep1Raw() => {
+        'name': _salonNameController.text.trim(),
+        'country': _countryController.text.trim(),
+        'street': _streetController.text.trim(),
+        'city': _cityController.text.trim(),
+        'postal': _postalCodeController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'instagram': _instagramController.text.trim(),
+        'facebook': _facebookController.text.trim(),
+        'tiktok': _tiktokController.text.trim(),
+        'currency': _selectedCurrency,
+        'salonType': _selectedSalonType,
+        'timezone': _selectedTimezone,
+        if (_whatsappE164 != null) 'whatsapp': _whatsappE164,
+        if (_latitude != null) 'latitude': _latitude,
+        if (_longitude != null) 'longitude': _longitude,
+      };
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 1500), () {
+      OnboardingProgress.save(
+        step: 1,
+        stepName: 'details',
+        step1Raw: _buildStep1Raw(),
+      );
+    });
   }
 
   Future<void> _autoDetectCurrency() async {
@@ -103,6 +181,7 @@ class _OwnerOnboardingStep1ScreenState
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
     _salonNameController.dispose();
     _descriptionController.dispose();
     _instagramController.dispose();
@@ -366,6 +445,14 @@ class _OwnerOnboardingStep1ScreenState
         'whatsapp': _whatsappE164 ?? '',
       },
     };
+
+    // Checkpoint: step-1 done → resume point is the Plan screen.
+    await OnboardingProgress.save(
+      step: 2,
+      stepName: 'plan',
+      data: salonData,
+      step1Raw: _buildStep1Raw(),
+    );
 
     if (!mounted) return;
     Navigator.push(
@@ -777,21 +864,30 @@ class _OwnerOnboardingStep1ScreenState
                           label: l?.tr('salon_type_femme') ?? 'Femme',
                           icon: Icons.female,
                           selected: _selectedSalonType == 'femme',
-                          onTap: () => setState(() => _selectedSalonType = 'femme'),
+                          onTap: () {
+                            setState(() => _selectedSalonType = 'femme');
+                            _scheduleAutosave();
+                          },
                         ),
                         const SizedBox(width: 8),
                         _SalonTypeChip(
                           label: l?.tr('salon_type_homme') ?? 'Homme',
                           icon: Icons.male,
                           selected: _selectedSalonType == 'homme',
-                          onTap: () => setState(() => _selectedSalonType = 'homme'),
+                          onTap: () {
+                            setState(() => _selectedSalonType = 'homme');
+                            _scheduleAutosave();
+                          },
                         ),
                         const SizedBox(width: 8),
                         _SalonTypeChip(
                           label: l?.tr('salon_type_mixte') ?? 'Mixte',
                           icon: Icons.people,
                           selected: _selectedSalonType == 'mixte',
-                          onTap: () => setState(() => _selectedSalonType = 'mixte'),
+                          onTap: () {
+                            setState(() => _selectedSalonType = 'mixte');
+                            _scheduleAutosave();
+                          },
                         ),
                       ],
                     ),
@@ -875,6 +971,7 @@ class _OwnerOnboardingStep1ScreenState
                         onChanged: (val) {
                           if (val != null) {
                             setState(() => _selectedCurrency = val);
+                            _scheduleAutosave();
                           }
                         },
                       ),
@@ -970,6 +1067,7 @@ class _OwnerOnboardingStep1ScreenState
                         onChanged: (val) {
                           if (val != null) {
                             setState(() => _selectedTimezone = val);
+                            _scheduleAutosave();
                           }
                         },
                       ),
@@ -1127,10 +1225,12 @@ class _OwnerOnboardingStep1ScreenState
                 ),
                 const SizedBox(height: 16),
                 CountryPhoneField(
+                  initialE164: _whatsappE164,
                   onChanged: (e164) {
                     _whatsappE164 = e164;
                     // Changing the WA number invalidates the previous verification.
                     if (_verifiedWhatsappE164 != e164) _verifiedWhatsappE164 = null;
+                    _scheduleAutosave();
                   },
                 ),
                 const SizedBox(height: 32),

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
+import '../services/onboarding_progress.dart';
 import 'owner_onboarding_step5_screen.dart';
 
 class DaySchedule {
@@ -214,6 +215,7 @@ class _OwnerOnboardingStep3ScreenState
 
     updatedData['workingHours'] = workingHours;
     updatedData['timezone'] = _selectedTimezone;
+    OnboardingProgress.save(step: 5, stepName: 'team', data: updatedData);
 
     Navigator.push(
       context,

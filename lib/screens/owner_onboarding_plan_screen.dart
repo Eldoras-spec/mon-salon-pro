@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/app_localizations.dart';
+import '../services/onboarding_progress.dart';
 import '../services/plan_config.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
@@ -32,6 +33,7 @@ class _OwnerOnboardingPlanScreenState extends State<OwnerOnboardingPlanScreen> {
   void _next() {
     final updated = Map<String, dynamic>.from(widget.salonData);
     updated['plan'] = _selectedPlan;
+    OnboardingProgress.save(step: 3, stepName: 'photos', data: updated);
     Navigator.push(
       context,
       MaterialPageRoute(

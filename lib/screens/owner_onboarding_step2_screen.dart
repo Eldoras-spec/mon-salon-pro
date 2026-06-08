@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../services/plan_config.dart';
+import '../services/onboarding_progress.dart';
 import '../utils/media_compressor.dart';
 import '../widgets/custom_button.dart';
 import '../services/app_localizations.dart';
@@ -407,6 +408,7 @@ class _OwnerOnboardingStep2ScreenState
     ];
     updatedData['images'] = allImages;
     updatedData['logoUrl'] = _coverPhotoUrl;
+    OnboardingProgress.save(step: 4, stepName: 'hours', data: updatedData);
 
     Navigator.push(
       context,

@@ -16,6 +16,11 @@ import 'screens/welcome_screen.dart';
 import 'screens/main_app_scaffold.dart';
 import 'screens/member_home_screen.dart';
 import 'screens/owner_onboarding_step1_screen.dart';
+import 'screens/owner_onboarding_plan_screen.dart';
+import 'screens/owner_onboarding_step2_screen.dart';
+import 'screens/owner_onboarding_step3_screen.dart';
+import 'screens/owner_onboarding_step5_screen.dart';
+import 'services/onboarding_progress.dart';
 import 'screens/team_profile_selector_screen.dart';
 import 'services/fb_events_service.dart';
 import 'services/notification_service.dart';
@@ -340,10 +345,49 @@ class _MonSalonProAppState extends ConsumerState<MonSalonProApp> {
                   skipLoadingOnReload: true,
                   data: (salon) {
                     if (salon == null) {
-                      // No salon → resume onboarding from step 1. The screen
-                      // handles already-verified-WhatsApp by skipping the OTP
-                      // check, so it works for both fresh and orphan users.
-                      return const OwnerOnboardingStep1Screen();
+                      // No salon → resume the onboarding flow. Read the saved
+                      // draft so the owner lands on the step they left off at,
+                      // with their data re-filled. Falls back to step 1.
+                      final draftAsync = ref.watch(onboardingDraftProvider);
+                      return draftAsync.when(
+                        skipLoadingOnReload: true,
+                        loading: () => const Scaffold(
+                          body: Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.brand600),
+                          ),
+                        ),
+                        error: (_, __) => const OwnerOnboardingStep1Screen(),
+                        data: (draft) {
+                          if (draft == null) {
+                            return const OwnerOnboardingStep1Screen();
+                          }
+                          final step = (draft['step'] as num?)?.toInt() ?? 1;
+                          final data = (draft['data'] is Map)
+                              ? Map<String, dynamic>.from(draft['data'] as Map)
+                              : null;
+                          final step1Raw = (draft['step1Raw'] is Map)
+                              ? Map<String, dynamic>.from(
+                                  draft['step1Raw'] as Map)
+                              : null;
+                          if (data != null) {
+                            if (step == 2) {
+                              return OwnerOnboardingPlanScreen(salonData: data);
+                            }
+                            if (step == 3) {
+                              return OwnerOnboardingStep2Screen(salonData: data);
+                            }
+                            if (step == 4) {
+                              return OwnerOnboardingStep3Screen(salonData: data);
+                            }
+                            if (step >= 5) {
+                              return OwnerOnboardingStep5Screen(salonData: data);
+                            }
+                          }
+                          return OwnerOnboardingStep1Screen(
+                              initialData: step1Raw);
+                        },
+                      );
                     }
                     return _buildOwnerHome(context, ref, model);
                   },
