@@ -87,6 +87,10 @@ class SalonModel {
   // `isPremium` is the derived boolean kept in sync server-side by the
   // `onSalonPlanChange` CF (plan == 'business' ⇔ isPremium == true).
   final String plan;
+  // Which store manages the subscription: 'stripe' (desktop), 'apple' or
+  // 'google' (mobile IAP), or null. Drives the cross-platform guard — you
+  // can only manage your plan where you subscribed. Server-controlled.
+  final String? subscriptionPlatform;
   // End of Essentiel free trial (3 months). null if not on trial / already paid.
   final DateTime? trialEndsAt;
   // When a Free salon has >2 team members (e.g. after downgrade from a paid
@@ -148,6 +152,7 @@ class SalonModel {
     this.salonType = 'femme',
     this.dismissedSetupTasks = const [],
     this.plan = 'essentiel',
+    this.subscriptionPlatform,
     this.trialEndsAt,
     this.freeCapGraceEndsAt,
     this.paidPlanEverActivated = false,
@@ -248,6 +253,7 @@ class SalonModel {
       // salons keep full features by default).
       plan: data['plan'] as String? ??
           ((data['isPremium'] == true) ? 'business' : 'essentiel'),
+      subscriptionPlatform: data['subscriptionPlatform'] as String?,
       trialEndsAt: (data['trialEndsAt'] is Timestamp)
           ? (data['trialEndsAt'] as Timestamp).toDate()
           : null,
