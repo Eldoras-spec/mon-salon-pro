@@ -87,43 +87,14 @@ class _Body extends StatelessWidget {
           _FeaturesCard(salon: salon),
           const SizedBox(height: 16),
           // ── Upgrade / Downgrade actions ────────────────────────
-          // Cross-platform guard: a subscription bought on DESKTOP (Stripe)
-          // can only be managed there.
-          if (salon.subscriptionPlatform == 'stripe')
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade100),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.desktop_windows_rounded,
-                      size: 20, color: Colors.blue.shade700),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      l?.tr('subscription.managed_on_desktop') ??
-                          'Votre abonnement est géré sur l\'application Mon Salon de votre ordinateur. Pour changer de plan ou résilier, faites-le depuis le bureau (desktop).',
-                      style: TextStyle(
-                          fontSize: 13, color: Colors.blue.shade900, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            Text(
-              l?.tr('subscription.change_plan') ?? 'Changer de plan',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.secondary600,
-              ),
+          Text(
+            l?.tr('subscription.change_plan') ?? 'Changer de plan',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.secondary600,
             ),
+          ),
             const SizedBox(height: 8),
             if (!salon.isFree)
             _ActionTile(
@@ -172,7 +143,6 @@ class _Body extends StatelessWidget {
                   _priceChip(context, PlanConfig.planBusiness, salon.currency),
               onTap: () => _goToUpgrade(context, PlanConfig.planBusiness),
             ),
-          ],
           const SizedBox(height: 16),
           // ── Bot Zayna message quota (Business plan only) ──────
           if (salon.isBusiness) ...[
