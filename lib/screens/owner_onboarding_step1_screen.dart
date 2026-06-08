@@ -100,6 +100,33 @@ class _OwnerOnboardingStep1ScreenState
     ]) {
       c.addListener(_scheduleAutosave);
     }
+
+    // If this WhatsApp number was already verified in a previous session
+    // (saved on the user doc), don't ask for the OTP again on resume.
+    _restorePreviousWhatsappVerification();
+  }
+
+  /// Marks the restored WhatsApp number as already verified when the user doc
+  /// confirms it — so resuming onboarding doesn't re-trigger the OTP for a
+  /// number the owner already validated the first time.
+  Future<void> _restorePreviousWhatsappVerification() async {
+    final wa = _whatsappE164;
+    if (wa == null || wa.isEmpty) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = snap.data();
+      if (data != null &&
+          data['whatsappVerified'] == true &&
+          data['whatsapp'] == wa) {
+        // No setState — this only feeds the _handleNext OTP guard.
+        _verifiedWhatsappE164 = wa;
+      }
+    } catch (_) {/* best effort — fall back to asking the OTP */}
   }
 
   void _restoreFromDraft(Map<String, dynamic> d) {
