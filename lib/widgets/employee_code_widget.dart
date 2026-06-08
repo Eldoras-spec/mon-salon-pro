@@ -2,7 +2,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:share_plus/share_plus.dart' show Share;
 
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -123,11 +122,6 @@ class _EmployeeCodeSheetState extends State<_EmployeeCodeSheet> {
       backgroundColor: AppColors.brand700,
       behavior: SnackBarBehavior.floating,
     ));
-  }
-
-  Future<void> _share() async {
-    if (_code == null) return;
-    await Share.share(employeeCodeShareMessage(context, _code!));
   }
 
   Future<void> _regenerate() async {
@@ -277,9 +271,9 @@ class _EmployeeCodeSheetState extends State<_EmployeeCodeSheet> {
               const SizedBox(width: 10),
               Expanded(
                 child: _ActionBtn(
-                  icon: Icons.share_rounded,
-                  label: l?.tr('emp_code_share') ?? 'Partager',
-                  onTap: _code == null ? null : _share,
+                  icon: Icons.check_circle_rounded,
+                  label: l?.tr('emp_code_close') ?? 'Fermer',
+                  onTap: () => Navigator.of(context).pop(),
                   primary: true,
                 ),
               ),
