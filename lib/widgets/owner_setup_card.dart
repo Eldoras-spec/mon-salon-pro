@@ -8,6 +8,7 @@ import '../screens/owner_boutique_screen.dart';
 import '../screens/owner_promotions_screen.dart';
 import '../screens/owner_salon_screen.dart';
 import '../screens/owner_services_screen.dart';
+import '../screens/owner_set_location_screen.dart';
 import '../screens/owner_team_screen.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -175,19 +176,21 @@ class _SetupTile extends ConsumerWidget {
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded,
-                  size: 16, color: AppColors.secondary300),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                  minWidth: 32, minHeight: 32),
-              tooltip: l?.tr('owner_setup_dismiss') ?? 'Masquer',
-              onPressed: () async {
-                final salon = ref.read(ownerSalonProvider).value;
-                if (salon == null) return;
-                await dismissSetupTask(salon.id, task.key);
-              },
-            ),
+            // Location is required (a salon must be findable) → not dismissible.
+            if (task.key != SetupTaskKey.location)
+              IconButton(
+                icon: const Icon(Icons.close_rounded,
+                    size: 16, color: AppColors.secondary300),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                    minWidth: 32, minHeight: 32),
+                tooltip: l?.tr('owner_setup_dismiss') ?? 'Masquer',
+                onPressed: () async {
+                  final salon = ref.read(ownerSalonProvider).value;
+                  if (salon == null) return;
+                  await dismissSetupTask(salon.id, task.key);
+                },
+              ),
             const Icon(Icons.arrow_forward_ios_rounded,
                 size: 12, color: AppColors.secondary300),
           ],
@@ -198,6 +201,15 @@ class _SetupTile extends ConsumerWidget {
 
   void _navigate(BuildContext context, WidgetRef ref, SetupTaskKey key) {
     switch (key) {
+      case SetupTaskKey.location:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OwnerSetLocationScreen(
+                salon: ref.read(ownerSalonProvider).value),
+          ),
+        );
+        break;
       case SetupTaskKey.googleReview:
       case SetupTaskKey.firstPromo:
       case SetupTaskKey.loyalty:
@@ -239,6 +251,16 @@ class _SetupTile extends ConsumerWidget {
 
   _TileMeta _meta(SetupTaskKey key, AppLocalizations? l) {
     switch (key) {
+      case SetupTaskKey.location:
+        return _TileMeta(
+          icon: Icons.location_on_outlined,
+          fg: const Color(0xFFDC2626),
+          bg: const Color(0xFFFEE2E2),
+          title: l?.tr('owner_setup_location_title') ??
+              'Ajoutez la localisation de votre salon',
+          subtitle: l?.tr('owner_setup_location_sub') ??
+              'Indispensable pour que vos clients vous trouvent',
+        );
       case SetupTaskKey.googleReview:
         return _TileMeta(
           icon: Icons.star_outline_rounded,

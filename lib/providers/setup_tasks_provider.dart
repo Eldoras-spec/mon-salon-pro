@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'owner_providers.dart';
 
 enum SetupTaskKey {
+  location,
   googleReview,
   firstPromo,
   firstProduct,
@@ -59,6 +60,10 @@ final setupTasksProvider = Provider<List<SetupTask>>((ref) {
   final needsClassification = hasMultiMemberService && !anyPrioritySet;
 
   final all = <SetupTask>[
+    // Location is collected after onboarding — top priority, never dismissed
+    // (a salon needs coordinates to be found by clients). Auto-hides once set.
+    if (salon.latitude == null || salon.longitude == null)
+      const SetupTask(key: SetupTaskKey.location, priority: 0),
     if (!(grr['enabled'] == true))
       const SetupTask(key: SetupTaskKey.googleReview, priority: 1),
     if (promos.isEmpty)
