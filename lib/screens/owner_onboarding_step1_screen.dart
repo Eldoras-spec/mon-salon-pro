@@ -2,12 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:latlong2/latlong.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -47,15 +43,6 @@ class _OwnerOnboardingStep1ScreenState
   bool _isProcessingNext = false; // guards _handleNext against re-entry
   Timer? _autosaveTimer; // debounces draft autosave on field edits
 
-  // Structured address fields
-  final _countryController = TextEditingController(text: 'Maroc');
-  final _streetController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _postalCodeController = TextEditingController();
-
-  double? _latitude;
-  double? _longitude;
-  bool _isGettingLocation = false;
   String _selectedCurrency = 'MAD';
   String _selectedSalonType = 'femme';
   String _selectedTimezone = TimezoneHelper.defaultTimezone;
@@ -84,10 +71,6 @@ class _OwnerOnboardingStep1ScreenState
       _instagramController,
       _facebookController,
       _tiktokController,
-      _countryController,
-      _streetController,
-      _cityController,
-      _postalCodeController,
     ]) {
       c.addListener(_scheduleAutosave);
     }
@@ -123,12 +106,6 @@ class _OwnerOnboardingStep1ScreenState
   void _restoreFromDraft(Map<String, dynamic> d) {
     String s(String k) => (d[k] as String?) ?? '';
     _salonNameController.text = s('name');
-    if (d['country'] is String && (d['country'] as String).isNotEmpty) {
-      _countryController.text = d['country'] as String;
-    }
-    _streetController.text = s('street');
-    _cityController.text = s('city');
-    _postalCodeController.text = s('postal');
     _instagramController.text = s('instagram');
     _facebookController.text = s('facebook');
     _tiktokController.text = s('tiktok');
@@ -138,16 +115,10 @@ class _OwnerOnboardingStep1ScreenState
     if (d['whatsapp'] is String && (d['whatsapp'] as String).isNotEmpty) {
       _whatsappE164 = d['whatsapp'] as String;
     }
-    if (d['latitude'] is num) _latitude = (d['latitude'] as num).toDouble();
-    if (d['longitude'] is num) _longitude = (d['longitude'] as num).toDouble();
   }
 
   Map<String, dynamic> _buildStep1Raw() => {
         'name': _salonNameController.text.trim(),
-        'country': _countryController.text.trim(),
-        'street': _streetController.text.trim(),
-        'city': _cityController.text.trim(),
-        'postal': _postalCodeController.text.trim(),
         'instagram': _instagramController.text.trim(),
         'facebook': _facebookController.text.trim(),
         'tiktok': _tiktokController.text.trim(),
@@ -155,8 +126,6 @@ class _OwnerOnboardingStep1ScreenState
         'salonType': _selectedSalonType,
         'timezone': _selectedTimezone,
         if (_whatsappE164 != null) 'whatsapp': _whatsappE164,
-        if (_latitude != null) 'latitude': _latitude,
-        if (_longitude != null) 'longitude': _longitude,
       };
 
   void _scheduleAutosave() {
@@ -201,73 +170,7 @@ class _OwnerOnboardingStep1ScreenState
     _instagramController.dispose();
     _facebookController.dispose();
     _tiktokController.dispose();
-    _countryController.dispose();
-    _streetController.dispose();
-    _cityController.dispose();
-    _postalCodeController.dispose();
     super.dispose();
-  }
-
-  Future<void> _getCurrentLocation() async {
-    setState(() => _isGettingLocation = true);
-    try {
-      final l = AppLocalizations.of(context);
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw l?.tr('salon_edit_info_location_disabled') ?? 'Le service de localisation est désactivé.';
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw l?.tr('salon_edit_info_location_denied') ?? 'Permission de localisation refusée.';
-        }
-      }
-      if (permission == LocationPermission.deniedForever) {
-        throw l?.tr('salon_edit_info_location_denied_forever') ?? 'Permission de localisation définitivement refusée. Activez-la dans les paramètres.';
-      }
-
-      final position = await Geolocator.getCurrentPosition();
-
-      final placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-
-      if (placemarks.isNotEmpty) {
-        final p = placemarks.first;
-
-        final street = (p.street ?? '').trim();
-        final city = p.locality ?? p.administrativeArea ?? '';
-        final postal = p.postalCode ?? '';
-        final country = p.country ?? 'Maroc';
-
-        setState(() {
-          _latitude = position.latitude;
-          _longitude = position.longitude;
-          _streetController.text = street;
-          _cityController.text = city;
-          _postalCodeController.text = postal;
-          _countryController.text = country.isNotEmpty ? country : 'Maroc';
-          _isGettingLocation = false;
-        });
-      } else {
-        setState(() {
-          _latitude = position.latitude;
-          _longitude = position.longitude;
-          _isGettingLocation = false;
-        });
-      }
-    } catch (e) {
-      setState(() => _isGettingLocation = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur : ${e.toString()}'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
   }
 
   /// Pre-checks WA availability for an owner account, then shows the
@@ -360,13 +263,12 @@ class _OwnerOnboardingStep1ScreenState
 
   Future<void> _handleNextInner() async {
     final name = _salonNameController.text.trim();
-    final city = _cityController.text.trim();
 
     final l = AppLocalizations.of(context);
-    if (name.isEmpty || city.isEmpty) {
+    if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(l?.tr('salon_edit_info_required') ?? 'Veuillez remplir les champs obligatoires (nom et ville)'),
+          content: Text(l?.tr('onboarding_step1_name_required') ?? 'Veuillez indiquer le nom du salon'),
         ),
       );
       return;
@@ -399,59 +301,22 @@ class _OwnerOnboardingStep1ScreenState
       }
     }
 
-    // Build full address string
-    final addressParts = [
-      if (_streetController.text.trim().isNotEmpty) _streetController.text.trim(),
-      if (_postalCodeController.text.trim().isNotEmpty) _postalCodeController.text.trim(),
-      city,
-      if (_countryController.text.trim().isNotEmpty) _countryController.text.trim(),
-    ];
-    final fullAddress = addressParts.join(', ');
-
-    // Forward geocoding: convert address to coordinates if GPS wasn't used
-    double? lat = _latitude;
-    double? lng = _longitude;
-    if (lat == null || lng == null) {
-      try {
-        final locations = await locationFromAddress(fullAddress);
-        if (locations.isNotEmpty) {
-          lat = locations.first.latitude;
-          lng = locations.first.longitude;
-        }
-      } catch (_) {}
-      // If still no coordinates, require GPS
-      if (lat == null || lng == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              l?.tr('salon_edit_info_geocode_error') ?? 'Impossible de localiser cette adresse. Veuillez utiliser le bouton GPS.',
-            ),
-            backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-        return;
-      }
-    }
-
     final String ownerId = AuthService().currentUserId ?? '';
 
+    // Location (address + coordinates) is collected AFTER onboarding via the
+    // "Set location" home card (owner_set_location_screen). The salon is
+    // created without it so a hard-to-geocode address never blocks signup.
     final salonData = {
       'ownerId': ownerId,
       'name': name,
-      'address': fullAddress,
+      'address': '',
       'description': '',
-      'city': city,
-      'country': _countryController.text.trim().isNotEmpty
-          ? _countryController.text.trim()
-          : 'Maroc',
+      'city': '',
+      'country': '',
       'category': 'Beauté',
       'currency': _selectedCurrency,
       'salonType': _selectedSalonType,
       'timezone': _selectedTimezone,
-      'latitude': lat,
-      'longitude': lng,
       'socialLinks': {
         'instagram': _instagramController.text.trim().replaceAll('@', ''),
         'facebook': _facebookController.text.trim().replaceAll('@', ''),
@@ -483,35 +348,6 @@ class _OwnerOnboardingStep1ScreenState
       backgroundColor: Colors.white,
       body: SafeArea(
         child: _buildFormSection(),
-      ),
-    );
-  }
-
-  Widget _buildMapPlaceholder({required bool hasLocation}) {
-    return Container(
-      color: AppColors.secondary100,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              hasLocation ? Icons.map_outlined : Icons.add_location_alt_outlined,
-              size: 32,
-              color: AppColors.secondary400,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasLocation
-                  ? 'Aperçu carte indisponible'
-                  : 'Utilisez votre position ou remplissez l\'adresse',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.secondary400,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -735,7 +571,7 @@ class _OwnerOnboardingStep1ScreenState
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Commencez par ajouter le nom de votre salon, sa localisation et une courte description. C\'est ce que vos clients verront en premier.',
+                  'Commencez par le nom de votre salon. Vous ajouterez sa localisation juste après, depuis votre tableau de bord.',
                   style:
                       TextStyle(color: AppColors.secondary500, height: 1.5),
                 ),
@@ -750,114 +586,6 @@ class _OwnerOnboardingStep1ScreenState
                   required: true,
                 ),
                 const SizedBox(height: 28),
-
-                // ── Address section ──────────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      l?.tr('onboarding_step1_address') ?? 'Adresse',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.secondary700,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed:
-                          _isGettingLocation ? null : _getCurrentLocation,
-                      icon: _isGettingLocation
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.brand500,
-                              ),
-                            )
-                          : Icon(
-                              _latitude != null
-                                  ? Icons.check_circle
-                                  : Icons.my_location,
-                              size: 14,
-                              color: _latitude != null
-                                  ? Colors.green
-                                  : AppColors.brand600,
-                            ),
-                      label: Text(
-                        _isGettingLocation
-                            ? (l?.tr('salon_edit_info_gps_loading') ?? 'Localisation...')
-                            : (_latitude != null
-                                ? (l?.tr('salon_edit_info_gps_captured') ?? 'Position capturée')
-                                : (l?.tr('salon_edit_info_gps_use') ?? 'Utiliser ma position')),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _latitude != null
-                              ? Colors.green
-                              : AppColors.brand600,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Country
-                _buildAddressField(
-                  controller: _countryController,
-                  label: l?.tr('salon_edit_info_country') ?? 'Pays',
-                  hint: 'Maroc',
-                  icon: Icons.public_outlined,
-                ),
-                const SizedBox(height: 14),
-
-                // Street
-                _buildAddressField(
-                  controller: _streetController,
-                  label: l?.tr('salon_edit_info_street') ?? 'Adresse (rue et numéro)',
-                  hint: 'ex. 12 Rue Mohammed V',
-                  icon: Icons.signpost_outlined,
-                ),
-                const SizedBox(height: 14),
-
-                // City + Postal code side by side
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: _buildAddressField(
-                        controller: _cityController,
-                        label: l?.tr('salon_edit_info_city') ?? 'Ville *',
-                        hint: 'ex. Casablanca',
-                        icon: Icons.location_city_outlined,
-                        required: true,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: _buildAddressField(
-                        controller: _postalCodeController,
-                        label: l?.tr('salon_edit_info_postal') ?? 'Code postal',
-                        hint: 'ex. 20000',
-                        icon: Icons.markunread_mailbox_outlined,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        maxLength: 10,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
 
                 // Salon Type
                 Column(
@@ -1087,49 +815,6 @@ class _OwnerOnboardingStep1ScreenState
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 14),
-
-                // Map preview (shown when GPS coords are available)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    height: 130,
-                    child: _latitude != null && _longitude != null
-                        ? IgnorePointer(
-                            child: FlutterMap(
-                              options: MapOptions(
-                                initialCenter: LatLng(_latitude!, _longitude!),
-                                initialZoom: 15,
-                                interactionOptions: const InteractionOptions(
-                                  flags: InteractiveFlag.none,
-                                ),
-                              ),
-                              children: [
-                                TileLayer(
-                                  urlTemplate:
-                                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                  userAgentPackageName: 'com.blagence.monsalon',
-                                ),
-                                MarkerLayer(
-                                  markers: [
-                                    Marker(
-                                      point: LatLng(_latitude!, _longitude!),
-                                      width: 32,
-                                      height: 32,
-                                      child: const Icon(
-                                        Icons.location_on,
-                                        color: AppColors.brand600,
-                                        size: 32,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          )
-                        : _buildMapPlaceholder(hasLocation: false),
-                  ),
                 ),
                 const SizedBox(height: 28),
 
