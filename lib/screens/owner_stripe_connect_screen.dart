@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/salon_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
+import 'owner_set_location_screen.dart';
 
 // Stripe Connect API codes (snake.dot.case) → human-readable i18n keys.
 // Falls back to the raw code if no translation exists, so unknown new
@@ -70,6 +72,12 @@ class OwnerStripeConnectScreen extends ConsumerWidget {
         data: (salon) {
           if (salon == null) {
             return const Center(child: CircularProgressIndicator());
+          }
+          // Gate: Stripe Connect onboarding needs the salon's country (which
+          // decides the account model: direct card_payments vs recipient).
+          // The country comes from the salon location, so require it first.
+          if (salon.latitude == null || salon.longitude == null) {
+            return _LocationGate(salon: salon);
           }
           return _Body(
             salonId: salon.id,
@@ -332,6 +340,80 @@ class _Intro extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the Stripe flow when the salon has no location yet.
+class _LocationGate extends StatelessWidget {
+  final SalonModel salon;
+  const _LocationGate({required this.salon});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.secondary100),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFEE2E2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.location_on_outlined,
+                  color: Color(0xFFDC2626), size: 28),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l?.tr('stripe_connect.location_gate_title') ??
+                  'Ajoutez d\'abord la localisation de votre salon',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.brand950),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l?.tr('stripe_connect.location_gate_body') ??
+                  'Les paiements par carte nécessitent la position et le pays de votre salon. Renseignez votre localisation, puis revenez ici pour connecter Stripe.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.secondary600, height: 1.5),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => OwnerSetLocationScreen(salon: salon)),
+                ),
+                icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                label: Text(l?.tr('owner_setup_location_title') ??
+                    'Ajoutez la localisation de votre salon'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brand600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

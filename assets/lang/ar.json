@@ -1534,6 +1534,8 @@
   "stripe_connect.tile_title": "Stripe Connect Express",
   "stripe_connect.tile_subtitle": "إعداد الدفع بالبطاقة",
   "stripe_connect.title": "الدفع بالبطاقة",
+  "stripe_connect.location_gate_title": "أضف موقع صالونك أولاً",
+  "stripe_connect.location_gate_body": "يتطلب الدفع بالبطاقة موقع صالونك وبلده. حدّد موقعك ثم عُد إلى هنا لربط Stripe.",
   "stripe_connect.intro_title": "الدفع بالبطاقة (Stripe)",
   "stripe_connect.intro_body": "اربط Stripe Express لقبول الدفع بالبطاقة (عربون أو دفع كامل) عند الحجز وفي المتجر. تُرسل الأموال مباشرة إلى حسابك المصرفي.",
   "stripe_connect.status_not_connected": "غير متصل",
