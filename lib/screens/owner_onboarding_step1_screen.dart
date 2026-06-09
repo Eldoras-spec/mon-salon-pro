@@ -39,7 +39,6 @@ class OwnerOnboardingStep1Screen extends StatefulWidget {
 class _OwnerOnboardingStep1ScreenState
     extends State<OwnerOnboardingStep1Screen> {
   final _salonNameController = TextEditingController();
-  final _descriptionController = TextEditingController();
   final _instagramController = TextEditingController();
   final _facebookController = TextEditingController();
   final _tiktokController = TextEditingController();
@@ -54,8 +53,6 @@ class _OwnerOnboardingStep1ScreenState
   final _cityController = TextEditingController();
   final _postalCodeController = TextEditingController();
 
-  int _charCount = 0;
-  final int _maxChars = 500;
   double? _latitude;
   double? _longitude;
   bool _isGettingLocation = false;
@@ -72,11 +69,6 @@ class _OwnerOnboardingStep1ScreenState
     final saved = widget.initialData;
     if (saved != null) _restoreFromDraft(saved);
 
-    _descriptionController.addListener(() {
-      setState(() {
-        _charCount = _descriptionController.text.length;
-      });
-    });
     // Auto-detect currency via GeoJS (IP geolocation) only when not restored.
     if (saved == null || saved['currency'] == null) {
       _autoDetectCurrency();
@@ -89,7 +81,6 @@ class _OwnerOnboardingStep1ScreenState
     // Autosave the form (debounced) so a reboot mid-step doesn't lose data.
     for (final c in [
       _salonNameController,
-      _descriptionController,
       _instagramController,
       _facebookController,
       _tiktokController,
@@ -138,7 +129,6 @@ class _OwnerOnboardingStep1ScreenState
     _streetController.text = s('street');
     _cityController.text = s('city');
     _postalCodeController.text = s('postal');
-    _descriptionController.text = s('description');
     _instagramController.text = s('instagram');
     _facebookController.text = s('facebook');
     _tiktokController.text = s('tiktok');
@@ -150,7 +140,6 @@ class _OwnerOnboardingStep1ScreenState
     }
     if (d['latitude'] is num) _latitude = (d['latitude'] as num).toDouble();
     if (d['longitude'] is num) _longitude = (d['longitude'] as num).toDouble();
-    _charCount = _descriptionController.text.length;
   }
 
   Map<String, dynamic> _buildStep1Raw() => {
@@ -159,7 +148,6 @@ class _OwnerOnboardingStep1ScreenState
         'street': _streetController.text.trim(),
         'city': _cityController.text.trim(),
         'postal': _postalCodeController.text.trim(),
-        'description': _descriptionController.text.trim(),
         'instagram': _instagramController.text.trim(),
         'facebook': _facebookController.text.trim(),
         'tiktok': _tiktokController.text.trim(),
@@ -210,7 +198,6 @@ class _OwnerOnboardingStep1ScreenState
   void dispose() {
     _autosaveTimer?.cancel();
     _salonNameController.dispose();
-    _descriptionController.dispose();
     _instagramController.dispose();
     _facebookController.dispose();
     _tiktokController.dispose();
@@ -454,7 +441,7 @@ class _OwnerOnboardingStep1ScreenState
       'ownerId': ownerId,
       'name': name,
       'address': fullAddress,
-      'description': _descriptionController.text.trim(),
+      'description': '',
       'city': city,
       'country': _countryController.text.trim().isNotEmpty
           ? _countryController.text.trim()
@@ -1145,76 +1132,6 @@ class _OwnerOnboardingStep1ScreenState
                   ),
                 ),
                 const SizedBox(height: 28),
-
-                // ── Description ──────────────────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      l?.tr('onboarding_step1_description') ?? 'Description',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.secondary700,
-                      ),
-                    ),
-                    Text(
-                      '$_charCount/$_maxChars',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: _charCount > _maxChars
-                            ? Colors.red
-                            : AppColors.secondary400,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    controller: _descriptionController,
-                    maxLines: 4,
-                    maxLength: _maxChars,
-                    decoration: InputDecoration(
-                      hintText:
-                          'Décrivez ce qui rend votre salon unique...',
-                      filled: true,
-                      fillColor: Colors.white,
-                      counterText: '',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.secondary200,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.secondary200,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.brand400,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
 
                 // ── WhatsApp (required, WA OTP-verified) ─────────────
                 Row(
