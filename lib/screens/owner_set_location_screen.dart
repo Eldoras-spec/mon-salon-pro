@@ -8,8 +8,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../constants/allowed_countries.dart';
 import '../models/salon_model.dart';
 import '../services/app_localizations.dart';
+import '../services/ip_country_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_button.dart';
 
@@ -28,11 +30,11 @@ class OwnerSetLocationScreen extends StatefulWidget {
 }
 
 class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
-  final _countryController = TextEditingController();
   final _streetController = TextEditingController();
   final _cityController = TextEditingController();
   final _postalCodeController = TextEditingController();
 
+  Country? _selectedCountry;
   double? _latitude;
   double? _longitude;
   bool _isGettingLocation = false;
@@ -49,12 +51,29 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
       // The salon stores a single joined `address` string; we keep it in the
       // street field as a best-effort prefill (the owner can tidy it).
       if (s.address.trim().isNotEmpty) _streetController.text = s.address;
+      // Re-hydrate the country dropdown from the saved name (FR display name).
+      if (s.country.trim().isNotEmpty) {
+        for (final c in kAllowedCountries) {
+          if (c.name.toLowerCase() == s.country.trim().toLowerCase()) {
+            _selectedCountry = c;
+            break;
+          }
+        }
+      }
+    }
+    // Pre-select the country from the visitor's IP (like the old onboarding),
+    // unless one was already restored from the salon above.
+    if (_selectedCountry == null) {
+      IpCountryService.detect().then((c) {
+        if (mounted && _selectedCountry == null && c != null) {
+          setState(() => _selectedCountry = c);
+        }
+      });
     }
   }
 
   @override
   void dispose() {
-    _countryController.dispose();
     _streetController.dispose();
     _cityController.dispose();
     _postalCodeController.dispose();
@@ -102,7 +121,11 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
           if ((p.postalCode ?? '').isNotEmpty) {
             _postalCodeController.text = p.postalCode!;
           }
-          if ((p.country ?? '').isNotEmpty) _countryController.text = p.country!;
+          // Map the reverse-geocoded ISO code to our allowed-country list so
+          // the dropdown reflects the GPS result.
+          final iso = (p.isoCountryCode ?? '').trim();
+          final matched = findCountryByCode(iso);
+          if (matched != null) _selectedCountry = matched;
         }
         _isGettingLocation = false;
       });
@@ -121,13 +144,13 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
+    final countryName = _selectedCountry?.name ?? '';
     final addressParts = [
       if (_streetController.text.trim().isNotEmpty) _streetController.text.trim(),
       if (_postalCodeController.text.trim().isNotEmpty)
         _postalCodeController.text.trim(),
       if (_cityController.text.trim().isNotEmpty) _cityController.text.trim(),
-      if (_countryController.text.trim().isNotEmpty)
-        _countryController.text.trim(),
+      if (countryName.isNotEmpty) countryName,
     ];
     final fullAddress = addressParts.join(', ');
 
@@ -162,7 +185,7 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
       await FirebaseFirestore.instance.collection('salons').doc(uid).update({
         'address': fullAddress,
         'city': _cityController.text.trim(),
-        'country': _countryController.text.trim(),
+        'country': countryName,
         'latitude': lat,
         'longitude': lng,
       });
@@ -323,9 +346,7 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
                     const SizedBox(height: 20),
                   ],
 
-                  _field(_countryController,
-                      l?.tr('salon_edit_info_country') ?? 'Pays',
-                      icon: Icons.public_outlined),
+                  _countryDropdown(l),
                   const SizedBox(height: 14),
                   _field(_streetController,
                       l?.tr('salon_edit_info_street') ?? 'Adresse (rue et numéro)',
@@ -373,6 +394,62 @@ class _OwnerSetLocationScreenState extends State<OwnerSetLocationScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _countryDropdown(AppLocalizations? l) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l?.tr('salon_edit_info_country') ?? 'Pays',
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.secondary700)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<Country>(
+          // Re-key on the selected code so an async IP-detected pre-fill (set
+          // after the first build) actually rebinds the field's initial value.
+          key: ValueKey(_selectedCountry?.code),
+          initialValue: _selectedCountry,
+          isExpanded: true,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              color: AppColors.secondary400),
+          style: const TextStyle(fontSize: 14, color: AppColors.secondary800),
+          hint: Text(l?.tr('set_location_country_hint') ?? 'Sélectionnez un pays',
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.secondary400)),
+          items: [
+            for (final c in kAllowedCountries)
+              DropdownMenuItem<Country>(
+                value: c,
+                child: Text('${c.flag}  ${c.name}',
+                    overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (c) => setState(() => _selectedCountry = c),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.public_outlined,
+                size: 18, color: AppColors.secondary400),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.secondary200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.secondary200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.brand400, width: 2),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

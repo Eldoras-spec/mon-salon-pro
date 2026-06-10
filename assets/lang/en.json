@@ -252,6 +252,7 @@
   "owner_setup_location_sub": "Essential so your clients can find you",
   "set_location_title": "Salon location",
   "set_location_gps_tip": "For an exact position, use the \"My position\" button once you're at the salon. Typing the address manually is less accurate.",
+  "set_location_country_hint": "Select a country",
   "owner_setup_team_sub": "Let your staff access the app",
   "owner_setup_loyalty_title": "Enable loyalty points",
   "owner_setup_loyalty_sub": "Reward returning clients with points",

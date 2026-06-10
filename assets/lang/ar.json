@@ -252,6 +252,7 @@
   "owner_setup_location_sub": "ضروري ليتمكن عملاؤك من العثور عليك",
   "set_location_title": "موقع الصالون",
   "set_location_gps_tip": "للحصول على موقع دقيق، استخدم زر «موقعي» عندما تكون في الصالون. إدخال العنوان يدوياً أقل دقة.",
+  "set_location_country_hint": "اختر دولة",
   "owner_setup_team_sub": "اسمح لموظفيك بالوصول إلى التطبيق",
   "owner_setup_loyalty_title": "تفعيل نقاط الولاء",
   "owner_setup_loyalty_sub": "كافئ العملاء العائدين بالنقاط",

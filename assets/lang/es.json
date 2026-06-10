@@ -252,6 +252,7 @@
   "owner_setup_location_sub": "Imprescindible para que tus clientes te encuentren",
   "set_location_title": "Ubicación del salón",
   "set_location_gps_tip": "Para una posición exacta, usa el botón «Mi posición» una vez en el salón. Escribir la dirección manualmente es menos preciso.",
+  "set_location_country_hint": "Selecciona un país",
   "owner_setup_team_sub": "Permite a tu personal acceder a la app",
   "owner_setup_loyalty_title": "Activar puntos de fidelidad",
   "owner_setup_loyalty_sub": "Recompensa a tus clientes con puntos",
