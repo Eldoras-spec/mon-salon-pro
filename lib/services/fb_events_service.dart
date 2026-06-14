@@ -72,6 +72,17 @@ class FbEventsService {
     } catch (_) {}
   }
 
+  /// THE single conversion event for app-install ad campaigns. Fired ONLY when
+  /// the salon doc is actually created (onboarding finalized) — never at
+  /// Firebase signup. Logs the standard Complete Registration event
+  /// (`fb_mobile_complete_registration`) which Meta App campaigns can optimize
+  /// on directly. Optimize on "Complete Registration" in Meta.
+  static Future<void> logSalonCreated() async {
+    try {
+      await _fb.logCompletedRegistration(registrationMethod: 'salon_onboarding');
+    } catch (_) {}
+  }
+
   /// Generic custom event passthrough (e.g. completed_registration,
   /// onboarding_finished, salon_published). Use sparingly.
   static Future<void> logEvent(String name, {Map<String, dynamic>? params}) async {
