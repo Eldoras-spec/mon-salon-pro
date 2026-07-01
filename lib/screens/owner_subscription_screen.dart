@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/salon_model.dart';
@@ -195,17 +196,37 @@ class _Body extends StatelessWidget {
 
   Future<void> _confirmCancelToFree(BuildContext context) async {
     final l = AppLocalizations.of(context);
-    final isAndroid = Platform.isAndroid;
-    final bodyKey = isAndroid
+
+    // Detect the store where the subscription actually lives (via RevenueCat),
+    // so cross-platform owners are pointed to the RIGHT store. A sub bought on
+    // the App Store can't be cancelled from Google Play and vice-versa — a
+    // subscriber who moved iPhone → Android (or the reverse) would otherwise be
+    // sent to the wrong store and never find their subscription. Fall back to
+    // the current device platform if the RevenueCat lookup fails.
+    bool onGoogle = Platform.isAndroid;
+    try {
+      final info = await Purchases.getCustomerInfo();
+      final active = info.entitlements.active.values;
+      if (active.any((e) => e.store == Store.appStore)) {
+        onGoogle = false;
+      } else if (active.any((e) => e.store == Store.playStore)) {
+        onGoogle = true;
+      }
+    } catch (_) {
+      // keep the platform-based fallback
+    }
+    if (!context.mounted) return;
+
+    final bodyKey = onGoogle
         ? 'subscription.cancel_to_free_body_android'
         : 'subscription.cancel_to_free_body';
-    final failedKey = isAndroid
+    final failedKey = onGoogle
         ? 'subscription.cancel_to_free_open_failed_android'
         : 'subscription.cancel_to_free_open_failed';
-    final bodyFallback = isAndroid
+    final bodyFallback = onGoogle
         ? 'Pour passer au plan Free, résiliez votre abonnement via Play Store → Profil → Paiements et abonnements → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.'
         : 'Pour passer au plan Free, résiliez votre abonnement via Réglages → Apple ID → Abonnements. Votre plan actuel reste actif jusqu\'à la fin du cycle de facturation, puis bascule automatiquement en Free.';
-    final failedFallback = isAndroid
+    final failedFallback = onGoogle
         ? 'Impossible d\'ouvrir Play Store. Allez manuellement dans Play Store → Profil → Paiements et abonnements → Abonnements.'
         : 'Impossible d\'ouvrir Réglages. Allez manuellement dans Réglages → Apple ID → Abonnements.';
 
@@ -233,7 +254,7 @@ class _Body extends StatelessWidget {
     if (confirmed != true || !context.mounted) return;
 
     final uri = Uri.parse(
-      isAndroid
+      onGoogle
           ? 'https://play.google.com/store/account/subscriptions'
           : 'https://apps.apple.com/account/subscriptions',
     );
