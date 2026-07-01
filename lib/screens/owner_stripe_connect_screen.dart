@@ -30,7 +30,7 @@ String _translateRequirement(String code, AppLocalizations? l) {
   return (tr == null || tr == key) ? code : tr;
 }
 
-const String _kSupportWhatsapp = '212663322420';
+const String _kSupportWhatsapp = '18127412676';
 const String _kSupportMessage =
     'Bonjour, je souhaite recevoir de l\'aide pour configurer les paiements '
     'par carte sur mon salon.';
