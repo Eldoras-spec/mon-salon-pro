@@ -83,6 +83,18 @@ class MediaCompressor {
 
     if (originalSize > maxVideoInputBytes) return null;
 
+    // Sweep the PREVIOUS transcode before starting this one — never after
+    // uploading this one, which would delete the file the caller is still
+    // holding. video_compress leaves every output in the app's cache directory,
+    // and nothing was clearing them: a salon posting videos regularly kept every
+    // transcode it had ever made.
+    try {
+      await VideoCompress.deleteAllCache();
+    } catch (_) {
+      // A cache we could not clear is a disk-space matter, never a reason to
+      // refuse the user their video.
+    }
+
     // Skip threshold raised from 10 MB → 20 MB: a well-encoded 1080p video
     // (modern phone in H.265, ~3-4 Mbps) often sits between 10-20 MB. The
     // package's H.264 transcode would inflate those clips significantly.
@@ -99,7 +111,19 @@ class MediaCompressor {
         includeAudio: true,
       );
 
-      if (info == null || info.file == null) return null;
+      // A FAILED transcode is not a refusal. This returned null, and every
+      // caller reads null as "your file is too big" — so a bug in the package
+      // told a user with a perfectly valid 30 MB clip that their video was
+      // oversized, with nothing they could do about it. Hand back the original
+      // instead; the caller still checks it against maxVideoSizeBytes, so a
+      // genuinely oversized file is still refused, and for the right reason.
+      if (info == null || info.file == null) {
+        return CompressionResult(
+          file: file,
+          originalSize: originalSize,
+          compressedSize: originalSize,
+        );
+      }
 
       final compressedFile = info.file!;
       final compressedSize = await compressedFile.length();
@@ -123,7 +147,13 @@ class MediaCompressor {
       return CompressionResult(file: compressedFile, originalSize: originalSize, compressedSize: compressedSize);
     } catch (e) {
       debugPrint('Video compression error: $e');
-      return null;
+      // Same reasoning as the null-info branch above: a thrown transcode leaves
+      // the source untouched and perfectly uploadable.
+      return CompressionResult(
+        file: file,
+        originalSize: originalSize,
+        compressedSize: originalSize,
+      );
     }
   }
 
