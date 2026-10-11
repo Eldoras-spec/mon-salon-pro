@@ -12,7 +12,13 @@ class ForceUpdateScreen extends StatelessWidget {
   static const _playStoreUrl = 'https://play.google.com/store/apps/details?id=com.blagence.monsalonpro';
 
   void _openStore() {
-    final url = Platform.isIOS ? _appStoreUrl : _playStoreUrl;
+    // Desktop builds have no store: send them to the download page instead
+    // of the Play Store.
+    final url = Platform.isIOS
+        ? _appStoreUrl
+        : Platform.isAndroid
+            ? _playStoreUrl
+            : 'https://monsalon.web.app/download.html';
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 

@@ -43,6 +43,11 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
   bool _restoring = false;
   Package? _package;
   String? _loadError;
+  // Free-trial length the STORE will actually grant on this purchase, in
+  // days (null = no trial for this account). Eligibility is tied to the
+  // Apple ID / Google account, not to our Firestore flags: promising a
+  // trial the store won't give risks App Review 3.1.2 and angry users.
+  int? _storeTrialDays;
 
   @override
   void initState() {
@@ -67,12 +72,24 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
           widget.targetPlan == PlanConfig.planBusiness
               ? RevenueCatService.packageBusinessMonthly
               : RevenueCatService.packageEssentielMonthly;
-      final pkg = current.availablePackages.firstWhere(
-        (p) => p.identifier == targetPackageId,
-        orElse: () => current.availablePackages.first,
-      );
+      // No silent fallback: buying "the first package" when the target is
+      // missing charged an Essentiel subscription to someone who chose
+      // Business (and threw on an empty list).
+      final pkg = current.availablePackages
+          .where((p) => p.identifier == targetPackageId)
+          .firstOrNull;
+      if (pkg == null) {
+        setState(() {
+          _loadingOffering = false;
+          _loadError = 'offerings_empty';
+        });
+        return;
+      }
+      final trialDays = await _resolveStoreTrialDays(pkg.storeProduct);
+      if (!mounted) return;
       setState(() {
         _package = pkg;
+        _storeTrialDays = trialDays;
         _loadingOffering = false;
       });
     } catch (e) {
@@ -149,10 +166,13 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
         }
       }
 
-      final customerInfo = changeInfo != null
+      final purchaseResult = changeInfo != null
           ? await Purchases.purchasePackage(pkg,
               googleProductChangeInfo: changeInfo)
           : await Purchases.purchasePackage(pkg);
+      // purchases_flutter 9.x: purchase methods return a PurchaseResult
+      // (CustomerInfo + StoreTransaction) instead of CustomerInfo directly.
+      final customerInfo = purchaseResult.customerInfo;
       final entitlementKey =
           widget.targetPlan == PlanConfig.planBusiness
               ? RevenueCatService.entitlementBusiness
@@ -313,7 +333,8 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
     final isEssentielWithTrial =
         widget.targetPlan == PlanConfig.planEssentiel &&
             salon != null &&
-            salon.isTrialEligible;
+            salon.isTrialEligible &&
+            (_storeTrialDays ?? 0) > 0;
 
     // Direction-aware copy: Business owner picking Essentiel = downgrade
     // (Apple defers it to end of cycle). Free / Essentiel → Business and
@@ -427,7 +448,7 @@ class _OwnerUpgradeScreenState extends ConsumerState<OwnerUpgradeScreen> {
                             .replaceAll(
                           '{date}',
                           _formatDate(DateTime.now().add(
-                              Duration(days: PlanConfig.essentielTrialDays))),
+                              Duration(days: _storeTrialDays ?? 0))),
                         ),
                         style: const TextStyle(
                           fontSize: 12,
@@ -714,10 +735,46 @@ class _ErrorState extends StatelessWidget {
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: onRetry,
-            child: const Text('Réessayer'),
+            child: Text(AppLocalizations.of(context)?.tr('main_retry') ?? 'Réessayer'),
           ),
         ],
       ),
     );
+  }
+}
+
+int _periodDays(PeriodUnit unit, int value) => switch (unit) {
+      PeriodUnit.day => value,
+      PeriodUnit.week => value * 7,
+      PeriodUnit.month => value * 30,
+      PeriodUnit.year => value * 365,
+      PeriodUnit.unknown => 0,
+    };
+
+/// Length in days of the free trial the store will grant THIS account on
+/// [product], or null. Android: Play only exposes offers the user is
+/// eligible for, so a free phase on the default option is enough. iOS:
+/// the intro offer must exist AND RevenueCat must report the Apple ID as
+/// eligible (anything else → no promise in the UI).
+Future<int?> _resolveStoreTrialDays(StoreProduct product) async {
+  try {
+    if (Platform.isAndroid) {
+      final free = product.defaultOption?.freePhase?.billingPeriod;
+      if (free == null) return null;
+      final d = _periodDays(free.unit, free.value);
+      return d > 0 ? d : null;
+    }
+    final intro = product.introductoryPrice;
+    if (intro == null || intro.price > 0) return null;
+    final elig = await Purchases.checkTrialOrIntroductoryPriceEligibility(
+        [product.identifier]);
+    if (elig[product.identifier]?.status !=
+        IntroEligibilityStatus.introEligibilityStatusEligible) {
+      return null;
+    }
+    final d = _periodDays(intro.periodUnit, intro.periodNumberOfUnits);
+    return d > 0 ? d : null;
+  } catch (_) {
+    return null;
   }
 }

@@ -15,16 +15,16 @@ import '../models/team_member_model.dart';
 import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
-import '../services/auth_service.dart';
+import '../services/plan_config.dart';
 import '../services/database_service.dart';
 import '../services/app_localizations.dart';
-import '../services/message_service.dart';
 import '../utils/currency_helper.dart';
 import '../utils/timezone_helper.dart';
+import 'owner_appointments_screen.dart';
 import 'owner_subscription_screen.dart';
 import 'conversations_screen.dart';
 import 'notifications_screen.dart';
-import '../models/notification_model.dart';
+import '../widgets/member_avatar.dart';
 import '../widgets/owner_tasks_card.dart';
 import '../widgets/owner_setup_card.dart';
 import '../providers/owner_tasks_provider.dart';
@@ -33,12 +33,16 @@ import '../providers/setup_tasks_provider.dart';
 class OwnerHomeScreen extends ConsumerWidget {
   const OwnerHomeScreen({super.key});
 
-  static bool _isOpen(Map<String, dynamic> hours) {
+  // Open/closed badge in the salon's own time zone, honouring holiday
+  // closures (closedDates) — the device clock was used before.
+  static bool _isOpen(SalonModel salon) {
     const dayNames = [
       'lundi', 'mardi', 'mercredi', 'jeudi',
       'vendredi', 'samedi', 'dimanche',
     ];
-    final now = DateTime.now();
+    final hours = salon.workingHours;
+    final now = TimezoneHelper.salonNow(salon.timezone);
+    if (salon.isClosedOnDate(now)) return false;
     final dayData = hours[dayNames[now.weekday - 1]] as Map<String, dynamic>?;
     if (dayData == null || dayData['isOpen'] != true) return false;
     try {
@@ -53,8 +57,9 @@ class OwnerHomeScreen extends ConsumerWidget {
     }
   }
 
-  static bool _isToday(DateTime dt) {
-    final n = DateTime.now();
+  // [dt] is wall-clock-UTC; compare with the salon's wall-clock "now".
+  static bool _isToday(DateTime dt, String? tz) {
+    final n = TimezoneHelper.salonWallClockNow(tz);
     return dt.year == n.year && dt.month == n.month && dt.day == n.day;
   }
 
@@ -81,24 +86,28 @@ class OwnerHomeScreen extends ConsumerWidget {
           final appointments = appointmentsAsync.value ?? [];
 
           final todayUpcoming = appointments
-              .where((a) => _isToday(a.dateTime) && a.status == 'upcoming')
+              .where((a) => _isToday(a.dateTime, salon?.timezone) && a.status == 'upcoming')
               .toList()
             ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
           // Current-month revenue + completed count come from dedicated
           // server-side providers (see ownerCurrentMonth* providers).
 
-          // Weekly stats
-          final now = DateTime.now();
-          final weekStart = now.subtract(Duration(days: now.weekday - 1));
+          // Weekly stats — wall-clock-UTC day buckets (Mon..Sun) in the salon
+          // TZ. Day index from calendar dates, not `difference().inDays`,
+          // which truncated toward zero and folded last Sunday into Monday.
+          // Cancelled / no-show RDV are not activity.
+          final now = TimezoneHelper.salonWallClockNow(salon?.timezone);
+          final weekStart = DateTime.utc(now.year, now.month, now.day)
+              .subtract(Duration(days: now.weekday - 1));
           final weekDayCounts = List.filled(7, 0);
           final weekDayRevenue = List.filled(7, 0.0);
           for (final a in appointments) {
-            final diff = a.dateTime
-                .difference(DateTime(
-                    weekStart.year, weekStart.month, weekStart.day))
-                .inDays;
-            if (diff >= 0 && diff < 7) {
+            if (a.status == 'cancelled' || a.status == 'no_show') continue;
+            final day = DateTime.utc(
+                a.dateTime.year, a.dateTime.month, a.dateTime.day);
+            final diff = day.difference(weekStart).inHours ~/ 24;
+            if (!day.isBefore(weekStart) && diff < 7) {
               weekDayCounts[diff]++;
               if (a.status == 'completed') weekDayRevenue[diff] += a.price;
             }
@@ -145,6 +154,37 @@ class OwnerHomeScreen extends ConsumerWidget {
                             // Top row: title + actions
                             Row(
                               children: [
+                                // Avatar = profile switcher (shared device).
+                                // A code-logged employee has no other
+                                // profile: the avatar is just an avatar.
+                                GestureDetector(
+                                  onTap: ref.watch(employeeSessionProvider).value != null
+                                      ? null
+                                      : () {
+                                          ref
+                                              .read(activeTeamMemberProvider.notifier)
+                                              .state = null;
+                                          ref
+                                              .read(profileSelectedProvider.notifier)
+                                              .state = false;
+                                        },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.5),
+                                          width: 1.5),
+                                    ),
+                                    child: MemberAvatar(
+                                      name: userName,
+                                      photoUrl: activeMember?.photoUrl ??
+                                          user?.profileImageUrl,
+                                      radius: 20,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -174,33 +214,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                                     ],
                                   ),
                                 ),
-                                // Profile switch — hidden when logged in via
-                                // employee code (no other profile to switch to).
-                                if (ref.watch(employeeSessionProvider).value == null) ...[
-                                  GestureDetector(
-                                    onTap: () {
-                                      ref
-                                          .read(activeTeamMemberProvider.notifier)
-                                          .state = null;
-                                      ref
-                                          .read(profileSelectedProvider.notifier)
-                                          .state = false;
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.15),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                          Icons.swap_horiz_rounded,
-                                          size: 20,
-                                          color: Colors.white),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
                                 // Security & Account
                                 // Notifications bell with unread badge
                                 GestureDetector(
@@ -209,12 +222,12 @@ class OwnerHomeScreen extends ConsumerWidget {
                                       builder: (_) => const NotificationsScreen(),
                                     ));
                                   },
-                                  child: StreamBuilder<List<NotificationModel>>(
-                                    stream: DatabaseService().getNotifications(
-                                        ref.read(authStateProvider).value?.uid ?? ''),
-                                    builder: (context, snap) {
-                                      final unreadCount =
-                                          snap.data?.where((n) => !n.isRead).length ?? 0;
+                                  child: Builder(
+                                    builder: (context) {
+                                      final unreadCount = ref
+                                              .watch(unreadNotificationsCountProvider)
+                                              .value ??
+                                          0;
                                       return Stack(
                                         clipBehavior: Clip.none,
                                         children: [
@@ -253,30 +266,28 @@ class OwnerHomeScreen extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 // Messages shortcut with unread badge
+                                if (ref.watch(employeeSessionProvider).value == null)
                                 GestureDetector(
                                   onTap: () {
+                                    // ConversationsScreen needs the salon id
+                                    // (it force-unwraps it): ignore taps until
+                                    // the salon is loaded instead of crashing.
+                                    if (salon == null) return;
                                     final uid = ref.read(authStateProvider).value?.uid ?? '';
                                     Navigator.push(context, MaterialPageRoute(
                                       builder: (_) => ConversationsScreen(
                                         currentUserId: uid,
                                         isClient: false,
-                                        salonId: salon?.id,
+                                        salonId: salon.id,
                                       ),
                                     ));
                                   },
-                                  child: StreamBuilder<QuerySnapshot>(
-                                    // Filter by ownerId (not salonId) so the
-                                    // Firestore rule can validate the query.
-                                    // salon.id == ownerId by convention.
-                                    stream: salon != null
-                                        ? FirebaseFirestore.instance
-                                            .collection('conversations')
-                                            .where('ownerId', isEqualTo: salon.id)
-                                            .where('unreadByOwner', isGreaterThan: 0)
-                                            .snapshots()
-                                        : const Stream.empty(),
-                                    builder: (context, snap) {
-                                      final unreadCount = snap.data?.docs.length ?? 0;
+                                  child: Builder(
+                                    builder: (context) {
+                                      final unreadCount = ref
+                                              .watch(unreadMessagesCountProvider)
+                                              .value ??
+                                          0;
                                       return Stack(
                                         clipBehavior: Clip.none,
                                         children: [
@@ -313,58 +324,12 @@ class OwnerHomeScreen extends ConsumerWidget {
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Logout
-                                GestureDetector(
-                                  onTap: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        backgroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(16)),
-                                        title: Text(l?.tr('home_logout_title') ?? 'Déconnexion'),
-                                        content: Text(
-                                            l?.tr('home_logout_message') ?? 'Êtes-vous sûr de vouloir vous déconnecter ?'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, false),
-                                            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, true),
-                                            child: Text(l?.tr('profile_sign_out') ?? 'Se déconnecter',
-                                                style: const TextStyle(
-                                                    color: Colors.red)),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (confirm != true) return;
-                                    await signOutAll(ref);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                        Icons.power_settings_new_rounded,
-                                        size: 18,
-                                        color: Colors.white),
-                                  ),
-                                ),
                               ],
                             ),
 
                             const SizedBox(height: 6),
                             Text(
-                              DateFormat("EEEE d MMMM yyyy", 'fr_FR')
+                              DateFormat("EEEE d MMMM yyyy", Localizations.localeOf(context).languageCode)
                                   .format(DateTime.now()),
                               style: TextStyle(
                                 fontSize: 12,
@@ -438,7 +403,7 @@ class OwnerHomeScreen extends ConsumerWidget {
                             final inGrace = salon.isFree &&
                                 graceEnd != null &&
                                 now.isBefore(graceEnd) &&
-                                team.length > 2;
+                                team.length > PlanConfig.freeTeamMemberCap;
                             final deactivatedCount = team
                                 .where((m) => m.isDeactivatedByCap)
                                 .length;
@@ -471,29 +436,46 @@ class OwnerHomeScreen extends ConsumerWidget {
                           },
                         ),
 
-                      // ── Salon web link ─────────────────────────────────
-                      if (salon != null)
+                      // ── Today's appointments ────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _SectionHeader(
+                          title: l?.tr('home_today_appointments') ?? "Rendez-vous d'aujourd'hui",
+                          count: todayUpcoming.length,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (appointmentsAsync.isLoading)
+                        const _LoadingCard()
+                      else if (todayUpcoming.isEmpty)
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _SalonLinkCard(salon: salon),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 20),
+                          child: _EmptyCard(
+                            icon: Icons.calendar_today_outlined,
+                            message:
+                                l?.tr('home_no_appointments_today') ?? "Aucun rendez-vous prévu aujourd'hui",
+                          ),
+                        )
+                      else
+                        // Same tile (and action sheet) as the RDV tab: tap
+                        // → mark done / no-show / WhatsApp / reschedule…
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: todayUpcoming
+                                .map((a) => OwnerAppointmentTile(
+                                      key: ValueKey(a.id),
+                                      appointment: a,
+                                      onStatusChanged: () => ref.invalidate(
+                                          ownerHomeAppointmentsProvider),
+                                    ))
+                                .toList(),
+                          ),
                         ),
-                      if (salon != null) const SizedBox(height: 16),
 
-                      // Setup card — owner only. Gerants don't need the
-                      // onboarding tasks (salon setup is owner's responsibility).
-                      if (activeMember?.role != 'gerant') ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 20),
-                          child: OwnerSetupCard(),
-                        ),
-                        Consumer(
-                          builder: (context, ref, _) {
-                            final hasSetup =
-                                ref.watch(setupTasksProvider).isNotEmpty;
-                            return SizedBox(height: hasSetup ? 16 : 0);
-                          },
-                        ),
-                      ],
+                      const SizedBox(height: 20),
 
                       // Tasks to do (hidden when empty)
                       const Padding(
@@ -525,94 +507,6 @@ class OwnerHomeScreen extends ConsumerWidget {
                       ),
 
                       const SizedBox(height: 16),
-
-                      // ── Weekly chart ─────────────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _WeeklyChart(
-                          dayCounts: weekDayCounts,
-                          weekTotal: weekTotal,
-                          weekRevenue: weekRevenue,
-                          currency: salon?.currency ?? 'MAD',
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // ── AI Summary (hidden for new salons with no appointments) ──
-                      if (salon != null && appointments.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _AISummaryCard(salonId: salon.id),
-                        ),
-                      if (salon != null && appointments.isNotEmpty) const SizedBox(height: 20),
-
-                      // ── Messages ─────────────────────────────────────────
-                      if (salon != null && user != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _MessagesWidget(
-                            salonId: salon.id,
-                            ownerId: user.id,
-                          ),
-                        ),
-                      if (salon != null && user != null)
-                        const SizedBox(height: 20),
-
-                      // ── Today's appointments ────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: _SectionHeader(
-                          title: l?.tr('home_today_appointments') ?? "Rendez-vous d'aujourd'hui",
-                          count: todayUpcoming.length,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (appointmentsAsync.isLoading)
-                        const _LoadingCard()
-                      else if (todayUpcoming.isEmpty)
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20),
-                          child: _EmptyCard(
-                            icon: Icons.calendar_today_outlined,
-                            message:
-                                l?.tr('home_no_appointments_today') ?? "Aucun rendez-vous prévu aujourd'hui",
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Column(
-                                children: todayUpcoming
-                                    .map((a) => _AppointmentCard(
-                                        appointment: a,
-                                        showDate: false,
-                                        currency: salon?.currency ?? 'MAD'))
-                                    .toList(),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 28),
-
                       // ── Revenue by employee (Today / Week / Month) ──────
                       Padding(
                         padding:
@@ -625,6 +519,49 @@ class OwnerHomeScreen extends ConsumerWidget {
                       ),
 
                       const SizedBox(height: 28),
+                      // ── Weekly chart ─────────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: _WeeklyChart(
+                          dayCounts: weekDayCounts,
+                          weekTotal: weekTotal,
+                          weekRevenue: weekRevenue,
+                          currency: salon?.currency ?? 'MAD',
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+                      // ── AI Summary (hidden for new salons with no appointments) ──
+                      if (salon != null && appointments.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _AISummaryCard(salonId: salon.id),
+                        ),
+                      if (salon != null && appointments.isNotEmpty) const SizedBox(height: 20),
+
+                      // Setup card — owner only. Gerants don't need the
+                      // onboarding tasks (salon setup is owner's responsibility).
+                      if (activeMember?.role != 'gerant') ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: OwnerSetupCard(),
+                        ),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final hasSetup =
+                                ref.watch(setupTasksProvider).isNotEmpty;
+                            return SizedBox(height: hasSetup ? 16 : 0);
+                          },
+                        ),
+                      ],
+
+                      // ── Salon web link ─────────────────────────────────
+                      if (salon != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _SalonLinkCard(salon: salon),
+                        ),
+                      if (salon != null) const SizedBox(height: 16),
 
                       // ── Add-on services (premium Mon Salon offerings) ───
                       const _AddOnServicesSection(),
@@ -1550,7 +1487,7 @@ class _RevenueCard extends StatelessWidget {
         : CurrencyHelper.format(monthlyRevenue, currency);
 
     final open =
-        salon != null ? OwnerHomeScreen._isOpen(salon!.workingHours) : false;
+        salon != null ? OwnerHomeScreen._isOpen(salon!) : false;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1862,193 +1799,6 @@ class _WeeklyChart extends StatelessWidget {
   }
 }
 
-// ── Appointment card ────────────────────────────────────────────────────────
-
-class _AppointmentCard extends StatefulWidget {
-  const _AppointmentCard({
-    required this.appointment,
-    required this.showDate,
-    this.currency = 'MAD',
-  });
-  final AppointmentModel appointment;
-  final bool showDate;
-  final String currency;
-
-  @override
-  State<_AppointmentCard> createState() => _AppointmentCardState();
-}
-
-class _AppointmentCardState extends State<_AppointmentCard> {
-  String _clientName = '…';
-
-  @override
-  void initState() {
-    super.initState();
-    final a = widget.appointment;
-    final storedName = a.clientName?.trim();
-    if (storedName != null && storedName.isNotEmpty) {
-      _clientName = storedName;
-      return;
-    }
-    if (a.clientId == 'walk-in') {
-      _clientName = 'Client sans compte';
-      return;
-    }
-    DatabaseService().getClientName(a.clientId).then((name) {
-      if (mounted) setState(() => _clientName = name);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final a = widget.appointment;
-    if (a.clientId == 'walk-in' && a.clientName == null) {
-      _clientName = l?.tr('appointments_walk_in_client') ?? 'Client sans compte';
-    }
-
-    final timeStr = DateFormat('HH:mm').format(a.dateTime);
-    final dateStr = widget.showDate
-        ? DateFormat('d MMM', 'fr_FR').format(a.dateTime)
-        : null;
-
-    final (statusLabel, statusBg, statusFg) = switch (a.status) {
-      'completed' => (
-          l?.tr('appointments_status_completed') ?? 'Terminé',
-          const Color(0xFFDCFCE7),
-          const Color(0xFF16A34A)
-        ),
-      'cancelled' => (
-          l?.tr('appointments_status_cancelled') ?? 'Annulé',
-          const Color(0xFFFEE2E2),
-          const Color(0xFFDC2626)
-        ),
-      _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Time badge
-          Container(
-            width: 50,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: a.status == 'upcoming'
-                  ? AppColors.brand50
-                  : AppColors.secondary50,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  timeStr,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: a.status == 'upcoming'
-                        ? AppColors.brand700
-                        : AppColors.secondary500,
-                  ),
-                ),
-                if (dateStr != null) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    dateStr,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: AppColors.secondary400,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  a.serviceName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: AppColors.brand950,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Icon(Icons.person_outline_rounded,
-                        size: 12, color: AppColors.secondary400),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        _clientName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondary500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          // Right: price + status
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                CurrencyHelper.format(a.price, widget.currency),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: AppColors.brand950,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: statusFg,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Section header ──────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
@@ -2274,7 +2024,8 @@ class _AISummaryCardState extends State<_AISummaryCard> {
       (_monthlyComparison ?? '').isNotEmpty ||
       (_financialInsights ?? '').isNotEmpty;
 
-  bool get _isEn => Localizations.localeOf(context).languageCode == 'en';
+  String _t(String key, String fallback) =>
+      AppLocalizations.of(context)?.tr(key) ?? fallback;
 
   @override
   Widget build(BuildContext context) {
@@ -2307,7 +2058,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _isEn ? 'AI Assistant' : 'Assistant IA',
+                  _t('home_ai_title', 'Assistant IA'),
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -2338,7 +2089,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
             GestureDetector(
               onTap: _fetchFromGemini,
               child: Text(
-                _isEn ? 'Unable to generate summary. Tap to retry.' : 'Impossible de générer le résumé. Appuie pour réessayer.',
+                _t('home_ai_error', 'Impossible de générer le résumé. Touchez pour réessayer.'),
                 style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.secondary400, height: 1.5),
               ),
             )
@@ -2353,7 +2104,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
             // ── No-show alerts ──
             if (_noShowAlerts.isNotEmpty) ...[
               const SizedBox(height: 14),
-              _AISectionHeader(icon: Icons.warning_amber_rounded, color: const Color(0xFFEA580C), label: _isEn ? 'No-show risk' : 'Risque no-show'),
+              _AISectionHeader(icon: Icons.warning_amber_rounded, color: const Color(0xFFEA580C), label: _t('home_ai_noshow', 'Risque no-show')),
               for (final alert in _noShowAlerts)
                 _AISectionRow(icon: Icons.person_off_rounded, color: const Color(0xFFEA580C), text: alert),
             ],
@@ -2366,7 +2117,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_isEn ? 'See more' : 'Voir plus', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    Text(_t('home_ai_see_more', 'Voir plus'), style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.brand600),
                   ],
@@ -2378,7 +2129,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               // ── Action suggestions ──
               if (_actionSuggestions.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                _AISectionHeader(icon: Icons.lightbulb_outline_rounded, color: const Color(0xFF0891B2), label: _isEn ? 'Suggestions' : 'Suggestions'),
+                _AISectionHeader(icon: Icons.lightbulb_outline_rounded, color: const Color(0xFF0891B2), label: _t('home_ai_suggestions', 'Suggestions')),
                 for (final s in _actionSuggestions)
                   _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF0891B2), text: s),
               ],
@@ -2386,7 +2137,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
               // ── Price suggestions ──
               if (_priceSuggestions.isNotEmpty) ...[
                 const SizedBox(height: 14),
-                _AISectionHeader(icon: Icons.monetization_on_outlined, color: const Color(0xFF059669), label: _isEn ? 'Price suggestions' : 'Suggestions de prix'),
+                _AISectionHeader(icon: Icons.monetization_on_outlined, color: const Color(0xFF059669), label: _t('home_ai_price', 'Suggestions de prix')),
                 for (final s in _priceSuggestions)
                   _AISectionRow(icon: Icons.arrow_right_rounded, color: const Color(0xFF059669), text: s),
               ],
@@ -2398,7 +2149,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                   icon: Icons.compare_arrows_rounded,
                   color: AppColors.brand600,
                   text: _monthlyComparison!,
-                  label: _isEn ? 'Monthly comparison' : 'Comparaison mensuelle',
+                  label: _t('home_ai_monthly', 'Comparaison mensuelle'),
                 ),
               ],
 
@@ -2409,7 +2160,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                   icon: Icons.insights_rounded,
                   color: const Color(0xFF0369A1),
                   text: _financialInsights!,
-                  label: _isEn ? 'Financial insights' : 'Insights financiers',
+                  label: _t('home_ai_finance', 'Insights financiers'),
                 ),
               ],
 
@@ -2419,7 +2170,7 @@ class _AISummaryCardState extends State<_AISummaryCard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_isEn ? 'See less' : 'Voir moins', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
+                    Text(_t('home_ai_see_less', 'Voir moins'), style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.brand600)),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: AppColors.brand600),
                   ],
@@ -2506,273 +2257,6 @@ class _AISectionRow extends StatelessWidget {
   }
 }
 
-// ── Messages widget ─────────────────────────────────────────────────────────
-
-class _MessagesWidget extends StatelessWidget {
-  const _MessagesWidget({required this.salonId, required this.ownerId});
-  final String salonId;
-  final String ownerId;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return StreamBuilder<List<dynamic>>(
-      stream: MessageService().getOwnerConversations(salonId),
-      builder: (context, snap) {
-        final convs = (snap.data ?? []);
-        final unread = convs.fold<int>(
-          0,
-          (acc, c) => acc + ((c.unreadByOwner ?? 0) as int),
-        );
-        final hasUnread = unread > 0;
-        final preview = convs.isNotEmpty ? convs.first : null;
-
-        return GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ConversationsScreen(
-                currentUserId: ownerId,
-                isClient: false,
-                salonId: salonId,
-              ),
-            ),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color:
-                    hasUnread ? AppColors.brand200 : AppColors.secondary100,
-                width: hasUnread ? 1.5 : 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: hasUnread
-                        ? AppColors.brand50
-                        : AppColors.secondary50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    color: hasUnread
-                        ? AppColors.brand600
-                        : AppColors.secondary400,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l?.tr('home_messages') ?? 'Messages',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.brand950,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        preview != null
-                            ? (preview.lastMessage as String).isNotEmpty
-                                ? '${preview.clientName} : ${preview.lastMessage}'
-                                : (l?.tr('home_conversations_count') ?? '{count} conversation{plural}').replaceAll('{count}', '${convs.length}').replaceAll('{plural}', convs.length > 1 ? 's' : '')
-                            : l?.tr('home_no_messages_yet') ?? 'Aucun message pour l\'instant',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: hasUnread
-                              ? AppColors.secondary700
-                              : AppColors.secondary400,
-                          fontWeight: hasUnread
-                              ? FontWeight.w500
-                              : FontWeight.normal,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                if (hasUnread)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.brand600,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$unread',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  )
-                else
-                  const Icon(Icons.chevron_right_rounded,
-                      color: AppColors.secondary300, size: 20),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ── Owner Security & Account Sheet ───────────────────────────────────────────
-
-class _OwnerSecuritySheet extends StatefulWidget {
-  const _OwnerSecuritySheet({
-    required this.userEmail,
-    required this.onAccountDeleted,
-  });
-  final String userEmail;
-  final VoidCallback onAccountDeleted;
-
-  @override
-  State<_OwnerSecuritySheet> createState() => _OwnerSecuritySheetState();
-}
-
-class _OwnerSecuritySheetState extends State<_OwnerSecuritySheet> {
-  bool _loading = false;
-  bool _sent = false;
-
-  Future<void> _resetPassword() async {
-    setState(() => _loading = true);
-    try {
-      await AuthService().sendPasswordResetEmail(widget.userEmail);
-      if (mounted) setState(() { _sent = true; _loading = false; });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text((AppLocalizations.of(context)?.tr('common_error') ?? 'Erreur : {error}').replaceAll('{error}', '$e')), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                  color: AppColors.secondary200,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          Text(l?.tr('profile_security_title') ?? 'Sécurité',
-              style: GoogleFonts.dmSans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brand950)),
-          const SizedBox(height: 20),
-
-          // Reset password
-          if (_sent) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_outline_rounded,
-                      color: Color(0xFF16A34A), size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      (l?.tr('profile_security_reset_sent') ?? 'Un email de réinitialisation a été envoyé à {email}').replaceAll('{email}', widget.userEmail),
-                      style: const TextStyle(
-                          fontSize: 13, color: Color(0xFF166534)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                  color: AppColors.secondary50,
-                  borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  const Icon(Icons.lock_outline_rounded,
-                      color: AppColors.secondary500, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      (l?.tr('profile_security_reset_hint') ?? 'Un lien de réinitialisation sera envoyé à\n{email}').replaceAll('{email}', widget.userEmail),
-                      style: const TextStyle(
-                          fontSize: 13, color: AppColors.secondary600),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _resetPassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand600,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : Text(l?.tr('profile_security_reset_button') ?? 'Réinitialiser le mot de passe',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15)),
-              ),
-            ),
-          ],
-
-        ],
-      ),
-    );
-  }
-}
 
 // Orange warning banner shown on the owner home during the 30-day grace
 // period following a downgrade to Free while the team still has >2 members.

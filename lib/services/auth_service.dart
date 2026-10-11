@@ -56,7 +56,10 @@ class AuthService {
       // login-code WhatsApp would otherwise fall back to English).
       final lang = (await LocaleService.getSavedLocale()).languageCode;
 
-      // Create a user document in Firestore
+      // Create a user document in Firestore. If this write fails, delete
+      // the just-created Auth user: an Auth account without its users doc
+      // is signed out by the router and the email stays "already in use".
+      try {
       await _firestore.collection('users').doc(result.user!.uid).set({
         'email': email,
         'fullName': fullName,
@@ -67,6 +70,12 @@ class AuthService {
         'lang': lang,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      } catch (e) {
+        try {
+          await result.user?.delete();
+        } catch (_) {}
+        rethrow;
+      }
 
       // Record successful signup for server-side rate tracking
       try {
@@ -80,22 +89,17 @@ class AuthService {
   }
 
   // Fetch user model from Firestore
+  /// Returns null ONLY when the document genuinely doesn't exist. Network /
+  /// timeout / permission errors are rethrown: the router used to treat
+  /// them as "orphan account" and sign the owner out on a bad connection.
   Future<UserModel?> getUserModel(String uid) async {
-    try {
-      DocumentSnapshot doc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .get()
-          .timeout(const Duration(seconds: 10));
-
-      if (doc.exists) {
-        return UserModel.fromFirestore(doc);
-      } else {
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
+    final DocumentSnapshot doc = await _firestore
+        .collection('users')
+        .doc(uid)
+        .get()
+        .timeout(const Duration(seconds: 10));
+    if (!doc.exists) return null;
+    return UserModel.fromFirestore(doc);
   }
 
   // Send password reset email

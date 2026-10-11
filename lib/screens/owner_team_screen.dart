@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'member_home_screen.dart' show UnavailabilityTab;
 import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
 import '../models/salon_model.dart';
@@ -281,8 +282,22 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
       ),
     );
 
-    final upcoming = await DatabaseService()
-        .getUpcomingAppointmentsForMember(salonId, member.id);
+    final List<AppointmentModel> upcoming;
+    try {
+      upcoming = await DatabaseService()
+          .getUpcomingAppointmentsForMember(salonId, member.id);
+    } catch (_) {
+      // Don't leave the blocking spinner up forever on a failed read.
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l?.tr('common_load_error') ??
+              'Impossible de charger les données. Vérifiez votre connexion.'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return;
+    }
     final allMembers = ref.read(ownerTeamProvider).value ?? [];
     final otherMembers =
         allMembers.where((m) => m.id != member.id && m.isActive).toList();
@@ -498,7 +513,15 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(ctx),
+                  // Manual path: explain how instead of silently closing.
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      duration: const Duration(seconds: 6),
+                      content: Text(l?.tr('team_delete_reassign_manual_hint') ??
+                          'Onglet RDV → filtrez sur ce membre → ouvrez chaque RDV → « Assigner ». Supprimez ensuite le membre.'),
+                    ));
+                  },
                   icon: const Icon(Icons.edit_calendar_outlined, size: 18),
                   label: Text(l?.tr('team_delete_reassign_manual') ?? 'Réassigner manuellement'),
                   style: OutlinedButton.styleFrom(
@@ -563,14 +586,17 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
         return list.any((r) => start.isBefore(r[1]) && end.isAfter(r[0]));
       }
 
-      final Map<String, Map<String, String>> assignments = {};
+      final Map<String, Map<String, String?>> assignments = {};
       // Process RDV in chronological order so earlier RDV get priority on busy slots.
       upcoming.sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
       for (final appt in upcoming) {
         // Candidates = other members who can perform this service
         var candidates = otherMembers
-            .where((m) => m.assignedServiceNames.contains(appt.serviceName))
+            .where((m) =>
+                m.isActive &&
+                m.assignedServiceNames.contains(appt.serviceName) &&
+                !m.isUnavailableOnDate(appt.dateTime))
             .toList();
         if (candidates.isEmpty) continue; // blocker — already filtered earlier
 
@@ -593,13 +619,20 @@ class _OwnerTeamScreenState extends ConsumerState<OwnerTeamScreen> {
 
         final duration = appt.durationMinutes;
 
-        // Pick first non-conflicting candidate; fall back to top priority if all busy.
-        TeamMemberModel picked = candidates.first;
+        // First candidate free at that time. If everyone is busy the RDV is
+        // left UNASSIGNED (visible in the agenda's "Non assigné" column) —
+        // it used to be forced onto the top-priority member = silent
+        // double booking.
+        TeamMemberModel? picked;
         for (final m in candidates) {
           if (!conflicts(m.id, appt.dateTime, duration)) {
             picked = m;
             break;
           }
+        }
+        if (picked == null) {
+          assignments[appt.id] = {'memberId': null, 'memberName': null};
+          continue;
         }
 
         // Track this assignment so the next RDV sees it as a conflict source
@@ -724,7 +757,7 @@ class _MemberCard extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1153,8 +1186,9 @@ class _MemberFormSheetState extends State<_MemberFormSheet> {
           'agendaColorIndex': _agendaColorIndex,
         };
         // Both gérant and member now authenticate via WhatsApp login
-        // code; no PIN is collected at edit time.
-        updates['pinHash'] = '';
+        // code; no PIN is collected at edit time. An existing (legacy)
+        // profile PIN is left untouched — wiping it on every edit silently
+        // removed the shared-device lock.
         await db.updateTeamMember(
             widget.salonId, widget.existing!.id, updates);
       } else {
@@ -1688,6 +1722,11 @@ class _TeamServiceToggle extends StatefulWidget {
 class _TeamServiceToggleState extends State<_TeamServiceToggle> {
   List<Map<String, dynamic>>? _localServices;
   bool _hasPendingChanges = false;
+  // serviceName → ordered member ids. Only these are written back, merged
+  // into a fresh read of the services array: saving the whole local copy
+  // used to drop every private (visibleTo) service and clobber concurrent
+  // edits.
+  final Map<String, List<String>> _pendingPriorities = {};
 
   bool get _showByService => widget.showByService;
 
@@ -1715,11 +1754,13 @@ class _TeamServiceToggleState extends State<_TeamServiceToggle> {
   }
 
   void _savePendingChanges() {
-    if (!_hasPendingChanges || _localServices == null) return;
+    if (!_hasPendingChanges || _pendingPriorities.isEmpty) return;
     final salonId = widget.salon?.id;
     if (salonId != null) {
-      DatabaseService().updateSalonField(salonId, 'services', _localServices!);
+      DatabaseService().updateServicePriorities(
+          salonId, Map<String, List<String>>.from(_pendingPriorities));
     }
+    _pendingPriorities.clear();
     _hasPendingChanges = false;
   }
 
@@ -1789,6 +1830,18 @@ class _TeamServiceToggleState extends State<_TeamServiceToggle> {
                           salon: widget.salon!,
                           onEdit: () => widget.onEditMember(m),
                           onDelete: () => widget.onDeleteMember(m),
+                          // Owner manages a member's days off / blocked
+                          // slots too (only the member could before).
+                          onManageUnavailability: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => Scaffold(
+                                appBar: AppBar(title: Text(m.name)),
+                                body: UnavailabilityTab(
+                                    salonId: widget.salon!.id, member: m),
+                              ),
+                            ),
+                          ),
                         ),
               ),
             )),
@@ -2045,6 +2098,7 @@ class _TeamServiceToggleState extends State<_TeamServiceToggle> {
     }
 
     setState(() => _localServices = services);
+    _pendingPriorities[serviceName] = newPriority;
 
     // Don't save to Firestore here — save when leaving the view
     // to avoid stream rebuild that resets scroll position

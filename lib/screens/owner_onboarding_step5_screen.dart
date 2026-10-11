@@ -77,7 +77,10 @@ class _OwnerOnboardingStep5ScreenState
     }
     OnboardingProgress.save(
         step: 6, stepName: 'services', data: widget.salonData);
-    Navigator.pushReplacement(
+    // push (not pushReplacement): when this step is the router's home
+    // route (resumed onboarding), replacing it removed the root and left
+    // the owner stuck on the success screen.
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => OwnerOnboardingStep4Screen(
@@ -182,7 +185,7 @@ class _OwnerOnboardingStep5ScreenState
                       IconButton(
                         icon: const Icon(Icons.arrow_back_ios_new_rounded,
                             size: 18, color: AppColors.brand950),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.maybePop(context),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -417,7 +420,9 @@ class _OnboardingMemberSheetState extends State<_OnboardingMemberSheet> {
   bool _saving = false;
   bool _showPin = false;
 
-  bool get _needsPin => _role == 'gerant';
+  // Gérants log in with their own WhatsApp code since 2026-05-30: no
+  // profile PIN to collect at onboarding anymore (same as the team screen).
+  bool get _needsPin => false;
 
   @override
   void dispose() {

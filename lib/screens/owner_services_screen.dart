@@ -7,6 +7,7 @@ import '../models/salon_model.dart';
 import '../models/team_member_model.dart';
 import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
+import '../utils/number_format.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../services/database_service.dart';
 import '../widgets/service_form_dialog.dart';
@@ -77,41 +78,10 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
           .toSet()
           .toList();
 
-      final updated = SalonModel(
-        id: salon.id,
-        ownerId: salon.ownerId,
-        name: salon.name,
-        city: salon.city,
-        country: salon.country,
-        address: salon.address,
-        description: salon.description,
-        category: salon.category,
-        rating: salon.rating,
-        reviewCount: salon.reviewCount,
-        images: salon.images,
-        logoUrl: salon.logoUrl,
-        phone: salon.phone,
-        workingHours: salon.workingHours,
+      final updated = salon.copyWith(
         services: _services,
         serviceCategories: categories,
         servicePacks: _packs,
-        latitude: salon.latitude,
-        longitude: salon.longitude,
-        createdAt: salon.createdAt,
-        socialLinks: salon.socialLinks,
-        slug: salon.slug,
-        currency: salon.currency,
-        rewardPointsEnabled: salon.rewardPointsEnabled,
-        aiPromosEnabled: salon.aiPromosEnabled,
-        aiPromoConfig: salon.aiPromoConfig,
-        googleReviewReward: salon.googleReviewReward,
-        isPremium: salon.isPremium,
-        galleryStorageUsed: salon.galleryStorageUsed,
-        salonType: salon.salonType,
-        timezone: salon.timezone,
-        cartDepositThreshold: salon.cartDepositThreshold,
-        cartDepositAmount: salon.cartDepositAmount,
-        closedDates: salon.closedDates,
       );
       await DatabaseService().saveSalon(updated);
 
@@ -146,7 +116,7 @@ class _OwnerServicesScreenState extends ConsumerState<OwnerServicesScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -849,7 +819,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
     final e = widget.existing;
     _nameCtrl = TextEditingController(text: e?['name'] ?? '');
     _priceCtrl = TextEditingController(
-      text: e != null && (e['price'] as num?) != null ? (e['price'] as num).toStringAsFixed(0) : '',
+      text: e != null && (e['price'] as num?) != null ? formatDecimal(e['price'] as num) : '',
     );
     _descCtrl = TextEditingController(text: e?['description'] ?? '');
     _selectedServices = Set<String>.from(e?['services'] ?? []);
@@ -892,7 +862,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
       'name': _nameCtrl.text.trim(),
       'description': _descCtrl.text.trim(),
       'services': _selectedServices.toList(),
-      'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
+      'price': parseDecimal(_priceCtrl.text) ?? 0.0,
       'originalPrice': _originalPrice,
     };
     Navigator.pop(context);
@@ -1060,7 +1030,7 @@ class _PackFormDialogState extends State<_PackFormDialog> {
                     const SizedBox(height: 14),
                     _label(l?.tr('pack_price') ?? 'Prix du pack (${CurrencyHelper.symbol(widget.currency)}) *'),
                     const SizedBox(height: 6),
-                    _field(_priceCtrl, '0', keyboardType: TextInputType.number),
+                    _field(_priceCtrl, '0', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                     const SizedBox(height: 14),
                     _label(l?.tr('pack_description') ?? 'Description (optionnel)'),
                     const SizedBox(height: 6),

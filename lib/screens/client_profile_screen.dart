@@ -25,6 +25,17 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'login_screen.dart';
 import 'owner_bot_settings_screen.dart';
 import 'owner_subscription_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import '../providers/team_providers.dart';
+
+/// True when someone other than the owner is using the app: an employee
+/// logged in with their code, OR a gérant/member picked in the profile
+/// selector on the owner's device (that path reuses the owner's Firebase
+/// session, so `employeeSessionProvider` alone misses it). Account-level
+/// actions — delete account, PIN, subscription, bot, password — are hidden.
+bool _isStaffSession(WidgetRef ref) =>
+    ref.watch(employeeSessionProvider).value != null ||
+    ref.watch(activeTeamMemberProvider) != null;
 
 String _hashPin(String pin) {
   final bytes = utf8.encode(pin);
@@ -42,6 +53,7 @@ class ClientProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   bool _uploadingPhoto = false;
 
   Future<void> _pickPhoto(UserModel user) async {
@@ -73,7 +85,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erreur : $e'), backgroundColor: Colors.red),
+              content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -204,7 +216,13 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     _AvatarSection(
                       user: user,
                       uploading: _uploadingPhoto,
-                      onPickPhoto: () => _pickPhoto(user),
+                      // Staff sessions have no users/{uid} doc to write the
+                      // photo to: no photo editing there.
+                      onPickPhoto: _isStaffSession(ref)
+                          ? null
+                          : () => _pickPhoto(user),
+                      staffRole: ref.watch(activeTeamMemberProvider)?.role ??
+                          ref.watch(employeeSessionProvider).value?.role,
                     ),
 
                     const SizedBox(height: 20),
@@ -213,7 +231,7 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     // Hidden for employees (code-logged): they don't have a
                     // users/{uid} doc so editing would silently fail, and a
                     // phone field here could confuse the account/phone flow.
-                    if (ref.watch(employeeSessionProvider).value == null) ...[
+                    if (!_isStaffSession(ref)) ...[
                       _AccountCard(user: user, onSaved: () {}),
                       const SizedBox(height: 8),
                     ],
@@ -221,8 +239,10 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     // ── Section spécifique au type ─────────────────────────
                     if (isOwner) ...[
                       _OwnerSalonCard(),
-                      const SizedBox(height: 8),
-                      const _SocialLinksCard(),
+                      if (!_isStaffSession(ref)) ...[
+                        const SizedBox(height: 8),
+                        const _SocialLinksCard(),
+                      ],
                     ] else
                       _ClientStatsCard(user: user),
 
@@ -260,8 +280,8 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
 
                     const SizedBox(height: 12),
 
-                    // ── Supprimer le compte ──────────────────────────────
-                    Padding(
+                    // ── Supprimer le compte (owner only) ─────────────────
+                    if (!_isStaffSession(ref)) Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: SizedBox(
                         width: double.infinity,
@@ -284,10 +304,15 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                     ),
 
                     const SizedBox(height: 16),
-                    Text(
-                      l?.tr('profile_version') ?? 'Mon Salon Pro v1.5.5',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.secondary300),
+                    FutureBuilder<PackageInfo>(
+                      future: _packageInfo,
+                      builder: (_, snap) => Text(
+                        snap.hasData
+                            ? 'Mon Salon Pro v${snap.data!.version}'
+                            : 'Mon Salon Pro',
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.secondary300),
+                      ),
                     ),
                     const SizedBox(height: 40),
                   ],
@@ -326,10 +351,14 @@ class _AvatarSection extends StatelessWidget {
     required this.user,
     required this.uploading,
     required this.onPickPhoto,
+    this.staffRole,
   });
   final UserModel user;
   final bool uploading;
-  final VoidCallback onPickPhoto;
+  final VoidCallback? onPickPhoto;
+  // 'gerant' / 'member' when a team member is using the app: the badge
+  // said "Propriétaire" for them (their synthetic UserModel is typed owner).
+  final String? staffRole;
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +403,7 @@ class _AvatarSection extends StatelessWidget {
                 bottom: 0,
                 right: 0,
                 child: GestureDetector(
-                  onTap: uploading ? null : onPickPhoto,
+                  onTap: uploading || onPickPhoto == null ? null : onPickPhoto,
                   child: Container(
                     width: 28,
                     height: 28,
@@ -418,7 +447,13 @@ class _AvatarSection extends StatelessWidget {
                 icon: isOwner
                     ? Icons.storefront_outlined
                     : Icons.person_outline_rounded,
-                label: isOwner ? (l?.tr('profile_owner') ?? 'Propriétaire') : (l?.tr('profile_client') ?? 'Client'),
+                label: staffRole == 'gerant'
+                    ? (l?.tr('team_role_manager') ?? 'Gérant(e)')
+                    : staffRole != null
+                        ? (l?.tr('team_role_member') ?? 'Employé(e)')
+                        : isOwner
+                            ? (l?.tr('profile_owner') ?? 'Propriétaire')
+                            : (l?.tr('profile_client') ?? 'Client'),
                 color: AppColors.brand600,
                 bg: AppColors.brand50,
               ),
@@ -868,7 +903,7 @@ class _SocialLinksCardState extends ConsumerState<_SocialLinksCard> {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1101,6 +1136,9 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
       child: Column(
         children: [
           // ── Notifications (inline toggle) ──────────────────────────────
+          // Not for code-logged employees: the toggle writes users/{uid},
+          // which doesn't exist for them (the write always failed).
+          if (ref.watch(employeeSessionProvider).value == null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
@@ -1144,18 +1182,21 @@ class _SettingsCardState extends ConsumerState<_SettingsCard> {
           ),
           const Divider(height: 1, indent: 46),
 
-          // ── Sécurité ──────────────────────────────────────────────────
-          _SettingsRow(
-            icon: Icons.lock_outline_rounded,
-            iconColor: const Color(0xFF059669),
-            iconBg: const Color(0xFFDCFCE7),
-            label: l?.tr('profile_security') ?? 'Sécurité',
-            onTap: _openSecurity,
-          ),
-          const Divider(height: 1, indent: 46),
+          // ── Sécurité (owner only: resets the OWNER's password) ───────
+          if (!_isStaffSession(ref)) ...[
+            _SettingsRow(
+              icon: Icons.lock_outline_rounded,
+              iconColor: const Color(0xFF059669),
+              iconBg: const Color(0xFFDCFCE7),
+              label: l?.tr('profile_security') ?? 'Sécurité',
+              onTap: _openSecurity,
+            ),
+            const Divider(height: 1, indent: 46),
+          ],
 
           // ── PIN de profil (propriétaire uniquement) ───────────────────
-          if (widget.user.userType == UserType.owner) ...[
+          if (widget.user.userType == UserType.owner &&
+              !_isStaffSession(ref)) ...[
             _SettingsRow(
               icon: Icons.pin_outlined,
               iconColor: AppColors.brand600,
@@ -1403,7 +1444,7 @@ class _SecuritySheetState extends State<_SecuritySheet> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1573,7 +1614,7 @@ class _SupportSheetState extends State<_SupportSheet> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1823,7 +1864,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1850,7 +1891,7 @@ class _ChangePinSheetState extends State<_ChangePinSheet> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     }
@@ -2201,7 +2242,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red),
         );
       }
     } finally {

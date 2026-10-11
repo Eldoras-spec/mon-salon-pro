@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../models/user_model.dart';
+import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../utils/page_transitions.dart';
@@ -62,6 +63,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
 
   List<_TabletNavItem> _tabletNavItems(bool isGerant) {
     final l = AppLocalizations.of(context);
+    final isCodeSession = ref.read(employeeSessionProvider).value != null;
     final currency = ref.read(ownerSalonProvider).value?.currency ?? 'MAD';
     return [
       _TabletNavItem(Icons.grid_view_rounded, l?.tr('nav_home') ?? 'Accueil', const OwnerHomeScreen()),
@@ -71,11 +73,14 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
       if (!isGerant)
         _TabletNavItem(Icons.store_rounded, l?.tr('nav_salon') ?? 'Salon', const OwnerSalonScreen()),
       _TabletNavItem(Icons.content_cut_outlined, l?.tr('menu_manage_services') ?? 'Services', const OwnerServicesScreen()),
+      if (!isCodeSession)
       _TabletNavItem(Icons.chat_outlined, l?.tr('menu_messages') ?? 'Messages',
           ConversationsScreen(currentUserId: widget.userModel.id, isClient: false, salonId: widget.userModel.id)),
       _TabletNavItem(Icons.account_balance_wallet_outlined, l?.tr('menu_finances') ?? 'Finances', const OwnerFinancesScreen()),
       _TabletNavItem(Icons.local_offer_outlined, l?.tr('menu_promotions') ?? 'Promotions', const OwnerPromotionsScreen()),
+      if (!isCodeSession)
       _TabletNavItem(Icons.storefront_outlined, l?.tr('menu_boutique') ?? 'Boutique', const OwnerBoutiqueScreen()),
+      if (!isCodeSession)
       _TabletNavItem(Icons.inventory_2_outlined, l?.tr('menu_inventory') ?? 'Stock', const OwnerInventoryScreen()),
       if (!isGerant)
         _TabletNavItem(Icons.groups_outlined, l?.tr('menu_team') ?? 'Équipe', const OwnerTeamScreen()),
@@ -225,6 +230,10 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
     // throws "widget unmounted". `navigator` doesn't depend on the State
     // staying mounted — the NavigatorState lives at the MaterialApp root.
     final navigator = Navigator.of(context);
+    // Gérant logged in with their own code: conversations, inventory and
+    // shop orders are owner-only in the rules (screens rendered empty /
+    // PERMISSION_DENIED), so hide them instead of showing dead ends.
+    final isCodeSession = ref.read(employeeSessionProvider).value != null;
 
     showModalBottomSheet(
       context: context,
@@ -269,6 +278,38 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                   controller: scrollController,
                   padding: EdgeInsets.zero,
                   children: [
+                    // "+" = create first: the most frequent action. The old
+                    // "Rendez-vous" entry only duplicated the RDV tab.
+                    _buildMenuTile(
+                      icon: Icons.add_circle_outline_rounded,
+                      iconBg: AppColors.brand600, iconColor: Colors.white,
+                      label: l?.tr('menu_new_appointment') ?? 'Nouveau rendez-vous',
+                      sub: l?.tr('menu_new_appointment_desc') ?? 'Réserver pour un client',
+                      onTap: () {
+                        navigator.pop();
+                        final salon = ref.read(ownerSalonProvider).value;
+                        if (salon == null) return;
+                        final team = ref.read(ownerTeamProvider).value ?? [];
+                        showModalBottomSheet(
+                          context: navigator.context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          builder: (sheetCtx) => ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.9,
+                            ),
+                            child: OwnerAddAppointmentSheet(
+                              salon: salon,
+                              teamMembers: team,
+                              onCreated: () => ref.invalidate(ownerAppointmentsRangeProvider),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     _buildMenuTile(
                       icon: Icons.calendar_view_day_outlined,
                       iconBg: AppColors.brand50, iconColor: AppColors.brand600,
@@ -282,16 +323,6 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       },
                     ),
                     _buildMenuTile(
-                      icon: Icons.calendar_month_outlined,
-                      iconBg: const Color(0xFFEFF6FF), iconColor: const Color(0xFF2563EB),
-                      label: l?.tr('menu_today_appointments') ?? 'Rendez-vous',
-                      sub: l?.tr('menu_today_appointments_desc') ?? 'Voir et gérer toutes vos réservations',
-                      onTap: () {
-                        navigator.pop();
-                        if (mounted) setState(() => _currentIndex = 1);
-                      },
-                    ),
-                    _buildMenuTile(
                       icon: Icons.content_cut_outlined,
                       iconBg: const Color(0xFFF0FDF4), iconColor: const Color(0xFF16A34A),
                       label: l?.tr('menu_manage_services') ?? 'Gérer les services',
@@ -302,6 +333,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       },
                     ),
                     Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1, color: AppColors.secondary100)),
+                    if (!isCodeSession)
                     _buildMenuTile(
                       icon: Icons.chat_outlined,
                       iconBg: AppColors.brand50, iconColor: AppColors.brand600,
@@ -312,6 +344,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                         navigator.push(MaterialPageRoute(builder: (_) => ConversationsScreen(currentUserId: widget.userModel.id, isClient: false, salonId: widget.userModel.id)));
                       },
                     ),
+                    if (!isCodeSession)
                     _buildMenuTile(
                       icon: Icons.inventory_2_outlined,
                       iconBg: const Color(0xFFFFF7ED), iconColor: const Color(0xFFEA580C),
@@ -335,6 +368,7 @@ class _MainAppScaffoldState extends ConsumerState<MainAppScaffold> {
                       sub: l?.tr('menu_promotions_desc') ?? 'Réductions, codes promo et offres spéciales',
                       onTap: () { navigator.pop(); navigator.pushSlide(const OwnerPromotionsScreen()); },
                     ),
+                    if (!isCodeSession)
                     _buildMenuTile(
                       icon: Icons.storefront_outlined,
                       iconBg: const Color(0xFFFFF7ED), iconColor: const Color(0xFFEA580C),

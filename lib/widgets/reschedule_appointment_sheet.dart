@@ -271,7 +271,7 @@ class _RescheduleSheetState extends State<_RescheduleSheet> {
     final l = AppLocalizations.of(context);
     final slots = _generateSlots();
     final dateLabel =
-        DateFormat('EEEE d MMMM', 'fr_FR').format(_selectedDate);
+        DateFormat('EEEE d MMMM', Localizations.localeOf(context).languageCode).format(_selectedDate);
     final memberLabel = _assignedMember?.name ??
         (l?.tr('appointments_no_member') ?? 'Aucun membre assigné');
 

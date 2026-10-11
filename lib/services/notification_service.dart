@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'database_service.dart';
+import '../screens/conversations_screen.dart';
+import '../screens/notifications_screen.dart';
+import '../screens/owner_boutique_screen.dart';
+import '../screens/owner_inventory_screen.dart';
 
 /// Top-level handler for background messages (must be a top-level function).
 @pragma('vm:entry-point')
@@ -27,6 +34,18 @@ class NotificationService {
   /// suppressed (the user is already reading the conversation live).
   /// Set from [ChatScreen] in initState / resume and cleared in dispose / pause.
   static String? activeConversationId;
+
+  /// Root navigator, wired on MaterialApp, used to open the screen a
+  /// notification is about when the user taps it.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
+  // One token-refresh listener per signed-in user. A new listener used to
+  // be stacked on every save (incl. from a build method), so after an
+  // account switch refreshed tokens were written to the previous users.
+  StreamSubscription<String>? _tokenRefreshSub;
+  String? _tokenRefreshUser;
+  String? _savedTokenFor;
 
   // Android notification channel
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
@@ -112,6 +131,17 @@ class NotificationService {
 
   /// Get the current FCM token and save it to Firestore for the given user.
   Future<void> saveTokenForUser(String userId) async {
+    if (_tokenRefreshUser != userId) {
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshUser = userId;
+      _savedTokenFor = null;
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) {
+        _databaseService.updateFcmToken(userId, newToken);
+        debugPrint('🔔 FCM Token refreshed for user $userId');
+      });
+    }
+    // Already written this session for this user: skip the write.
+    if (_savedTokenFor == userId) return;
     try {
       // On iOS, wait for the APNS token before requesting FCM token
       if (Platform.isIOS) {
@@ -128,17 +158,20 @@ class NotificationService {
       final token = await _messaging.getToken();
       if (token != null) {
         await _databaseService.updateFcmToken(userId, token);
+        _savedTokenFor = userId;
         debugPrint('🔔 FCM Token saved for user $userId');
       }
     } catch (e) {
       debugPrint('🔔 Error getting FCM token: $e');
     }
+  }
 
-    // Listen for token refresh
-    _messaging.onTokenRefresh.listen((newToken) {
-      _databaseService.updateFcmToken(userId, newToken);
-      debugPrint('🔔 FCM Token refreshed for user $userId');
-    });
+  /// Stops token syncing (call on sign-out).
+  Future<void> stopTokenSync() async {
+    await _tokenRefreshSub?.cancel();
+    _tokenRefreshSub = null;
+    _tokenRefreshUser = null;
+    _savedTokenFor = null;
   }
 
   /// Handle a message received while the app is in the foreground.
@@ -169,7 +202,7 @@ class NotificationService {
       showLocalNotification(
         title: notification.title ?? 'Mon Salon',
         body: notification.body ?? '',
-        payload: message.data['route'] ?? '',
+        payload: jsonEncode(message.data),
       );
     }
   }
@@ -177,13 +210,46 @@ class NotificationService {
   /// Handle a notification tap that opened the app.
   void _handleMessageOpenedApp(RemoteMessage message) {
     debugPrint('🔔 Notification opened app: ${message.data}');
-    // Future: navigate to a specific screen based on message.data['route']
+    _openFor(Map<String, dynamic>.from(message.data));
   }
 
   /// Handle local notification tap.
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('🔔 Local notification tapped: ${response.payload}');
-    // Future: navigate based on payload
+    final p = response.payload;
+    if (p == null || p.isEmpty) return;
+    try {
+      final data = jsonDecode(p);
+      if (data is Map) _openFor(Map<String, dynamic>.from(data));
+    } catch (_) {}
+  }
+
+  /// Opens the screen matching a push payload `type`. Waits for the app to
+  /// be signed in and the navigator mounted (cold start from a tap).
+  Future<void> _openFor(Map<String, dynamic> data) async {
+    for (var i = 0; i < 30; i++) {
+      if (navigatorKey.currentState != null &&
+          FirebaseAuth.instance.currentUser != null) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    final nav = navigatorKey.currentState;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (nav == null || uid == null) return;
+    // Give the router a moment to settle on the home screen first.
+    await Future.delayed(const Duration(milliseconds: 300));
+    final isEmployee = uid.startsWith('emp_');
+    final type = (data['type'] ?? '').toString();
+    final Widget screen = switch (type) {
+      'new_message' || 'bot_handover' when !isEmployee =>
+        ConversationsScreen(currentUserId: uid, isClient: false, salonId: uid),
+      'new_order' || 'order_status' when !isEmployee =>
+        const OwnerBoutiqueScreen(),
+      'low_stock' when !isEmployee => const OwnerInventoryScreen(),
+      _ => const NotificationsScreen(),
+    };
+    nav.push(MaterialPageRoute(builder: (_) => screen));
   }
 
   /// Show a local notification (used for foreground messages and booking confirmations).

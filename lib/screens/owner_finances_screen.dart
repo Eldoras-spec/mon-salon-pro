@@ -12,6 +12,23 @@ import '../utils/currency_helper.dart';
 
 final _db = DatabaseService();
 
+typedef _MonthKey = (String salonId, int year, int month);
+
+// Revenue for a (salon, month). Re-aggregated whenever nearby appointments
+// change, so a RDV auto-completed by the CF shows up without reopening.
+final _financeRevenueProvider =
+    FutureProvider.autoDispose.family<double, _MonthKey>((ref, k) {
+  ref.watch(ownerHomeAppointmentsProvider);
+  return _db.getMonthlyRevenue(k.$1, k.$2, k.$3);
+});
+
+// Charges stream memoized per month — creating it inline in build()
+// re-subscribed on every setState (flash of "no charges").
+final _financeChargesProvider = StreamProvider.autoDispose
+    .family<List<ChargeModel>, _MonthKey>((ref, k) {
+  return _db.getCharges(k.$1, k.$3, k.$2);
+});
+
 class OwnerFinancesScreen extends ConsumerStatefulWidget {
   const OwnerFinancesScreen({super.key});
 
@@ -35,8 +52,6 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
 
   late int _selectedMonth;
   late int _selectedYear;
-  double _revenue = 0;
-  bool _loadingRevenue = false;
 
   @override
   void initState() {
@@ -46,29 +61,15 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
     _selectedYear = now.year;
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _fetchRevenue();
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _selectedYear == now.year && _selectedMonth == now.month;
   }
 
   List<String> _getLocalizedMonths(AppLocalizations? l) {
     return List.generate(12, (i) =>
       l?.tr(_monthKeys[i]) ?? _monthFallbacks[i],
     );
-  }
-
-  Future<void> _fetchRevenue() async {
-    final salonId = ref.read(ownerSalonProvider).value?.id;
-    if (salonId == null) return;
-    setState(() => _loadingRevenue = true);
-    try {
-      final rev = await _db.getMonthlyRevenue(
-          salonId, _selectedYear, _selectedMonth);
-      if (mounted) setState(() => _revenue = rev);
-    } finally {
-      if (mounted) setState(() => _loadingRevenue = false);
-    }
   }
 
   void _prevMonth() {
@@ -80,10 +81,11 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
         _selectedMonth--;
       }
     });
-    _fetchRevenue();
   }
 
   void _nextMonth() {
+    // No future months: there is nothing to account for yet.
+    if (_isCurrentMonth) return;
     setState(() {
       if (_selectedMonth == 12) {
         _selectedMonth = 1;
@@ -92,7 +94,6 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
         _selectedMonth++;
       }
     });
-    _fetchRevenue();
   }
 
   @override
@@ -154,14 +155,19 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
 
                   // Summary cards
                   if (salonId != null)
-                    StreamBuilder<List<ChargeModel>>(
-                      stream: _db.getCharges(
-                          salonId, _selectedMonth, _selectedYear),
-                      builder: (context, snap) {
-                        final charges = snap.data ?? [];
+                    Builder(
+                      builder: (context) {
+                        final key = (salonId, _selectedYear, _selectedMonth);
+                        final revenueAsync =
+                            ref.watch(_financeRevenueProvider(key));
+                        final loadingRevenue = revenueAsync.isLoading;
+                        final revenue = revenueAsync.value ?? 0.0;
+                        final charges =
+                            ref.watch(_financeChargesProvider(key)).value ??
+                                const <ChargeModel>[];
                         final totalCharges = charges.fold<double>(
                             0, (acc, c) => acc + c.amount);
-                        final profit = _revenue - totalCharges;
+                        final profit = revenue - totalCharges;
 
                         return Column(
                           children: [
@@ -170,9 +176,9 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                 Expanded(
                                   child: _FinanceCard(
                                     label: l?.tr('finances_revenue') ?? 'Revenus',
-                                    value: _loadingRevenue
+                                    value: loadingRevenue
                                         ? '...'
-                                        : CurrencyHelper.format(_revenue, salonAsync.value?.currency ?? 'MAD'),
+                                        : CurrencyHelper.format(revenue, salonAsync.value?.currency ?? 'MAD'),
                                     icon: Icons.trending_up_rounded,
                                     iconBg: const Color(0xFFF0FDF4),
                                     iconColor: const Color(0xFF16A34A),
@@ -277,8 +283,7 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
                                         const EdgeInsets.only(bottom: 10),
                                     child: _ChargeTile(
                                       charge: c,
-                                      onDelete: () =>
-                                          _db.deleteCharge(c.id),
+                                      onDelete: () => _confirmDeleteCharge(c),
                                       currency: salonAsync.value?.currency ?? 'MAD',
                                     ),
                                   )),
@@ -294,6 +299,30 @@ class _OwnerFinancesScreenState extends ConsumerState<OwnerFinancesScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCharge(ChargeModel charge) async {
+    final l = AppLocalizations.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l?.tr('finances_delete_charge_title') ??
+            'Supprimer cette charge ?'),
+        content: Text(charge.label),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l?.tr('common_cancel') ?? 'Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+            child: Text(l?.tr('common_delete') ?? 'Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _db.deleteCharge(charge.id);
   }
 
   void _showAddChargeSheet(BuildContext context, String salonId) {
@@ -648,7 +677,7 @@ class _ChargeTile extends StatelessWidget {
                       color: AppColors.brand950,
                     )),
                 Text(
-                    '${charge.type} · ${charge.category}',
+                    _chargeSubtitle(context, charge),
                     style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.secondary400)),
@@ -900,4 +929,30 @@ class _FinanceField extends StatelessWidget {
       ],
     );
   }
+}
+
+// Stored type/category values are French keys ('Loyer', 'Fixe'…); show
+// them translated instead of raw.
+String _chargeSubtitle(BuildContext context, ChargeModel c) {
+  final l = AppLocalizations.of(context);
+  const typeKeys = {
+    'Salaire': 'finances_charge_salary',
+    'Loyer': 'finances_charge_rent',
+    'Produits': 'finances_charge_products',
+    'Équipement': 'finances_charge_equipment',
+    'Factures': 'finances_charge_bills',
+    'Marketing': 'finances_charge_marketing',
+    'Autre': 'finances_charge_other',
+  };
+  const catKeys = {
+    'Fixe': 'finances_category_fixed',
+    'Variable': 'finances_category_variable',
+  };
+  final type = typeKeys[c.type] != null
+      ? (l?.tr(typeKeys[c.type]!) ?? c.type)
+      : c.type;
+  final cat = catKeys[c.category] != null
+      ? (l?.tr(catKeys[c.category]!) ?? c.category)
+      : c.category;
+  return '$type · $cat';
 }

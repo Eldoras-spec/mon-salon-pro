@@ -154,13 +154,13 @@ class _BodyState extends State<_Body> {
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.message ?? 'Erreur Stripe.'),
+        content: Text(e.message ?? (AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.')),
         backgroundColor: Colors.redAccent,
       ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -182,7 +182,7 @@ class _BodyState extends State<_Body> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -191,11 +191,11 @@ class _BodyState extends State<_Body> {
 
   Future<void> _contactSupport() async {
     final url = Uri.parse(
-        'https://wa.me/$_kSupportWhatsapp?text=${Uri.encodeComponent(_kSupportMessage)}');
+        'https://wa.me/$_kSupportWhatsapp?text=${Uri.encodeComponent(AppLocalizations.of(context)?.tr('stripe_connect.support_message') ?? _kSupportMessage)}');
     final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible d\'ouvrir WhatsApp.')),
+        SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_whatsapp_open_error') ?? "Impossible d'ouvrir WhatsApp.")),
       );
     }
   }
@@ -824,7 +824,7 @@ class _CartDepositCardState extends State<_CartDepositCard> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

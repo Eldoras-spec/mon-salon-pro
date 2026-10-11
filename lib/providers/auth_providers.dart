@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/notification_service.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../models/user_model.dart';
@@ -33,12 +34,22 @@ final userModelProvider = FutureProvider<UserModel?>((ref) async {
 
   final authService = ref.read(authServiceProvider);
 
+  Object? lastError;
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await Future.delayed(const Duration(seconds: 3));
-    final model = await authService.getUserModel(user.uid);
-    if (model != null) return model;
+    try {
+      final model = await authService.getUserModel(user.uid);
+      if (model != null) return model;
+      lastError = null;
+    } catch (e) {
+      lastError = e;
+    }
   }
 
+  // Read kept failing (offline, timeout…) → error state, which main.dart
+  // renders with a Retry button. Never null here: null means "orphan
+  // account" and triggers a sign-out.
+  if (lastError != null) throw lastError;
   return null; // Profile genuinely not found after 3 attempts
 });
 
@@ -155,6 +166,7 @@ final employeeSessionProvider = FutureProvider<EmployeeSession?>((ref) async {
 /// to the wrong home or trigger the orphan-auth branch in main.dart
 /// and force-sign-out the new session ~9s after login.
 Future<void> signOutAll(WidgetRef ref) async {
+  await NotificationService().stopTokenSync();
   await ref.read(authServiceProvider).signOut();
   ref.invalidate(authStateProvider);
   ref.invalidate(userModelProvider);

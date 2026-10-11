@@ -144,6 +144,15 @@ class _Body extends StatelessWidget {
                   _priceChip(context, PlanConfig.planBusiness, salon.currency),
               onTap: () => _goToUpgrade(context, PlanConfig.planBusiness),
             ),
+          // Was only reachable from the upgrade checkout.
+          _ActionTile(
+            icon: Icons.restore_rounded,
+            color: AppColors.secondary500,
+            title: l?.tr('upgrade.restore') ?? 'Restaurer mes achats',
+            subtitle: l?.tr('subscription.restore_desc') ??
+                'Abonnement déjà payé sur ce compte Apple / Google',
+            onTap: () => _restorePurchases(context),
+          ),
           const SizedBox(height: 16),
           // ── Bot Zayna message quota (Business plan only) ──────
           if (salon.isBusiness) ...[
@@ -591,3 +600,24 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
+
+Future<void> _restorePurchases(BuildContext context) async {
+  final l = AppLocalizations.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final info = await Purchases.restorePurchases();
+    final hasActive = info.entitlements.active.isNotEmpty;
+    messenger.showSnackBar(SnackBar(
+      content: Text(hasActive
+          ? (l?.tr('upgrade.restore_success') ?? 'Achats restaurés avec succès')
+          : (l?.tr('upgrade.restore_empty') ??
+              'Aucun achat à restaurer sur ce compte')),
+    ));
+  } catch (_) {
+    messenger.showSnackBar(SnackBar(
+      content: Text(l?.tr('common_error_retry') ??
+          'Une erreur est survenue. Réessayez.'),
+      backgroundColor: Colors.red.shade600,
+    ));
+  }
+}

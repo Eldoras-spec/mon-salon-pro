@@ -151,7 +151,7 @@ final lowStockCountProvider = Provider<int>((ref) {
 /// Async because the cross-salon check needs a Firestore read per
 /// upcoming-today client (bounded, typically < 20 reads per dashboard).
 final noShowRiskClientsProvider =
-    FutureProvider<List<NoShowRiskClient>>((ref) async {
+    FutureProvider.autoDispose<List<NoShowRiskClient>>((ref) async {
   // 6-month window is enough to read a client's cancellation rate;
   // avoids the lifetime-history scan of `ownerAppointmentsProvider`.
   final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
@@ -173,23 +173,26 @@ final noShowRiskClientsProvider =
       a.status == 'upcoming' &&
       !a.dateTime.isBefore(todayStart) &&
       a.dateTime.isBefore(todayEnd) &&
-      a.clientId.isNotEmpty &&
-      a.clientId != 'walk-in' &&
+      riskKeyFor(a) != null &&
       a.paymentStatus != 'paid' &&
       a.paymentStatus != 'deposit_paid').toList();
 
   final results = <NoShowRiskClient>[];
   final seenClients = <String>{};
   for (final appt in todayUpcoming) {
-    if (seenClients.contains(appt.clientId)) continue;
-    seenClients.add(appt.clientId);
+    final key = riskKeyFor(appt)!;
+    if (seenClients.contains(key)) continue;
+    seenClients.add(key);
 
     // ── Tier 1: per-salon history ───────────────────────────────────
     final past = appointments.where((a) =>
-        a.clientId == appt.clientId &&
+        riskKeyFor(a) == key &&
         a.dateTime.isBefore(todayStart)).toList();
     if (past.length >= 2) {
-      final cancelled = past.where((a) => a.status == 'cancelled').length;
+      // No-shows weigh like cancellations: they are the risk itself.
+      final cancelled = past
+          .where((a) => a.status == 'cancelled' || a.status == 'no_show')
+          .length;
       final rate = ((cancelled / past.length) * 100).round();
       if (rate >= 25) {
         results.add(NoShowRiskClient(
@@ -208,12 +211,7 @@ final noShowRiskClientsProvider =
 
     // ── Tier 2: cross-salon reputation ──────────────────────────────
     try {
-      final repSnap = await FirebaseFirestore.instance
-          .collection('clientReputation')
-          .doc(appt.clientId)
-          .get();
-      if (!repSnap.exists) continue;
-      final data = repSnap.data();
+      final data = await _reputationOf(key);
       if (data == null) continue;
       final totalPastLifetime = (data['totalPast'] as num?)?.toInt() ?? 0;
       final cancelledLifetime = (data['cancelledCount'] as num?)?.toInt() ?? 0;
@@ -267,7 +265,7 @@ class AgendaRiskInfo {
 /// 25% / min 2, then cross-salon 30% / min 3 fallback) but the upcoming
 /// window is widened from "today" to "today + 7 days".
 final agendaRiskClientsProvider =
-    FutureProvider<Map<String, AgendaRiskInfo>>((ref) async {
+    FutureProvider.autoDispose<Map<String, AgendaRiskInfo>>((ref) async {
   final appointments = ref.watch(ownerNoShowWindowAppointmentsProvider).value ?? [];
   if (appointments.isEmpty) return {};
 
@@ -280,8 +278,7 @@ final agendaRiskClientsProvider =
       a.status == 'upcoming' &&
       !a.dateTime.isBefore(todayStart) &&
       a.dateTime.isBefore(windowEnd) &&
-      a.clientId.isNotEmpty &&
-      a.clientId != 'walk-in' &&
+      riskKeyFor(a) != null &&
       a.paymentStatus != 'paid' &&
       a.paymentStatus != 'deposit_paid').toList();
 
@@ -289,18 +286,22 @@ final agendaRiskClientsProvider =
   final processed = <String>{};
 
   for (final appt in upcoming) {
-    if (processed.contains(appt.clientId)) continue;
-    processed.add(appt.clientId);
+    final key = riskKeyFor(appt)!;
+    if (processed.contains(key)) continue;
+    processed.add(key);
 
     // Tier 1: per-salon history
     final past = appointments.where((a) =>
-        a.clientId == appt.clientId &&
+        riskKeyFor(a) == key &&
         a.dateTime.isBefore(todayStart)).toList();
     if (past.length >= 2) {
-      final cancelled = past.where((a) => a.status == 'cancelled').length;
+      // No-shows weigh like cancellations: they are the risk itself.
+      final cancelled = past
+          .where((a) => a.status == 'cancelled' || a.status == 'no_show')
+          .length;
       final rate = ((cancelled / past.length) * 100).round();
       if (rate >= 25) {
-        results[appt.clientId] = AgendaRiskInfo(
+        results[key] = AgendaRiskInfo(
           rate: rate,
           totalPast: past.length,
           cancelledPast: cancelled,
@@ -312,18 +313,13 @@ final agendaRiskClientsProvider =
 
     // Tier 2: cross-salon reputation
     try {
-      final repSnap = await FirebaseFirestore.instance
-          .collection('clientReputation')
-          .doc(appt.clientId)
-          .get();
-      if (!repSnap.exists) continue;
-      final data = repSnap.data();
+      final data = await _reputationOf(key);
       if (data == null) continue;
       final totalPastLifetime = (data['totalPast'] as num?)?.toInt() ?? 0;
       final cancelledLifetime = (data['cancelledCount'] as num?)?.toInt() ?? 0;
       final rateLifetime = (data['cancellationRate'] as num?)?.toInt() ?? 0;
       if (totalPastLifetime < 3 || rateLifetime < 30) continue;
-      results[appt.clientId] = AgendaRiskInfo(
+      results[key] = AgendaRiskInfo(
         rate: rateLifetime,
         totalPast: totalPastLifetime,
         cancelledPast: cancelledLifetime,
@@ -373,3 +369,38 @@ final ownerTasksProvider = Provider<List<OwnerTask>>((ref) {
   tasks.sort((a, b) => a.priority.compareTo(b.priority));
   return tasks;
 });
+
+// Cross-salon reputation docs, cached 10 min. The risk providers re-run on
+// every emission of the appointments window; without this each run re-read
+// clientReputation for every client of the day.
+final Map<String, ({DateTime at, Map<String, dynamic>? data})> _repCache = {};
+
+Future<Map<String, dynamic>?> _reputationOf(String clientId) async {
+  final hit = _repCache[clientId];
+  if (hit != null &&
+      DateTime.now().difference(hit.at) < const Duration(minutes: 10)) {
+    return hit.data;
+  }
+  final snap = await FirebaseFirestore.instance
+      .collection('clientReputation')
+      .doc(clientId)
+      .get();
+  final data = snap.exists ? snap.data() : null;
+  _repCache[clientId] = (at: DateTime.now(), data: data);
+  return data;
+}
+
+/// Identity used for no-show risk. Registered clients → uid. Walk-ins (site
+/// / Zayna / Pro bookings without an account) → `walkin_<digits>`, the same
+/// id the `maintainClientReputation` CF uses — they were skipped entirely
+/// before, and all walk-ins would otherwise share the id "walk-in".
+String? riskKeyFor(AppointmentModel a) {
+  if (a.clientId.isNotEmpty && a.clientId != 'walk-in') return a.clientId;
+  var digits = (a.clientPhone ?? '').replaceAll(RegExp(r'\D'), '');
+  if (digits.isEmpty) return null;
+  // Same normalisation as the CF's normalizePhone (legacy local MA numbers).
+  if (digits.startsWith('0') && digits.length == 10) {
+    digits = '212${digits.substring(1)}';
+  }
+  return 'walkin_$digits';
+}

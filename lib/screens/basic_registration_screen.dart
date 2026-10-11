@@ -146,12 +146,10 @@ class _BasicRegistrationScreenState
 
       if (mounted) {
         setState(() => _isLoading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const OwnerOnboardingStep1Screen(),
-          ),
-        );
+        // The router already shows onboarding step 1 as the home route now
+        // that the account exists: go back to it instead of pushing a
+        // second Step 1 (system back then led to the old signup form).
+        Navigator.of(context).popUntil((r) => r.isFirst);
       }
     } catch (e) {
       if (mounted) {

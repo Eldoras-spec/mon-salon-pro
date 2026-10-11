@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers/auth_providers.dart';
 import '../providers/owner_providers.dart';
 import '../providers/owner_tasks_provider.dart';
+import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import 'owner_stripe_connect_screen.dart';
@@ -153,6 +155,11 @@ class _EnableDepositBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Card-payment settings are owner-only: never promote them to a gérant.
+    if (ref.watch(activeTeamMemberProvider) != null ||
+        ref.watch(employeeSessionProvider).value != null) {
+      return const SizedBox.shrink();
+    }
     final salon = ref.watch(ownerSalonProvider).value;
     if (salon == null) return const SizedBox.shrink();
     // Already configured → nothing to promote.
@@ -160,11 +167,11 @@ class _EnableDepositBanner extends ConsumerWidget {
 
     // `chargesEnabled` lives under salons/{id}.stripeConnect (billing-only,
     // not on SalonModel), so read it once here.
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance.collection('salons').doc(salon.id).get(),
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
-        final connect = snap.data?.data()?['stripeConnect'];
+    return Consumer(
+      builder: (context, ref, _) {
+        final snap = ref.watch(_salonStripeConnectProvider(salon.id));
+        if (!snap.hasValue) return const SizedBox.shrink();
+        final connect = snap.value;
         final chargesEnabled =
             connect is Map && connect['chargesEnabled'] == true;
         if (!chargesEnabled) return const SizedBox.shrink();
@@ -535,3 +542,12 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
+// `stripeConnect` lives on the salon doc but not on SalonModel. Read once
+// per salon (a FutureBuilder with an inline .get() re-read it every rebuild).
+final _salonStripeConnectProvider =
+    FutureProvider.autoDispose.family<Object?, String>((ref, salonId) async {
+  final doc =
+      await FirebaseFirestore.instance.collection('salons').doc(salonId).get();
+  return doc.data()?['stripeConnect'];
+});

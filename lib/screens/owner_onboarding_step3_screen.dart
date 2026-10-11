@@ -46,7 +46,13 @@ class OwnerOnboardingStep3Screen extends StatefulWidget {
 
 class _OwnerOnboardingStep3ScreenState
     extends State<OwnerOnboardingStep3Screen> {
-  String _selectedTimezone = 'Africa/Casablanca';
+  // Seeded from step 1 (IP-detected / owner-picked). Hardcoding a default
+  // here used to overwrite it, creating every non-Moroccan salon on
+  // Casablanca time.
+  late String _selectedTimezone =
+      (widget.salonData['timezone'] as String?)?.isNotEmpty == true
+          ? widget.salonData['timezone'] as String
+          : 'Africa/Casablanca';
 
   final List<DaySchedule> _schedule = [
     DaySchedule(dayName: 'Lundi', isOpen: true),
@@ -64,7 +70,7 @@ class _OwnerOnboardingStep3ScreenState
     ),
     DaySchedule(
       dayName: 'Samedi',
-      isOpen: false,
+      isOpen: true,
       openTime: const TimeOfDay(hour: 10, minute: 0),
       closeTime: const TimeOfDay(hour: 16, minute: 0),
     ),
@@ -252,7 +258,7 @@ class _OwnerOnboardingStep3ScreenState
                 Row(
                   children: [
                     TextButton.icon(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.maybePop(context),
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -450,7 +456,7 @@ class _OwnerOnboardingStep3ScreenState
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.maybePop(context),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

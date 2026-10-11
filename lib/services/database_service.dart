@@ -72,42 +72,9 @@ class DatabaseService {
       slug = await _ensureUniqueSlug(baseSlug, salon.id);
     }
 
-    final updatedSalon = SalonModel(
-      id: salon.id,
-      ownerId: salon.ownerId,
-      name: salon.name,
-      address: salon.address,
-      city: salon.city,
-      country: salon.country,
-      description: salon.description,
-      category: salon.category,
-      rating: salon.rating,
-      reviewCount: salon.reviewCount,
-      images: salon.images,
-      logoUrl: salon.logoUrl,
-      phone: salon.phone,
-      workingHours: salon.workingHours,
-      services: salon.services,
+    final updatedSalon = salon.copyWith(
       serviceCategories: categories,
-      createdAt: salon.createdAt,
-      latitude: salon.latitude,
-      longitude: salon.longitude,
-      socialLinks: salon.socialLinks,
-      servicePacks: salon.servicePacks,
       slug: slug,
-      currency: salon.currency,
-      rewardPointsEnabled: salon.rewardPointsEnabled,
-      aiPromosEnabled: salon.aiPromosEnabled,
-      aiPromoConfig: salon.aiPromoConfig,
-      googleReviewReward: salon.googleReviewReward,
-      isPremium: salon.isPremium,
-      galleryStorageUsed: salon.galleryStorageUsed,
-      salonType: salon.salonType,
-      plan: salon.plan,
-      timezone: salon.timezone,
-      cartDepositThreshold: salon.cartDepositThreshold,
-      cartDepositAmount: salon.cartDepositAmount,
-      closedDates: salon.closedDates,
     );
 
     // Build the write map manually so we never overwrite server-controlled
@@ -238,6 +205,8 @@ class DatabaseService {
   // stay at ~5 supp reads for a 100-RDV / 5-client salon. Cleared on
   // signout via `clearUserCache()`.
   static final Map<String, ({String? name, String? phone})> _apptPiiCache = {};
+  static final Map<String, ({String? name, String? phone, String? token})>
+      _walkInPiiCache = {};
 
   /// PII hydration: for each appointment doc, merge `clientName` +
   /// `clientPhone` from the `private/contact` subcollection into the
@@ -267,6 +236,18 @@ class DatabaseService {
             clientPhone: cached.phone,
           );
         }
+      } else {
+        // Walk-in → cache by appointment id. Without it every stream
+        // emission (status change, CF auto-complete…) re-read the private
+        // doc of EVERY walk-in in the window (6 months on the home).
+        final cached = _walkInPiiCache[doc.id];
+        if (cached != null) {
+          return appt.copyWith(
+            clientName: cached.name,
+            clientPhone: cached.phone,
+            managementToken: cached.token,
+          );
+        }
       }
       // Cache miss → read the private subcoll.
       try {
@@ -281,6 +262,12 @@ class DatabaseService {
           // Cache for next RDV of the same registered client.
           if (appt.clientId.isNotEmpty && appt.clientId != 'walk-in') {
             _apptPiiCache[appt.clientId] = (name: name, phone: phone);
+          } else {
+            _walkInPiiCache[doc.id] = (
+              name: name,
+              phone: phone,
+              token: data['managementToken'] as String?,
+            );
           }
           return appt.copyWith(
             clientName: name,
@@ -406,11 +393,15 @@ class DatabaseService {
   // Mark all notifications as read (batch)
   Future<void> markAllNotificationsRead(String userId) async {
     final batch = _firestore.batch();
+    // A batch caps at 500 writes; anything older than the newest 400 is
+    // TTL-purged within days anyway.
     final snapshot = await _firestore
         .collection('notifications')
         .where('userId', isEqualTo: userId)
         .where('isRead', isEqualTo: false)
+        .limit(400)
         .get();
+    if (snapshot.docs.isEmpty) return;
     for (final doc in snapshot.docs) {
       batch.update(doc.reference, {'isRead': true});
     }
@@ -472,8 +463,8 @@ class DatabaseService {
   /// how many docs match. Refresh by invalidating the wrapping provider.
   Future<int> getMonthlyCompletedCount(
       String salonId, int year, int month) async {
-    final start = DateTime(year, month);
-    final end = DateTime(year, month + 1);
+    final start = DateTime.utc(year, month);
+    final end = DateTime.utc(year, month + 1);
     final agg = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
@@ -491,8 +482,8 @@ class DatabaseService {
   /// stream variant that downloaded every doc and folded client-side.
   Future<double> getMonthlyRevenue(
       String salonId, int year, int month) async {
-    final start = DateTime(year, month);
-    final end = DateTime(year, month + 1);
+    final start = DateTime.utc(year, month);
+    final end = DateTime.utc(year, month + 1);
     final agg = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
@@ -549,6 +540,7 @@ class DatabaseService {
     if (uid == null) {
       _userCache.clear();
       _apptPiiCache.clear();
+      _walkInPiiCache.clear();
     } else {
       _userCache.remove(uid);
       _apptPiiCache.remove(uid);
@@ -828,7 +820,10 @@ class DatabaseService {
   /// Server-side filtered by date — requires index (salonId, dateTime).
   Future<List<AppointmentModel>> getSalonAppointmentsForDate(
       String salonId, DateTime date) async {
-    final startOfDay = DateTime(date.year, date.month, date.day);
+    // Appointments are stored as wall-clock-UTC: the day window must be
+    // built in UTC too, otherwise it shifts by the device offset and evening
+    // bookings fall out of the day (missed conflicts → double booking).
+    final startOfDay = DateTime.utc(date.year, date.month, date.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
     final snap = await _firestore
         .collection('appointments')
@@ -969,12 +964,13 @@ class DatabaseService {
   /// Batch reassign appointments to new members.
   /// [assignments] maps appointmentId → {memberId, memberName}.
   Future<void> reassignAppointments(
-      Map<String, Map<String, String>> assignments) async {
+      Map<String, Map<String, String?>> assignments) async {
     final batch = _firestore.batch();
     assignments.forEach((apptId, data) {
+      // null memberId = leave the RDV unassigned (no free member).
       batch.update(_firestore.collection('appointments').doc(apptId), {
-        'assignedMemberId': data['memberId'],
-        'assignedMemberName': data['memberName'],
+        'assignedMemberId': data['memberId'] ?? FieldValue.delete(),
+        'assignedMemberName': data['memberName'] ?? FieldValue.delete(),
       });
     });
     await batch.commit();
@@ -1028,17 +1024,19 @@ class DatabaseService {
   /// Get appointments for a specific member on a specific date (one-shot).
   Future<List<AppointmentModel>> getAppointmentsForMemberOnDate(
       String salonId, String memberId, DateTime dayStart, DateTime dayEnd) async {
+    // Bounds are wall-clock-UTC. Filtered server-side (index salonId +
+    // assignedMemberId + dateTime) instead of downloading the member's
+    // whole history on every tap.
     final snap = await _firestore
         .collection('appointments')
         .where('salonId', isEqualTo: salonId)
         .where('assignedMemberId', isEqualTo: memberId)
+        .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
+        .where('dateTime', isLessThan: Timestamp.fromDate(dayEnd))
         .get();
     return snap.docs
         .map((d) => AppointmentModel.fromFirestore(d))
-        .where((a) =>
-            a.dateTime.isAfter(dayStart.subtract(const Duration(seconds: 1))) &&
-            a.dateTime.isBefore(dayEnd) &&
-            a.status != 'cancelled')
+        .where((a) => a.status != 'cancelled')
         .toList();
   }
 
@@ -1144,6 +1142,27 @@ class DatabaseService {
 
   Future<void> updateSalonField(String salonId, String field, dynamic value) async {
     await _firestore.collection('salons').doc(salonId).update({field: value});
+  }
+
+  /// Writes `memberPriority` for the given services (by name) onto a fresh
+  /// read of the services array, inside a transaction — never rewrites the
+  /// array from a possibly stale / filtered local copy.
+  Future<void> updateServicePriorities(
+      String salonId, Map<String, List<String>> prioritiesByService) async {
+    final ref = _firestore.collection('salons').doc(salonId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final services = List<Map<String, dynamic>>.from(
+        ((snap.data()?['services'] as List?) ?? const [])
+            .map((s) => Map<String, dynamic>.from(s as Map)),
+      );
+      for (final svc in services) {
+        final name = (svc['name'] ?? svc['title'] ?? '') as String;
+        final prio = prioritiesByService[name];
+        if (prio != null) svc['memberPriority'] = prio;
+      }
+      tx.update(ref, {'services': services});
+    });
   }
 
   // ─── Blacklist Management ────────────────────────────────────────────────

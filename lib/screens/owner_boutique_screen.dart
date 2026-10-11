@@ -13,6 +13,7 @@ import '../services/app_localizations.dart';
 import '../services/database_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/currency_helper.dart';
+import '../utils/number_format.dart';
 import '../utils/media_compressor.dart';
 
 final _db = DatabaseService();
@@ -513,7 +514,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _priceCtrl =
-        TextEditingController(text: p != null ? p.price.toStringAsFixed(0) : '');
+        TextEditingController(text: p != null ? formatDecimal(p.price) : '');
     _stockCtrl =
         TextEditingController(text: p != null ? '${p.stock}' : '');
     _thresholdCtrl = TextEditingController(
@@ -525,7 +526,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _citiesCtrl = TextEditingController(text: p?.deliveryCities.join(', ') ?? '');
     _feeCtrl = TextEditingController(
         text: p != null && p.deliveryFee > 0
-            ? p.deliveryFee.toStringAsFixed(0)
+            ? formatDecimal(p.deliveryFee)
             : '');
     _daysCtrl = TextEditingController(
         text: p != null && p.deliveryDays > 0 ? '${p.deliveryDays}' : '');
@@ -591,6 +592,16 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     return urls;
   }
 
+  /// New product → absolute stock. Edit → apply only the owner's delta, so
+  /// an order decremented between opening and saving the form isn't
+  /// overwritten by the stale value shown in the field.
+  Object _stockWrite() {
+    final typed = int.tryParse(_stockCtrl.text.trim()) ?? 0;
+    final p = widget.product;
+    if (p == null) return typed;
+    return FieldValue.increment(typed - p.stock);
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
@@ -603,18 +614,18 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
         'salonId': widget.salonId,
         'name': _nameCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
-        'price': double.parse(_priceCtrl.text.trim()),
+        'price': parseDecimal(_priceCtrl.text) ?? 0.0,
         'images': allImages,
         'category': _categoryCtrl.text.trim(),
-        'stock': int.parse(_stockCtrl.text.trim()),
-        'lowStockThreshold': int.parse(_thresholdCtrl.text.trim()),
+        'stock': _stockWrite(),
+        'lowStockThreshold': int.tryParse(_thresholdCtrl.text.trim()) ?? 5,
         'deliveryType': _deliveryType,
         'deliveryCities': _deliveryType == 'cities'
             ? _citiesCtrl.text.trim().split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList()
             : <String>[],
         'deliveryFee': _feeCtrl.text.trim().isEmpty
             ? 0.0
-            : double.parse(_feeCtrl.text.trim()),
+            : (parseDecimal(_feeCtrl.text) ?? 0.0),
         'deliveryDays': _daysCtrl.text.trim().isEmpty
             ? 0
             : (int.tryParse(_daysCtrl.text.trim()) ?? 0),
@@ -772,7 +783,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   _buildField(l?.tr('boutique_product_name') ?? 'Nom du produit', _nameCtrl, required: true),
                   _buildField(l?.tr('boutique_description') ?? 'Description', _descCtrl, maxLines: 2),
                   _buildField(l?.tr('boutique_price') ?? 'Prix (${widget.currency})', _priceCtrl,
-                      required: true, keyboard: TextInputType.number),
+                      required: true, keyboard: const TextInputType.numberWithOptions(decimal: true)),
                   _buildField(
                       l?.tr('boutique_delivery_days') ??
                           'Délai de livraison (jours)',
@@ -853,7 +864,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   ],
                   if (_deliveryType != 'pickup')
                     _buildField('Frais de livraison (${widget.currency})', _feeCtrl,
-                        keyboard: TextInputType.number, hint: '0 = gratuit'),
+                        keyboard: const TextInputType.numberWithOptions(decimal: true), hint: '0 = gratuit'),
 
                   // Payment method picker — only when delivery active AND
                   // the salon can actually accept card payments. For pickup
@@ -1505,8 +1516,7 @@ class _OrderCard extends StatelessWidget {
                   label: l?.tr('boutique_cancel') ?? 'Annuler',
                   color: const Color(0xFFDC2626),
                   outlined: true,
-                  onTap: () =>
-                      _db.updateOrderStatus(order.id, 'cancelled'),
+                  onTap: () => _confirmCancelOrder(context, order),
                 ),
               ],
               // Failed-delivery return: only delivered + delivery method
@@ -1826,4 +1836,34 @@ class _ActionBtn extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Cancelling an order used to be a single tap. Paid-by-card orders also
+/// warn that no automatic refund is issued from the app.
+Future<void> _confirmCancelOrder(BuildContext context, OrderModel order) async {
+  final l = AppLocalizations.of(context);
+  final paidByCard = order.paymentStatus == 'paid';
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(l?.tr('boutique_cancel_confirm_title') ??
+          'Annuler cette commande ?'),
+      content: paidByCard
+          ? Text(l?.tr('boutique_cancel_paid_warning') ??
+              'Cette commande a été payée par carte : le remboursement n\'est pas automatique.')
+          : null,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(l?.tr('common_back') ?? 'Retour'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+          child: Text(l?.tr('common_confirm') ?? 'Confirmer'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) await DatabaseService().updateOrderStatus(order.id, 'cancelled');
 }

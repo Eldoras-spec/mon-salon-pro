@@ -9,7 +9,9 @@ import 'package:intl/intl.dart';
 import 'package:linked_scroll_controller/linked_scroll_controller.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers/owner_providers.dart';
 import '../providers/owner_tasks_provider.dart';
+import '../utils/timezone_helper.dart';
 import '../theme/app_colors.dart';
 import '../models/appointment_model.dart';
 import '../models/team_member_model.dart';
@@ -79,8 +81,52 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   String? _selectedDayKey; // 'yyyy-MM-dd'
 
   // Timeline config
-  static const int _startHour = 8;
-  static const int _endHour = 22;
+  // Grid bounds follow the salon's opening hours and stretch to include
+  // any RDV outside them (a fixed 8h–22h grid pinned 7:00 / 22:30 RDV to
+  // the edges). Defaults 8–22 when hours are unknown.
+  int get _startHour {
+    var h = 8;
+    final hours = ref.read(ownerSalonProvider).value?.workingHours;
+    if (hours != null) {
+      final opens = hours.values
+          .whereType<Map>()
+          .where((d) => d['isOpen'] == true && d['open'] is String)
+          .map((d) => int.tryParse((d['open'] as String).split(':').first))
+          .whereType<int>();
+      if (opens.isNotEmpty) h = opens.reduce((a, b) => a < b ? a : b);
+    }
+    for (final a in _appointments) {
+      if (a.dateTime.hour < h) h = a.dateTime.hour;
+    }
+    return h.clamp(0, 23);
+  }
+
+  int get _endHour {
+    var h = 22;
+    final hours = ref.read(ownerSalonProvider).value?.workingHours;
+    if (hours != null) {
+      final closes = hours.values
+          .whereType<Map>()
+          .where((d) => d['isOpen'] == true && d['close'] is String)
+          .map((d) {
+            final p = (d['close'] as String).split(':');
+            final hh = int.tryParse(p.first) ?? 0;
+            final mm = p.length > 1 ? (int.tryParse(p[1]) ?? 0) : 0;
+            return mm > 0 ? hh + 1 : hh;
+          });
+      if (closes.isNotEmpty) h = closes.reduce((a, b) => a > b ? a : b);
+    }
+    for (final a in _appointments) {
+      final end = a.dateTime.add(Duration(minutes: a.durationMinutes));
+      final endH = end.minute > 0 ? end.hour + 1 : end.hour;
+      if (end.day == a.dateTime.day && endH > h) h = endH;
+    }
+    return h.clamp(_startHour + 1, 24);
+  }
+
+  // Salon wall-clock now (appointment.dateTime is wall-clock-UTC).
+  DateTime get _salonNow => TimezoneHelper.salonWallClockNow(
+      ref.read(ownerSalonProvider).value?.timezone);
   static const double _pixelsPerMinute = 2.5;
   static const double _timeColumnWidth = 44.0;
   static const double _memberColumnWidth = 120.0;
@@ -143,14 +189,17 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     _selectedDaySub?.cancel();
     setState(() => _loading = true);
 
-    final start = DateTime(forDate.year, forDate.month, forDate.day);
+    // Wall-clock-UTC day window (local DateTime shifted it by the device
+    // offset, so evening RDV of UTC+3/+4 salons fell on the next day).
+    final start = DateTime.utc(forDate.year, forDate.month, forDate.day);
     final end = start.add(const Duration(days: 1));
     _selectedDaySub = _db
         .streamSalonAppointmentsForRange(widget.salonId, start, end)
         .listen((apts) {
       if (!mounted) return;
       setState(() {
-        _appointments = apts;
+        // Cancelled RDV free their slot — don't draw them as busy blocks.
+        _appointments = apts.where((a) => a.status != 'cancelled').toList();
         _loading = false;
       });
     }, onError: (e) {
@@ -204,7 +253,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     final dateLabel =
         DateFormat('EEEE d MMMM yyyy', _intlLocale(context)).format(_selectedDate);
     final buf = StringBuffer();
-    buf.writeln('📅 Planning du $dateLabel');
+    buf.writeln('📅 ${(l?.tr('agenda_share_title') ?? 'Planning du {date}').replaceAll('{date}', dateLabel)}');
     buf.writeln('─────────────────────');
 
     if (_appointments.isEmpty) {
@@ -236,7 +285,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
     }
 
     buf.writeln('\n─────────────────────');
-    buf.writeln('Total: ${_appointments.length} RDV');
+    buf.writeln((l?.tr('agenda_share_total') ?? 'Total : {count} RDV').replaceAll('{count}', '${_appointments.length}'));
 
     await Clipboard.setData(ClipboardData(text: buf.toString()));
     if (mounted) {
@@ -336,7 +385,9 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
               child: _loading
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColors.brand600))
-                  : _members.isEmpty
+                  // No team: still show the grid when there are (unassigned)
+                  // RDV — a solo owner's bookings were invisible here.
+                  : (_members.isEmpty && _appointments.isEmpty)
                       ? _buildEmptyState()
                       : _buildTimelineGrid(),
             ),
@@ -726,7 +777,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
             ),
 
           // Current time indicator (red line)
-          if (DateUtils.isSameDay(_selectedDate, DateTime.now()))
+          if (DateUtils.isSameDay(_selectedDate, _salonNow))
             _buildNowIndicator(),
 
           // Appointment blocks
@@ -738,7 +789,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
                 appt.dateTime.add(Duration(minutes: appt.durationMinutes));
             final risk = ref
                 .watch(agendaRiskClientsProvider)
-                .valueOrNull?[appt.clientId];
+                .valueOrNull?[riskKeyFor(appt)];
 
             return Positioned(
               top: top,
@@ -845,7 +896,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
   }
 
   Widget _buildNowIndicator() {
-    final now = DateTime.now();
+    final now = _salonNow;
     final rawTop = _yForTime(now);
     if (rawTop < 0 || rawTop > _timelineHeight) return const SizedBox.shrink();
 
@@ -993,7 +1044,7 @@ class _OwnerAgendaScreenState extends ConsumerState<OwnerAgendaScreen> {
             Builder(builder: (_) {
               final risk = ref
                   .read(agendaRiskClientsProvider)
-                  .valueOrNull?[appt.clientId];
+                  .valueOrNull?[riskKeyFor(appt)];
               if (risk == null) return const SizedBox.shrink();
               final l = AppLocalizations.of(context);
               return Padding(

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -505,6 +506,10 @@ class _OwnerPromotionsScreenState
         initialType: initialType,
         services: services,
         slug: slug,
+        existingCodes: (ref.read(ownerPromotionsProvider).value ?? const [])
+            .map((p) => (p.promoCode ?? '').toUpperCase())
+            .where((c) => c.isNotEmpty)
+            .toSet(),
       ),
     );
   }
@@ -541,11 +546,14 @@ class _AddPromoSheet extends StatefulWidget {
     required this.initialType,
     required this.services,
     this.slug,
+    this.existingCodes = const {},
   });
   final String salonId;
   final String initialType;
   final List<Map<String, dynamic>> services;
   final String? slug;
+  // Codes already used by this salon's promotions (upper-cased).
+  final Set<String> existingCodes;
 
   @override
   State<_AddPromoSheet> createState() => _AddPromoSheetState();
@@ -570,9 +578,16 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
   // validation messages used to silently disappear under the modal.
   String? _errorMsg;
 
+  // Stored keys = lowercase French day names, the convention shared with
+  // workingHours, booking.js and the client app. Labels go through i18n.
   static const _daysList = [
-    'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+    'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
   ];
+  static const _dayLabelKeys = {
+    'lundi': 'day_monday', 'mardi': 'day_tuesday', 'mercredi': 'day_wednesday',
+    'jeudi': 'day_thursday', 'vendredi': 'day_friday', 'samedi': 'day_saturday',
+    'dimanche': 'day_sunday',
+  };
 
   Map<String, String> _typeLabels(AppLocalizations? l) => {
     'percent': l?.tr('promotions_type_selector_percent') ?? 'Réduction %',
@@ -603,7 +618,12 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null) setState(() => _expiresAt = picked);
+    // Valid through the END of the chosen day — midnight at its start made
+    // the promo stop the day before the date the owner picked.
+    if (picked != null) {
+      setState(() => _expiresAt =
+          DateTime(picked.year, picked.month, picked.day, 23, 59, 59));
+    }
   }
 
   void _showError(String msg) {
@@ -627,6 +647,11 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
       if (code.isEmpty) {
         _showError(l?.tr('promotions_error_code_required') ??
             'Veuillez saisir un code promo.');
+        return;
+      }
+      if (widget.existingCodes.contains(code)) {
+        _showError(l?.tr('promotions_error_code_taken') ??
+            'Ce code promo existe déjà.');
         return;
       }
       title = code;
@@ -703,6 +728,9 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
         Navigator.pop(context);
         _showShareDialog(context, promo, widget.slug);
       }
+    } catch (_) {
+      _showError(l?.tr('common_save_error') ??
+          'Enregistrement impossible. Réessayez.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -922,7 +950,8 @@ class _AddPromoSheetState extends State<_AddPromoSheet> {
                         ),
                       ),
                       child: Text(
-                        day.substring(0, 3),
+                        (AppLocalizations.of(context)?.tr(_dayLabelKeys[day]!) ?? day)
+                            .characters.take(3).toString(),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -2070,9 +2099,21 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
                         'discountPercent': percent,
                         'googleMapsUrl': mapsUrl,
                       };
-                      await _db.updateGoogleReviewReward(
-                          widget.salonId, newConfig);
-                      if (ctx.mounted) Navigator.pop(ctx);
+                      try {
+                        await _db.updateGoogleReviewReward(
+                            widget.salonId, newConfig);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (_) {
+                        // Spinner used to stay stuck on a failed write.
+                        setDlgState(() => saving = false);
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                            content: Text(l?.tr('common_save_error') ??
+                                'Enregistrement impossible. Réessayez.'),
+                            backgroundColor: Colors.red,
+                          ));
+                        }
+                      }
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brand700,
@@ -2110,13 +2151,25 @@ class _GoogleReviewSectionState extends State<_GoogleReviewSection> {
 
   Future<void> _validateReward(ReviewRewardModel reward) async {
     final percent = widget.config['discountPercent'] ?? 10;
-    final code =
-        'AVIS${reward.clientName.toUpperCase().replaceAll(' ', '').substring(0, reward.clientName.length.clamp(0, 4))}$percent';
+    // Letters of the name only, bounded on the CLEANED string (the old
+    // substring used the raw length and threw on names like "Al B"), plus
+    // a random suffix so codes aren't guessable (AVISMARI10).
+    final letters = reward.clientName
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z]'), '');
+    final prefix = letters.length > 4 ? letters.substring(0, 4) : letters;
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final rnd = Random.secure();
+    final suffix = List.generate(3, (_) => alphabet[rnd.nextInt(alphabet.length)]).join();
+    final code = 'AVIS$prefix$percent$suffix';
     await _db.validateReviewReward(reward.id, code);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Code "$code" envoyé à ${reward.clientName}'),
+          content: Text((AppLocalizations.of(context)?.tr('promotions_review_code_sent') ??
+                  'Code « {code} » envoyé à {name}')
+              .replaceAll('{code}', code)
+              .replaceAll('{name}', reward.clientName)),
           backgroundColor: const Color(0xFF16A34A),
         ),
       );

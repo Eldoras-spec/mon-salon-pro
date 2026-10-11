@@ -101,7 +101,10 @@ class PromotionModel {
       targetedClientName: d['targetedClientName'] as String?,
       redemptionCount: (d['redemptionCount'] as num?)?.toInt() ?? 0,
       minAmount: d['minAmount'] != null ? (d['minAmount'] as num).toDouble() : null,
-      validDays: d['validDays'] != null ? List<String>.from(d['validDays']) : null,
+      // Lowercased: legacy promos were saved as 'Lundi' and never matched.
+      validDays: d['validDays'] != null
+          ? List<String>.from(d['validDays']).map((s) => s.toLowerCase()).toList()
+          : null,
       validHoursStart: d['validHoursStart'] as String?,
       validHoursEnd: d['validHoursEnd'] as String?,
     );

@@ -217,33 +217,44 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
           fetchPast = Future.value([]);
           fetchUpcoming = Future.value([]);
         } else {
-          // Past: dateTime ≤ now, dateTime ASC index, reverse in memory.
-          fetchPast = fs
-              .collection('appointments')
-              .where('salonId', isEqualTo: salonId)
-              .where('clientPhone', isEqualTo: phoneE164)
-              .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(now))
-              .orderBy('dateTime', descending: false)
-              .limit(50)
-              .get()
-              .then((s) {
-            final list = s.docs.map((d) => AppointmentModel.fromFirestore(d)).toList()
-              ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
-            return list.take(10).toList();
+          // The phone only lives in private/contact since the PII split,
+          // so walk-in history is resolved server-side (one call feeds both
+          // lists). Times come back as wall-clock-UTC millis.
+          final all = FirebaseFunctions.instance
+              .httpsCallable('ownerGetWalkInHistory')
+              .call({'salonId': salonId, 'clientPhone': phoneE164})
+              .then((res) {
+            final rows = (res.data['appointments'] as List?) ?? const [];
+            return rows.map((r) {
+              final m = Map<String, dynamic>.from(r as Map);
+              return AppointmentModel(
+                id: m['id'] as String,
+                clientId: 'walk-in',
+                salonId: salonId,
+                salonName: widget.salon.name,
+                serviceName: m['serviceName'] as String? ?? '',
+                price: (m['price'] as num?)?.toDouble() ?? 0,
+                dateTime: DateTime.fromMillisecondsSinceEpoch(
+                    (m['dateTimeMs'] as num?)?.toInt() ?? 0,
+                    isUtc: true),
+                status: m['status'] as String? ?? '',
+                createdAt: DateTime.now(),
+                durationMinutes: (m['durationMinutes'] as num?)?.toInt() ?? 30,
+                clientName: client.clientName,
+                clientPhone: client.clientPhone,
+                assignedMemberId: m['assignedMemberId'] as String?,
+                assignedMemberName: m['assignedMemberName'] as String?,
+              );
+            }).toList();
           });
-          // Upcoming: dateTime > now, status=upcoming, dateTime ASC.
-          fetchUpcoming = fs
-              .collection('appointments')
-              .where('salonId', isEqualTo: salonId)
-              .where('clientPhone', isEqualTo: phoneE164)
-              .where('dateTime', isGreaterThan: Timestamp.fromDate(now))
-              .orderBy('dateTime')
-              .limit(20)
-              .get()
-              .then((s) => s.docs
-                  .map((d) => AppointmentModel.fromFirestore(d))
-                  .where((a) => a.status == 'upcoming')
-                  .toList());
+          fetchPast = all.then((list) => list
+              .where((a) => !a.dateTime.isAfter(now))
+              .take(10)
+              .toList());
+          fetchUpcoming = all.then((list) => list
+              .where((a) => a.dateTime.isAfter(now) && a.status == 'upcoming')
+              .toList()
+            ..sort((a, b) => a.dateTime.compareTo(b.dateTime)));
         }
       } else {
         final uid = client.clientId;
@@ -251,40 +262,28 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
           fetchPast = Future.value([]);
           fetchUpcoming = Future.value([]);
         } else {
-          // Past: 3 status branches × index #2, filter salonId in-memory.
-          // whereIn on status would also work but limits us to a single
-          // index hit; explicit 3 queries are clearer when reasoning
-          // about which composite is being used.
-          fetchPast = Future.wait([
-            for (final s in ['completed', 'cancelled', 'no_show'])
-              fs
-                  .collection('appointments')
-                  .where('clientId', isEqualTo: uid)
-                  .where('status', isEqualTo: s)
-                  .orderBy('dateTime', descending: true)
-                  .limit(10)
-                  .get()
-                  .then((q) => q.docs.map((d) => AppointmentModel.fromFirestore(d)).toList()),
-          ]).then((lists) {
-            final merged = <AppointmentModel>[
-              for (final l in lists) ...l,
-            ];
-            merged.removeWhere((a) => a.salonId != salonId);
-            merged.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-            return merged.take(10).toList();
-          });
-          // Upcoming: clientId + status='upcoming' + dateTime ASC →
-          // index #1. Filter salonId + future-only client-side.
-          fetchUpcoming = fs
+          // Scoped to this salon server-side (index salonId + clientId +
+          // dateTime). The previous cross-salon limit(10) + client-side
+          // salonId filter lost this salon's history as soon as the client
+          // also booked elsewhere.
+          final base = fs
               .collection('appointments')
-              .where('clientId', isEqualTo: uid)
-              .where('status', isEqualTo: 'upcoming')
+              .where('salonId', isEqualTo: salonId)
+              .where('clientId', isEqualTo: uid);
+          fetchPast = base
+              .where('dateTime', isLessThanOrEqualTo: Timestamp.fromDate(now))
+              .orderBy('dateTime', descending: true)
+              .limit(10)
+              .get()
+              .then((q) => q.docs.map((d) => AppointmentModel.fromFirestore(d)).toList());
+          fetchUpcoming = base
+              .where('dateTime', isGreaterThan: Timestamp.fromDate(now))
               .orderBy('dateTime')
               .limit(30)
               .get()
               .then((s) => s.docs
                   .map((d) => AppointmentModel.fromFirestore(d))
-                  .where((a) => a.salonId == salonId && a.dateTime.isAfter(now))
+                  .where((a) => a.status == 'upcoming')
                   .take(20)
                   .toList());
         }
@@ -511,9 +510,15 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
     final phoneE164 = phone.isNotEmpty
         ? (phone.startsWith('+') ? phone : '+${phone.replaceAll(RegExp(r'\D'), '')}')
         : null;
-    Navigator.pop(context);
+    // This sheet is closed before the booking sheet opens: capture what we
+    // need first — using its context / ref afterwards threw once the RDV
+    // was created (widget already disposed).
+    final container = ProviderScope.containerOf(context);
+    final nav = Navigator.of(context);
+    final maxH = MediaQuery.of(context).size.height * 0.9;
+    nav.pop();
     showModalBottomSheet(
-      context: context,
+      context: nav.context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
@@ -521,14 +526,14 @@ class _ClientDetailSheetState extends ConsumerState<ClientDetailSheet> {
       ),
       builder: (_) => ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
+          maxHeight: maxH,
         ),
         child: OwnerAddAppointmentSheet(
           salon: widget.salon,
           teamMembers: team,
           initialClientName: widget.client.clientName,
           initialClientPhoneE164: phoneE164,
-          onCreated: () => ref.invalidate(ownerAppointmentsRangeProvider),
+          onCreated: () => container.invalidate(ownerAppointmentsRangeProvider),
         ),
       ),
     );

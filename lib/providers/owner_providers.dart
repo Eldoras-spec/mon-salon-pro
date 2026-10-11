@@ -9,6 +9,7 @@ import '../models/product_model.dart';
 import '../models/order_model.dart';
 import '../models/client_summary_model.dart';
 import '../services/database_service.dart';
+import '../utils/timezone_helper.dart';
 import 'auth_providers.dart';
 
 final _db = DatabaseService();
@@ -54,9 +55,11 @@ final ownerHomeAppointmentsProvider =
     StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
-  final now = DateTime.now();
-  final start = DateTime(now.year, now.month, now.day - 7);
-  final end = DateTime(now.year, now.month, now.day + 8);
+  // Wall-clock-UTC bounds in the salon TZ (appointments are stored that
+  // way); DateTime(...) local shifted the window by the device offset.
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
+  final start = DateTime.utc(now.year, now.month, now.day - 7);
+  final end = DateTime.utc(now.year, now.month, now.day + 8);
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
@@ -74,9 +77,9 @@ final ownerNoShowWindowAppointmentsProvider =
     StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
-  final now = DateTime.now();
-  final start = DateTime(now.year, now.month - 6, now.day);
-  final end = DateTime(now.year, now.month, now.day + 8);
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
+  final start = DateTime.utc(now.year, now.month - 6, now.day);
+  final end = DateTime.utc(now.year, now.month, now.day + 8);
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
@@ -93,9 +96,9 @@ final ownerCurrentMonthAppointmentsProvider =
     StreamProvider.autoDispose<List<AppointmentModel>>((ref) {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
-  final now = DateTime.now();
-  final start = DateTime(now.year, now.month, 1);
-  final end = DateTime(now.year, now.month + 1, 1);
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
+  final start = DateTime.utc(now.year, now.month, 1);
+  final end = DateTime.utc(now.year, now.month + 1, 1);
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
 
@@ -166,19 +169,25 @@ final ownerOrdersProvider = StreamProvider.autoDispose<List<OrderModel>>((ref) {
 ///
 /// Refresh strategy: invalidated by appointment status mutations
 /// (createAppointment / updateAppointmentStatus) and explicit refresh.
-final ownerCurrentMonthRevenueProvider = FutureProvider<double>((ref) async {
+final ownerCurrentMonthRevenueProvider =
+    FutureProvider.autoDispose<double>((ref) async {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return 0.0;
-  final now = DateTime.now();
+  // Re-aggregate whenever a nearby appointment changes (e.g. the CF
+  // auto-completing past RDV) — 1 read per change instead of a stale total.
+  ref.watch(ownerHomeAppointmentsProvider);
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
   return _db.getMonthlyRevenue(salon.id, now.year, now.month);
 });
 
 /// Number of completed appointments during the current calendar month.
 /// Same aggregation pattern as [ownerCurrentMonthRevenueProvider].
-final ownerCurrentMonthCompletedCountProvider = FutureProvider<int>((ref) async {
+final ownerCurrentMonthCompletedCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return 0;
-  final now = DateTime.now();
+  ref.watch(ownerHomeAppointmentsProvider);
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
   return _db.getMonthlyCompletedCount(salon.id, now.year, now.month);
 });
 
@@ -201,16 +210,16 @@ final ownerAppointmentsRangeProvider =
   if (salon == null) return Stream.value([]);
   final period = ref.watch(appointmentsPeriodProvider);
 
-  final now = DateTime.now();
+  final now = TimezoneHelper.salonWallClockNow(salon.timezone);
   final start = switch (period) {
     AppointmentsPeriod.lastWeek =>
-      DateTime(now.year, now.month, now.day - 7),
-    AppointmentsPeriod.last3Months => DateTime(now.year, now.month - 3, 1),
-    AppointmentsPeriod.last6Months => DateTime(now.year, now.month - 6, 1),
-    AppointmentsPeriod.lastYear => DateTime(now.year - 1, now.month, 1),
+      DateTime.utc(now.year, now.month, now.day - 7),
+    AppointmentsPeriod.last3Months => DateTime.utc(now.year, now.month - 3, 1),
+    AppointmentsPeriod.last6Months => DateTime.utc(now.year, now.month - 6, 1),
+    AppointmentsPeriod.lastYear => DateTime.utc(now.year - 1, now.month, 1),
   };
   // End = far future so upcoming bookings stay visible regardless of period.
-  final end = DateTime(now.year + 5);
+  final end = DateTime.utc(now.year + 5);
 
   return _db.streamSalonAppointmentsForRange(salon.id, start, end);
 });
@@ -231,30 +240,36 @@ final statisticsPeriodProvider =
 
 /// Resolves a [StatisticsPeriod] into a concrete (start, end) date range.
 /// `end` is always "now + 1 day" to include today's appointments.
-({DateTime start, DateTime end}) resolveStatisticsRange(StatisticsPeriod p) {
-  final now = DateTime.now();
-  final end = DateTime(now.year, now.month, now.day)
+({DateTime start, DateTime end}) resolveStatisticsRange(StatisticsPeriod p,
+    [String? salonTimezone]) {
+  // Wall-clock-UTC bounds (salon TZ), matching appointment.dateTime.
+  final now = TimezoneHelper.salonWallClockNow(salonTimezone);
+  final end = DateTime.utc(now.year, now.month, now.day)
       .add(const Duration(days: 1));
   return switch (p) {
     StatisticsPeriod.currentWeek => (
-        start: DateTime(now.year, now.month, now.day)
+        start: DateTime.utc(now.year, now.month, now.day)
             .subtract(Duration(days: now.weekday - 1)),
         end: end,
       ),
     StatisticsPeriod.currentMonth => (
-        start: DateTime(now.year, now.month, 1),
+        start: DateTime.utc(now.year, now.month, 1),
         end: end,
       ),
+    // Ranges match the activity chart exactly (90 daily bins, 6 / 12
+    // monthly bins incl. the current month) — they used to load up to a
+    // month more than the chart showed.
     StatisticsPeriod.last3Months => (
-        start: DateTime(now.year, now.month - 3, 1),
+        start: DateTime.utc(now.year, now.month, now.day)
+            .subtract(const Duration(days: 89)),
         end: end,
       ),
     StatisticsPeriod.last6Months => (
-        start: DateTime(now.year, now.month - 6, 1),
+        start: DateTime.utc(now.year, now.month - 5, 1),
         end: end,
       ),
     StatisticsPeriod.lastYear => (
-        start: DateTime(now.year - 1, now.month, 1),
+        start: DateTime.utc(now.year, now.month - 11, 1),
         end: end,
       ),
   };
@@ -267,7 +282,7 @@ final ownerStatisticsAppointmentsProvider =
   final salon = ref.watch(ownerSalonProvider).value;
   if (salon == null) return Stream.value([]);
   final period = ref.watch(statisticsPeriodProvider);
-  final r = resolveStatisticsRange(period);
+  final r = resolveStatisticsRange(period, salon.timezone);
   return _db.streamSalonAppointmentsForRange(salon.id, r.start, r.end);
 });
 
@@ -300,4 +315,28 @@ final ownerClientSummariesProvider =
       break;
   }
   return _db.streamClientSummaries(salon.id, since: since);
+});
+
+/// Unread in-app notifications of the signed-in user (header badge).
+/// A provider instead of a StreamBuilder created inline in build(), which
+/// re-subscribed on every rebuild and flickered the badge.
+final unreadNotificationsCountProvider =
+    StreamProvider.autoDispose<int>((ref) {
+  final uid = ref.watch(authStateProvider).value?.uid;
+  if (uid == null || uid.isEmpty) return Stream.value(0);
+  return _db.getUnreadNotificationCount(uid);
+});
+
+/// Orders for the statistics screen, server-filtered on the selected
+/// period. The stats used `ownerOrdersProvider`, which is narrowed to the
+/// Orders tab's cutoff (14 days by default): shop revenue / top products
+/// were wrong for any longer period.
+final ownerStatisticsOrdersProvider =
+    StreamProvider.autoDispose<List<OrderModel>>((ref) {
+  if (ref.watch(employeeSessionProvider).value != null) return Stream.value([]);
+  final salon = ref.watch(ownerSalonProvider).value;
+  if (salon == null) return Stream.value([]);
+  final r = resolveStatisticsRange(
+      ref.watch(statisticsPeriodProvider), salon.timezone);
+  return _db.getSalonOrders(salon.id, since: r.start);
 });

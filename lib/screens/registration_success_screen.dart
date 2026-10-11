@@ -26,7 +26,14 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Scaffold(
+    // Salon already created: system back must go to the dashboard, never
+    // back into the onboarding steps (which would re-create it).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goToDashboard();
+      },
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
@@ -163,6 +170,7 @@ class _RegistrationSuccessScreenState extends State<RegistrationSuccessScreen> {
         ),
       ),
       ),
+    ),
     );
   }
 

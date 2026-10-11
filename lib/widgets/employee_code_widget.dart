@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -79,8 +80,40 @@ class _EmployeeCodeSheetState extends State<_EmployeeCodeSheet> {
     super.initState();
     _code = widget.initialCode;
     if (_code == null || _code!.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _generate());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadOrGenerate());
     }
+  }
+
+  // The code now lives in an owner-only private subdoc (it used to sit on
+  // the publicly readable team member doc). Read it there first; only
+  // generate when the member has no code yet — generating would revoke the
+  // code the employee is currently using.
+  Future<void> _loadOrGenerate() async {
+    setState(() => _loading = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('salons')
+          .doc(widget.salonId)
+          .collection('teamMembers')
+          .doc(widget.memberId)
+          .collection('private')
+          .doc('credentials')
+          .get();
+      final code = snap.data()?['loginCode'] as String?;
+      if (!mounted) return;
+      if (code != null && code.isNotEmpty) {
+        setState(() {
+          _code = code;
+          _loading = false;
+        });
+        return;
+      }
+    } catch (_) {
+      // Rules not deployed yet / offline: fall through to generation.
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+    await _generate();
   }
 
   Future<void> _generate() async {

@@ -10,6 +10,7 @@ import '../providers/owner_providers.dart';
 import '../services/app_localizations.dart';
 import '../widgets/member_avatar.dart';
 import '../utils/currency_helper.dart';
+import '../utils/timezone_helper.dart';
 
 class OwnerStatisticsScreen extends ConsumerWidget {
   const OwnerStatisticsScreen({super.key});
@@ -18,7 +19,7 @@ class OwnerStatisticsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final appointmentsAsync = ref.watch(ownerStatisticsAppointmentsProvider);
-    final ordersAsync = ref.watch(ownerOrdersProvider);
+    final ordersAsync = ref.watch(ownerStatisticsOrdersProvider);
     final currency = ref.watch(ownerSalonProvider).value?.currency ?? 'MAD';
 
     return Scaffold(
@@ -141,7 +142,13 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
     final items = _filtered;
     final completed = items.where((a) => a.status == 'completed').toList();
     final cancelled = items.where((a) => a.status == 'cancelled').toList();
-    final upcoming = items.where((a) => a.status == 'upcoming').toList();
+    final noShows = items.where((a) => a.status == 'no_show').toList();
+    final salonTz = ref.watch(ownerSalonProvider).value?.timezone;
+    final wallNow = TimezoneHelper.salonWallClockNow(salonTz);
+    // Truly upcoming only (past RDV not closed yet are not "to come").
+    final upcoming = items
+        .where((a) => a.status == 'upcoming' && a.dateTime.isAfter(wallNow))
+        .toList();
     final totalRevenue =
         completed.fold<double>(0, (s, a) => s + a.price);
     final avgPrice =
@@ -162,7 +169,8 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
     // Activity breakdown — granularity adapts to the selected period.
     // Week / month / 3 months → daily grid. 6 months / 1 year → monthly grid.
     final period = ref.watch(statisticsPeriodProvider);
-    final now = DateTime.now();
+    final now = wallNow;
+    final range = resolveStatisticsRange(period, salonTz);
     final bool isMonthly = period == StatisticsPeriod.last6Months ||
         period == StatisticsPeriod.lastYear;
 
@@ -173,17 +181,18 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
       binCount = monthCount;
       // Oldest month first → current month last. Start-of-month dates.
       binStarts = List.generate(monthCount,
-          (i) => DateTime(now.year, now.month - (monthCount - 1 - i), 1));
+          (i) => DateTime.utc(now.year, now.month - (monthCount - 1 - i), 1));
     } else {
+      // Bins start where the loaded range starts (Monday / 1st of month /
+      // 90 days ago) so the chart and the KPIs cover the same days.
+      final start = range.start;
       final int dayCount = switch (period) {
         StatisticsPeriod.currentWeek => 7,
-        StatisticsPeriod.currentMonth => 30,
-        StatisticsPeriod.last3Months => 90,
-        _ => 30,
+        StatisticsPeriod.currentMonth =>
+          DateTime.utc(now.year, now.month + 1, 0).day,
+        _ => 90,
       };
       binCount = dayCount;
-      final start = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: dayCount - 1));
       binStarts = List.generate(dayCount,
           (i) => start.add(Duration(days: i)));
     }
@@ -192,6 +201,8 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
     final startDate = binStarts.first;
 
     for (final a in items) {
+      // Cancelled / no-show bookings are not activity.
+      if (a.status == 'cancelled' || a.status == 'no_show') continue;
       int? bin;
       if (isMonthly) {
         // Match on (year, month).
@@ -203,10 +214,11 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
           }
         }
       } else {
-        final diff = a.dateTime
-            .difference(DateTime(
-                startDate.year, startDate.month, startDate.day))
-            .inDays;
+        final day = DateTime.utc(
+            a.dateTime.year, a.dateTime.month, a.dateTime.day);
+        final diff = day.isBefore(startDate)
+            ? -1
+            : day.difference(startDate).inHours ~/ 24;
         if (diff >= 0 && diff < binCount) bin = diff;
       }
       if (bin != null) {
@@ -240,7 +252,9 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
     final clientNames = <String, String>{};
     final clientFirstDate = <String, DateTime>{};
     for (final a in completed) {
-      final cid = a.clientId;
+      // Walk-ins all share clientId "walk-in": key them by phone (or name)
+      // so they don't merge into one fake top client.
+      final cid = _clientKey(a);
       clientRevenue[cid] = (clientRevenue[cid] ?? 0) + a.price;
       clientVisits[cid] = (clientVisits[cid] ?? 0) + 1;
       clientNames[cid] = a.clientName ?? '—';
@@ -255,9 +269,12 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
         .where((e) => e.value >= 3)
         .toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final thisMonthStart = DateTime(now.year, now.month, 1);
-    final newClientsThisMonth = clientFirstDate.entries
-        .where((e) => !e.value.isBefore(thisMonthStart))
+    // "New this month" = first visit EVER is this month (client summaries),
+    // not first visit inside the loaded period.
+    final thisMonthStart = DateTime.utc(now.year, now.month, 1);
+    final newClientsThisMonth = (ref.watch(ownerClientSummariesProvider).value ??
+            const [])
+        .where((s) => !s.firstVisit.isBefore(thisMonthStart))
         .toList();
 
     // ── Boutique analytics ──
@@ -333,8 +350,12 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
               const SizedBox(width: 12),
               Expanded(
                 child: _KpiCard(
-                  label: l?.tr('statistics_cancelled') ?? 'Annulés',
-                  value: '${cancelled.length}',
+                  label: noShows.isEmpty
+                      ? (l?.tr('statistics_cancelled') ?? 'Annulés')
+                      : (l?.tr('statistics_cancelled_no_show') ?? 'Annulés + absents'),
+                  value: noShows.isEmpty
+                      ? '${cancelled.length}'
+                      : '${cancelled.length} + ${noShows.length}',
                   icon: Icons.cancel_outlined,
                   iconColor: const Color(0xFFDC2626),
                   iconBg: const Color(0xFFFEE2E2),
@@ -358,7 +379,10 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
               Expanded(
                 child: _KpiCard(
                   label: l?.tr('statistics_peak_hour') ?? 'Heure de pointe',
-                  value: completed.isNotEmpty ? '${peakHour}h' : '—',
+                  value: completed.isNotEmpty
+                      ? DateFormat.Hm(Localizations.localeOf(context).languageCode)
+                          .format(DateTime(2000, 1, 1, peakHour))
+                      : '—',
                   icon: Icons.access_time_rounded,
                   iconColor: const Color(0xFFD97706),
                   iconBg: const Color(0xFFFEF3C7),
@@ -524,8 +548,9 @@ class _StatisticsBodyState extends ConsumerState<_StatisticsBody> {
             _SectionHeader(title: l?.tr('statistics_cancellation_rate') ?? 'Taux d\'annulation'),
             const SizedBox(height: 14),
             _CancellationRate(
-              total: completed.length + cancelled.length,
-              cancelled: cancelled.length,
+              // No-shows count as lost bookings in the rate.
+              total: completed.length + cancelled.length + noShows.length,
+              cancelled: cancelled.length + noShows.length,
             ),
           ],
 
@@ -751,7 +776,6 @@ class _ActivityChart extends StatelessWidget {
   // Start date of each bin (used for monthly view labels/tooltips).
   final List<DateTime> binStarts;
 
-  static const _shortDays = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
   @override
   Widget build(BuildContext context) {
@@ -825,7 +849,11 @@ class _ActivityChart extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _shortDays[date.weekday - 1],
+                        DateFormat.E(Localizations.localeOf(context).languageCode)
+                            .format(date)
+                            .characters
+                            .first
+                            .toUpperCase(),
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight:
@@ -874,10 +902,10 @@ class _ActivityChart extends StatelessWidget {
                   : startDate.add(Duration(days: i));
               final isToday = i == todayIndex;
               final tooltipMsg = isMonthly
-                  ? '${DateFormat('MMMM yyyy', 'fr_FR').format(date)}: ${dayCounts[i]} RDV'
-                  : '${DateFormat('d MMM', 'fr_FR').format(date)}: ${dayCounts[i]} RDV';
+                  ? '${DateFormat('MMMM yyyy', Localizations.localeOf(context).languageCode).format(date)}: ${(AppLocalizations.of(context)?.tr('agenda_count') ?? '{count} RDV').replaceAll('{count}', '${dayCounts[i]}')}'
+                  : '${DateFormat('d MMM', Localizations.localeOf(context).languageCode).format(date)}: ${(AppLocalizations.of(context)?.tr('agenda_count') ?? '{count} RDV').replaceAll('{count}', '${dayCounts[i]}')}';
               final cellText = isMonthly
-                  ? DateFormat('MMM', 'fr_FR')
+                  ? DateFormat('MMM', Localizations.localeOf(context).languageCode)
                       .format(date)
                       .replaceAll('.', '')
                   : '${date.day}';
@@ -953,9 +981,9 @@ class _ActivityChart extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              const Text('Peu',
+              Text(AppLocalizations.of(context)?.tr('statistics_legend_low') ?? 'Peu',
                   style:
-                      TextStyle(fontSize: 10, color: AppColors.secondary400)),
+                      const TextStyle(fontSize: 10, color: AppColors.secondary400)),
               const SizedBox(width: 12),
               Container(
                 width: 12,
@@ -966,9 +994,9 @@ class _ActivityChart extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              const Text('Beaucoup',
+              Text(AppLocalizations.of(context)?.tr('statistics_legend_high') ?? 'Beaucoup',
                   style:
-                      TextStyle(fontSize: 10, color: AppColors.secondary400)),
+                      const TextStyle(fontSize: 10, color: AppColors.secondary400)),
             ],
           ),
         ],
@@ -1450,4 +1478,13 @@ class _EmptySection extends StatelessWidget {
       ),
     );
   }
+}
+
+// Walk-ins all share clientId "walk-in": key them by phone digits (or name)
+// so they don't merge into one fake "top client".
+String _clientKey(AppointmentModel a) {
+  if (a.clientId != 'walk-in') return a.clientId;
+  final digits = (a.clientPhone ?? '').replaceAll(RegExp(r'\D'), '');
+  if (digits.isNotEmpty) return 'walk-in:$digits';
+  return 'walk-in:${(a.clientName ?? '').trim().toLowerCase()}';
 }

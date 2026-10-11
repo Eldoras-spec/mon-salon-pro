@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../models/team_member_model.dart';
 import '../theme/app_colors.dart';
@@ -12,11 +10,9 @@ import '../services/database_service.dart';
 import '../services/fb_events_service.dart';
 import '../services/onboarding_progress.dart';
 import '../services/plan_config.dart';
-import '../services/revenue_cat_service.dart';
 import '../models/salon_model.dart';
 import '../widgets/custom_button.dart';
 import 'registration_success_screen.dart';
-import '../theme/app_constants.dart';
 import '../services/app_localizations.dart';
 import '../widgets/service_form_dialog.dart';
 import '../utils/currency_helper.dart';
@@ -63,128 +59,6 @@ class _OwnerOnboardingStep4ScreenState
   bool _isLoading = false;
   final _databaseService = DatabaseService();
   final List<ServiceEntry> _services = [];
-
-  // ── Apple / Play purchase triggered right after salon creation when
-  // the owner picked Essentiel or Business at the plan screen.
-  //
-  // The salon doc is already in Firestore at this point so the
-  // `onRevenueCatEvent` webhook can stamp `plan` once Apple confirms.
-  // We never block the redirect to the success screen — if the user
-  // cancels or the purchase fails, they keep the Free plan and we tell
-  // them they can upgrade later from "Mon abonnement".
-  Future<void> _triggerOnboardingPurchase(String chosenPlan) async {
-    final l = AppLocalizations.of(context);
-    try {
-      final offerings = await Purchases.getOfferings();
-      final offering = offerings.current;
-      if (offering == null) {
-        debugPrint('Onboarding purchase: no current RC offering — skipping.');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l?.tr('onboarding_purchase_unavailable') ??
-                'Activation de l\'abonnement temporairement indisponible. Vous démarrez en Free, vous pourrez activer votre plan depuis Mon abonnement.'),
-            duration: const Duration(seconds: 5),
-          ));
-        }
-        return;
-      }
-      final packageId = chosenPlan == PlanConfig.planBusiness
-          ? RevenueCatService.packageBusinessMonthly
-          : RevenueCatService.packageEssentielMonthly;
-      Package? pkg;
-      for (final p in offering.availablePackages) {
-        if (p.identifier == packageId) {
-          pkg = p;
-          break;
-        }
-      }
-      if (pkg == null) {
-        debugPrint('Onboarding purchase: package "$packageId" not found in offering.');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l?.tr('onboarding_purchase_unavailable') ??
-                'Activation de l\'abonnement temporairement indisponible. Vous démarrez en Free, vous pourrez activer votre plan depuis Mon abonnement.'),
-            duration: const Duration(seconds: 5),
-          ));
-        }
-        return;
-      }
-      // Android only: defensive replacement-info if user already has an
-      // active sub on a different product (rare during onboarding but
-      // possible if account was deleted/recreated). iOS handles this
-      // natively via subscription groups.
-      GoogleProductChangeInfo? changeInfo;
-      if (Platform.isAndroid) {
-        try {
-          final info = await Purchases.getCustomerInfo();
-          for (final ent in info.entitlements.active.values) {
-            final oldProductId = ent.productIdentifier;
-            if (oldProductId.isNotEmpty &&
-                !pkg.storeProduct.identifier.startsWith(oldProductId)) {
-              changeInfo = GoogleProductChangeInfo(
-                oldProductId,
-                prorationMode:
-                    GoogleProrationMode.immediateWithTimeProration,
-              );
-              break;
-            }
-          }
-        } catch (_) {
-          // Detection failed — fall back to plain purchase.
-        }
-      }
-
-      final customerInfo = changeInfo != null
-          ? await Purchases.purchasePackage(pkg,
-              googleProductChangeInfo: changeInfo)
-          : await Purchases.purchasePackage(pkg);
-      final entitlementKey = chosenPlan == PlanConfig.planBusiness
-          ? RevenueCatService.entitlementBusiness
-          : RevenueCatService.entitlementEssentiel;
-      final active =
-          customerInfo.entitlements.active.containsKey(entitlementKey);
-      if (!mounted) return;
-      if (active) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l?.tr('upgrade.success') ?? 'Plan activé 🎉'),
-          backgroundColor: Colors.green.shade600,
-        ));
-      } else {
-        // Apple accepted the purchase but entitlement isn't reflected
-        // in CustomerInfo yet — webhook race. Plan will be activated
-        // server-side within seconds.
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l?.tr('upgrade.pending') ??
-              'Achat en cours de validation — votre plan sera actif dans quelques instants.'),
-        ));
-      }
-    } on PlatformException catch (e) {
-      final code = PurchasesErrorHelper.getErrorCode(e);
-      if (code == PurchasesErrorCode.purchaseCancelledError) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l?.tr('onboarding_purchase_cancelled') ??
-                'Vous démarrez en Free. Vous pourrez activer votre plan depuis Mon abonnement.'),
-            duration: const Duration(seconds: 5),
-          ));
-        }
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : ${e.message ?? code.name}'),
-          backgroundColor: Colors.red.shade600,
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${l?.tr('common_error_short') ?? 'Erreur'} : $e'),
-          backgroundColor: Colors.red.shade600,
-        ));
-      }
-    }
-  }
 
   // ── Finish setup ─────────────────────────────────────────────────────────────
 
@@ -280,17 +154,9 @@ class _OwnerOnboardingStep4ScreenState
             : 'Africa/Casablanca',
       );
 
-      await _databaseService.saveSalon(salon);
-      // Salon created → onboarding done. Clear the saved draft so the funnel
-      // signal and resume state don't linger.
-      await OnboardingProgress.clear();
-
-      // FB conversion: fire ONLY here (salon actually created = onboarding
-      // finalized), so app-install campaigns optimize on real owners, not on
-      // Firebase signups that abandon at step 1. Fire-and-forget.
-      unawaited(FbEventsService.logSalonCreated());
-
-      // Update each team member's assignedServiceNames
+      // Team assignments FIRST, salon doc LAST: the salon doc is what flips
+      // the router to the dashboard. Written the other way round, a kill in
+      // between left a live salon whose members had no assigned services.
       for (final member in widget.teamMembers) {
         if (member.id.isEmpty) continue;
         final assignedServices = _services
@@ -304,20 +170,18 @@ class _OwnerOnboardingStep4ScreenState
         );
       }
 
-      // ── Trigger Apple / Play Billing if the owner chose a paid plan ──
-      // Salon doc now exists in Firestore so the RC webhook will be
-      // able to update its `plan` field once Apple confirms. On cancel
-      // or error, we keep the salon at `free` and surface a snackbar
-      // pointing to the upgrade screen.
-      final chosenPlan =
-          (finalSalonData['plan'] as String?) ?? PlanConfig.planFree;
-      if (chosenPlan == PlanConfig.planEssentiel ||
-          chosenPlan == PlanConfig.planBusiness) {
-        await _triggerOnboardingPurchase(chosenPlan);
-      }
 
+      await _databaseService.saveSalon(salon);
+      // Salon created → onboarding done. Clear the saved draft so the funnel
+      // signal and resume state don't linger.
+      await OnboardingProgress.clear();
+
+      // FB conversion: fire ONLY here (salon actually created = onboarding
+      // finalized), so app-install campaigns optimize on real owners, not on
+      // Firebase signups that abandon at step 1. Fire-and-forget.
+      unawaited(FbEventsService.logSalonCreated());
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) =>
@@ -418,7 +282,7 @@ class _OwnerOnboardingStep4ScreenState
                   IconButton(
                     icon: const Icon(Icons.arrow_back_ios_new_rounded,
                         size: 18, color: AppColors.brand950),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.maybePop(context),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),

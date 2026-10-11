@@ -25,14 +25,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final _db = DatabaseService();
   final _auth = AuthService();
 
+  late final Stream<List<NotificationModel>>? _stream;
+
   @override
   void initState() {
     super.initState();
-    // Mark all as read when screen opens
+    final uid = widget.userId ?? _auth.currentUserId;
+    _stream = uid == null ? null : _db.getNotifications(uid);
+  }
+
+  // Marked read when LEAVING the screen: marking on open meant the user
+  // never saw which notifications were new (unread dots vanished at once).
+  @override
+  void dispose() {
     final uid = widget.userId ?? _auth.currentUserId;
     if (uid != null) {
-      _db.markAllNotificationsRead(uid);
+      _db.markAllNotificationsRead(uid).catchError((_) {});
     }
+    super.dispose();
   }
 
   String _formatTime(DateTime date, AppLocalizations? l) {
@@ -136,11 +146,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: uid == null
           ? Center(child: Text(l?.tr('notifications_not_connected') ?? 'Non connecté'))
           : StreamBuilder<List<NotificationModel>>(
-              stream: _db.getNotifications(uid),
+              stream: _stream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: AppColors.brand500),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(l?.tr('common_load_error') ??
+                        'Impossible de charger les notifications.'),
                   );
                 }
 

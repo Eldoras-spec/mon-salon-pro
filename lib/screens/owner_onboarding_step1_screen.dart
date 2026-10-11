@@ -19,7 +19,7 @@ import '../services/plan_config.dart';
 import '../utils/currency_helper.dart';
 import '../utils/timezone_helper.dart';
 import '../services/onboarding_progress.dart';
-import 'owner_onboarding_plan_screen.dart';
+import 'owner_onboarding_step2_screen.dart';
 
 class OwnerOnboardingStep1Screen extends StatefulWidget {
   const OwnerOnboardingStep1Screen({super.key, this.initialData});
@@ -144,7 +144,11 @@ class _OwnerOnboardingStep1ScreenState
       final detected = await PlanConfig.detectCurrencyByIp();
       if (!mounted) return;
       // Only overwrite if the user hasn't already interacted with the picker.
-      if (_selectedCurrency == 'MAD') {
+      // Guard: a detected code missing from the dropdown items would make
+      // DropdownButtonFormField assert and crash the step.
+      final supported =
+          CurrencyHelper.allCurrencies.any((c) => c.code == detected);
+      if (_selectedCurrency == 'MAD' && supported) {
         setState(() => _selectedCurrency = detected);
       }
     } catch (_) { /* best effort, fallback to MAD */ }
@@ -325,10 +329,14 @@ class _OwnerOnboardingStep1ScreenState
       },
     };
 
-    // Checkpoint: step-1 done → resume point is the Plan screen.
+    // Checkpoint: step-1 done → resume point is the Photos step. There is
+    // no plan step anymore: every salon starts on Free, and a paid plan is
+    // only offered when adding a 6th team member (Essentiel) or turning on
+    // Zayna (Business).
+    salonData['plan'] = PlanConfig.planFree;
     await OnboardingProgress.save(
-      step: 2,
-      stepName: 'plan',
+      step: 3,
+      stepName: 'photos',
       data: salonData,
       step1Raw: _buildStep1Raw(),
     );
@@ -337,7 +345,7 @@ class _OwnerOnboardingStep1ScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => OwnerOnboardingPlanScreen(salonData: salonData),
+        builder: (context) => OwnerOnboardingStep2Screen(salonData: salonData),
       ),
     );
   }
@@ -788,7 +796,7 @@ class _OwnerOnboardingStep1ScreenState
                         dropdownColor: Colors.white,
                         icon: const Icon(Icons.keyboard_arrow_down,
                             color: AppColors.secondary400),
-                        items: TimezoneHelper.commonTimezones
+                        items: TimezoneHelper.optionsIncluding(_selectedTimezone)
                             .map((t) => DropdownMenuItem<String>(
                                   value: t.iana,
                                   child: Text(
@@ -977,6 +985,28 @@ class _OwnerOnboardingStep1ScreenState
     if (confirm != true) return;
 
     final user = FirebaseAuth.instance.currentUser;
+    // Clean the Firestore traces first (while still signed in): the users
+    // doc keeps the WhatsApp number marked verified, which made the same
+    // number hit "already in use" on the next signup; team members added
+    // during onboarding would be orphaned.
+    if (user != null) {
+      try {
+        final team = await FirebaseFirestore.instance
+            .collection('salons')
+            .doc(user.uid)
+            .collection('teamMembers')
+            .get();
+        for (final d in team.docs) {
+          await d.reference.delete();
+        }
+      } catch (_) {}
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .delete();
+      } catch (_) {}
+    }
     bool deleted = false;
     try {
       await user?.delete();

@@ -119,7 +119,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ref.invalidate(userStreamProvider);
         ref.invalidate(employeeSessionProvider);
 
-        final userModel = await authService.getUserModel(credential.user!.uid);
+        UserModel? userModel;
+        try {
+          userModel = await authService.getUserModel(credential.user!.uid);
+        } catch (_) {
+          // Network hiccup: the router re-reads the profile and shows its
+          // own retry screen; don't block the login here.
+        }
 
         // Block client accounts from logging into the Pro app
         if (userModel != null && userModel.userType == UserType.client) {

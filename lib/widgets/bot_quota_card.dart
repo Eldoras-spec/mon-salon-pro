@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 
 const String _kBotBillingUrl = 'https://monsalon.web.app/bot-billing.html';
@@ -117,7 +118,9 @@ class BotQuotaCard extends StatelessWidget {
                       size: 14, color: AppColors.secondary500),
                   const SizedBox(width: 6),
                   Text(
-                    'One-shot restants : $oneShot',
+                    (AppLocalizations.of(context)?.tr('bot_quota_oneshot_left') ??
+                            'Envois ponctuels restants : {n}')
+                        .replaceAll('{n}', '$oneShot'),
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary600,
@@ -142,8 +145,12 @@ class BotQuotaCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           cancelAtEnd
-                              ? 'Bonus +$subTier msg/mois — annulation programmée'
-                              : 'Abonnement bonus actif : +$subTier msg/mois',
+                              ? (AppLocalizations.of(context)?.tr('bot_quota_bonus_ending') ??
+                                      'Bonus +{n} msg/mois — annulation programmée')
+                                  .replaceAll('{n}', '$subTier')
+                              : (AppLocalizations.of(context)?.tr('bot_quota_bonus_active') ??
+                                      'Abonnement bonus actif : +{n} msg/mois')
+                                  .replaceAll('{n}', '$subTier'),
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -155,14 +162,17 @@ class BotQuotaCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (!Platform.isIOS) ...[
+              // Desktop only: Apple AND Google Play forbid linking to an
+              // external payment page for a digital service inside the app.
+              if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: () => _openBilling(context),
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('Gérer mon abonnement bot'),
+                    label: Text(AppLocalizations.of(context)?.tr('bot_quota_manage') ??
+                        'Gérer mon abonnement bot'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.brand600,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -185,8 +195,9 @@ class BotQuotaCard extends StatelessWidget {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Impossible d\'ouvrir la page de facturation.')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)?.tr('bot_quota_billing_error') ??
+                "Impossible d'ouvrir la page de facturation.")),
       );
     }
   }

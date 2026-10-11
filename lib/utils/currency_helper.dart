@@ -13,6 +13,8 @@ class CurrencyHelper {
     'EGP': _CurrencyInfo('E£', 'EGP', true, 2),
     'SAR': _CurrencyInfo('SAR', 'SAR', false, 2),
     'AED': _CurrencyInfo('AED', 'AED', false, 2),
+    'CAD': _CurrencyInfo('CA\$', 'CAD', true, 2),
+    'CHF': _CurrencyInfo('CHF', 'CHF', false, 2),
   };
 
   /// Format a price with the salon's currency.
@@ -47,6 +49,8 @@ class CurrencyHelper {
     CurrencyOption('EGP', 'EGP — Livre égyptienne'),
     CurrencyOption('SAR', 'SAR — Riyal saoudien'),
     CurrencyOption('AED', 'AED — Dirham émirati'),
+    CurrencyOption('CAD', 'CAD — Dollar canadien'),
+    CurrencyOption('CHF', 'CHF — Franc suisse'),
   ];
 }
 

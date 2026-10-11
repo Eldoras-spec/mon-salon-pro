@@ -35,7 +35,48 @@ class TimezoneHelper {
     TimezoneOption('Asia/Dubai', 'EAU — Dubaï (UTC+4)'),
     TimezoneOption('Asia/Riyadh', 'Arabie Saoudite — Riyad (UTC+3)'),
     TimezoneOption('Asia/Istanbul', 'Turquie — Istanbul (UTC+3)'),
+    TimezoneOption('Europe/Lisbon', 'Portugal — Lisbonne (UTC+0/+1)'),
+    TimezoneOption('Europe/Dublin', 'Irlande — Dublin (UTC+0/+1)'),
+    TimezoneOption('Europe/Amsterdam', 'Pays-Bas — Amsterdam (UTC+1/+2)'),
+    TimezoneOption('Europe/Luxembourg', 'Luxembourg (UTC+1/+2)'),
+    TimezoneOption('Europe/Zurich', 'Suisse — Zurich (UTC+1/+2)'),
+    TimezoneOption('Europe/Vienna', 'Autriche — Vienne (UTC+1/+2)'),
+    TimezoneOption('Europe/Athens', 'Grèce — Athènes (UTC+2/+3)'),
+    TimezoneOption('Europe/Helsinki', 'Finlande — Helsinki (UTC+2/+3)'),
+    TimezoneOption('Africa/Tripoli', 'Libye — Tripoli (UTC+2)'),
+    TimezoneOption('Africa/Khartoum', 'Soudan — Khartoum (UTC+2)'),
+    TimezoneOption('Africa/Nouakchott', 'Mauritanie — Nouakchott (UTC+0)'),
+    TimezoneOption('Africa/Bamako', 'Mali — Bamako (UTC+0)'),
+    TimezoneOption('Africa/Douala', 'Cameroun — Douala (UTC+1)'),
+    TimezoneOption('Africa/Kinshasa', 'RD Congo — Kinshasa (UTC+1)'),
+    TimezoneOption('Africa/Lubumbashi', 'RD Congo — Lubumbashi (UTC+2)'),
+    TimezoneOption('Indian/Antananarivo', 'Madagascar — Antananarivo (UTC+3)'),
+    TimezoneOption('Africa/Djibouti', 'Djibouti (UTC+3)'),
+    TimezoneOption('Asia/Kuwait', 'Koweït (UTC+3)'),
+    TimezoneOption('Asia/Qatar', 'Qatar — Doha (UTC+3)'),
+    TimezoneOption('Asia/Bahrain', 'Bahreïn (UTC+3)'),
+    TimezoneOption('Asia/Muscat', 'Oman — Mascate (UTC+4)'),
+    TimezoneOption('Asia/Beirut', 'Liban — Beyrouth (UTC+2/+3)'),
+    TimezoneOption('Asia/Amman', 'Jordanie — Amman (UTC+3)'),
+    TimezoneOption('Asia/Damascus', 'Syrie — Damas (UTC+3)'),
+    TimezoneOption('Asia/Gaza', 'Palestine — Gaza (UTC+2/+3)'),
+    TimezoneOption('America/Halifax', 'Canada — Atlantique (UTC-4/-3)'),
+    TimezoneOption('America/Edmonton', 'Canada — Edmonton (UTC-7/-6)'),
+    TimezoneOption('America/Vancouver', 'Canada — Vancouver (UTC-8/-7)'),
+    TimezoneOption('America/Phoenix', 'États-Unis — Arizona (UTC-7)'),
   ];
+
+  /// Picker items guaranteed to contain [current] — a stored / IP-detected
+  /// IANA outside the curated list would otherwise make the dropdown assert
+  /// (debug) or silently fall back to Casablanca on the next save.
+  static List<TimezoneOption> optionsIncluding(String? current) {
+    if (current == null ||
+        current.isEmpty ||
+        commonTimezones.any((t) => t.iana == current)) {
+      return commonTimezones;
+    }
+    return [TimezoneOption(current, current), ...commonTimezones];
+  }
 
   static const String defaultTimezone = 'Africa/Casablanca';
 

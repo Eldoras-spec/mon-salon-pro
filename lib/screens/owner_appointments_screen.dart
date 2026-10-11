@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../theme/app_colors.dart';
+import 'owner_agenda_screen.dart';
 import '../models/appointment_model.dart';
 import '../models/promotion_model.dart';
 import '../models/salon_model.dart';
@@ -21,13 +23,14 @@ import '../widgets/reschedule_appointment_sheet.dart';
 
 // ── Filter tabs ──────────────────────────────────────────────────────────────
 
-enum _Filter { all, upcoming, completed, cancelled }
+enum _Filter { all, upcoming, completed, noShow, cancelled }
 
 extension _FilterLabel on _Filter {
   String localizedLabel(AppLocalizations? l) => switch (this) {
         _Filter.all => l?.tr('appointments_filter_all') ?? 'Tous',
         _Filter.upcoming => l?.tr('appointments_filter_upcoming') ?? 'À venir',
         _Filter.completed => l?.tr('appointments_filter_completed') ?? 'Terminés',
+        _Filter.noShow => l?.tr('appointments_filter_no_show') ?? 'Absents',
         _Filter.cancelled => l?.tr('appointments_filter_cancelled') ?? 'Annulés',
       };
 }
@@ -80,12 +83,20 @@ class _OwnerAppointmentsScreenState
   }
 
   List<AppointmentModel> _filter(List<AppointmentModel> all) {
-    final now = DateTime.now();
+    // appointment.dateTime is wall-clock-UTC: compare with the salon's
+    // wall-clock now, not DateTime.now() (off by the salon's UTC offset).
+    final now = TimezoneHelper.salonWallClockNow(
+        ref.read(ownerSalonProvider).value?.timezone);
     var result = switch (_selected) {
       _Filter.all => all,
-      _Filter.upcoming =>
-        all.where((a) => a.status == 'upcoming' && a.dateTime.isAfter(now)).toList(),
+      // Soonest first: the next appointment must be on top, not buried
+      // under bookings weeks away.
+      _Filter.upcoming => all
+          .where((a) => a.status == 'upcoming' && a.dateTime.isAfter(now))
+          .toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime)),
       _Filter.completed => all.where((a) => a.status == 'completed').toList(),
+      _Filter.noShow => all.where((a) => a.status == 'no_show').toList(),
       _Filter.cancelled => all.where((a) => a.status == 'cancelled').toList(),
     };
     if (_memberFilterId != null) {
@@ -139,6 +150,24 @@ class _OwnerAppointmentsScreenState
               ),
             ),
             actions: [
+              // Agenda (timeline) one tap away from the list — it was only
+              // reachable through the "+" menu on mobile.
+              IconButton(
+                tooltip: AppLocalizations.of(context)?.tr('menu_agenda') ?? 'Agenda',
+                icon: const Icon(Icons.view_timeline_outlined,
+                    color: AppColors.brand600),
+                onPressed: () {
+                  final salon = ref.read(ownerSalonProvider).value;
+                  if (salon == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OwnerAgendaScreen(
+                          salonId: salon.id, currency: salon.currency),
+                    ),
+                  );
+                },
+              ),
               IconButton(
                 onPressed: () => _showAddAppointmentSheet(context),
                 icon: Container(
@@ -258,7 +287,7 @@ class _OwnerAppointmentsScreenState
               }
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) => _AppointmentTile(
+                  (context, i) => OwnerAppointmentTile(
                     key: ValueKey(items[i].id),
                     appointment: items[i],
                     onStatusChanged: () {
@@ -424,8 +453,8 @@ class _MemberDropdown extends ConsumerWidget {
 
 // ── Appointment tile ─────────────────────────────────────────────────────────
 
-class _AppointmentTile extends ConsumerStatefulWidget {
-  const _AppointmentTile({
+class OwnerAppointmentTile extends ConsumerStatefulWidget {
+  const OwnerAppointmentTile({
     super.key,
     required this.appointment,
     required this.onStatusChanged,
@@ -434,10 +463,10 @@ class _AppointmentTile extends ConsumerStatefulWidget {
   final VoidCallback onStatusChanged;
 
   @override
-  ConsumerState<_AppointmentTile> createState() => _AppointmentTileState();
+  ConsumerState<OwnerAppointmentTile> createState() => _AppointmentTileState();
 }
 
-class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
+class _AppointmentTileState extends ConsumerState<OwnerAppointmentTile> {
   String _clientName = '…';
   String? _clientPhone;
   bool _updating = false;
@@ -498,6 +527,78 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
       if (mounted) setState(() => _updating = false);
     }
   }
+
+  Widget _noShowTile(AppLocalizations? l) => ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEDD5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.person_off_outlined,
+              color: Color(0xFFC2410C), size: 20),
+        ),
+        title: Text(l?.tr('appointments_mark_no_show') ?? 'Client absent (no-show)',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+            l?.tr('appointments_mark_no_show_hint') ??
+                'Retiré du chiffre d\'affaires, compte dans le risque du client',
+            style: const TextStyle(fontSize: 12)),
+        onTap: () async {
+          Navigator.pop(context);
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (dctx) => AlertDialog(
+              title: Text(l?.tr('appointments_no_show_confirm_title') ??
+                  'Marquer ce client comme absent ?'),
+              content: Text(l?.tr('appointments_no_show_confirm_body') ??
+                  'Le RDV sort du chiffre d\'affaires et les points de fidélité éventuels sont retirés.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dctx, false),
+                  child: Text(l?.tr('common_back') ?? 'Retour'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dctx, true),
+                  style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFC2410C)),
+                  child: Text(l?.tr('common_confirm') ?? 'Confirmer'),
+                ),
+              ],
+            ),
+          );
+          if (ok == true) _updateStatus('no_show');
+        },
+      );
+
+  Widget _whatsAppTile(AppLocalizations? l) => ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFDCFCE7),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.chat_rounded,
+              color: Color(0xFF25D366), size: 20),
+        ),
+        title: Text(l?.tr('appointments_whatsapp_client') ?? 'Écrire sur WhatsApp',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        onTap: () async {
+          Navigator.pop(context);
+          final digits =
+              (widget.appointment.clientPhone ?? '').replaceAll(RegExp(r'\D'), '');
+          final ok = await launchUrl(Uri.parse('https://wa.me/$digits'),
+              mode: LaunchMode.externalApplication);
+          if (!ok && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(l?.tr('common_whatsapp_open_error') ??
+                  "Impossible d'ouvrir WhatsApp."),
+            ));
+          }
+        },
+      );
 
   void _showAssignSheet(List<TeamMemberModel> members) {
     final l = AppLocalizations.of(context);
@@ -578,7 +679,12 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
     final l = AppLocalizations.of(context);
     final a = widget.appointment;
     if (a.status != 'upcoming') return;
-    final members = ref.read(ownerTeamProvider).value ?? [];
+    // Inactive members (incl. those deactivated by the Free cap) can't take
+    // bookings: assigning them bypassed the cap and hid the RDV from the
+    // agenda, which only shows active members.
+    final members = (ref.read(ownerTeamProvider).value ?? [])
+        .where((m) => m.isActive)
+        .toList();
     // `a.dateTime` is wall-clock-UTC of the salon TZ, so the "is this
     // RDV in the past?" check below must compare against the salon's
     // wall-clock-UTC now — not `DateTime.now()` which would drift by
@@ -682,6 +788,10 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
                   _updateStatus('completed');
                 },
               ),
+            if (a.dateTime.isBefore(salonNow))
+              _noShowTile(l),
+            if ((a.clientPhone ?? '').replaceAll(RegExp(r'\D'), '').isNotEmpty)
+              _whatsAppTile(l),
             ListTile(
               leading: Container(
                 width: 36,
@@ -739,9 +849,31 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               ),
               title: Text(l?.tr('appointments_cancel') ?? 'Annuler le rendez-vous',
                   style: const TextStyle(fontWeight: FontWeight.w600)),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                _updateStatus('cancelled');
+                // One mis-tap used to cancel instantly (and notify the client).
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dctx) => AlertDialog(
+                    title: Text(l?.tr('appointments_cancel_confirm_title') ??
+                        'Annuler ce rendez-vous ?'),
+                    content: Text(l?.tr('appointments_cancel_confirm_body') ??
+                        "Le client sera prévenu de l'annulation."),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dctx, false),
+                        child: Text(l?.tr('common_back') ?? 'Retour'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dctx, true),
+                        style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFDC2626)),
+                        child: Text(l?.tr('common_confirm') ?? 'Confirmer'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) _updateStatus('cancelled');
               },
             ),
             _BlacklistTile(appointment: a),
@@ -789,6 +921,11 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
               ),
             ),
             const Divider(height: 1),
+            // The auto-complete CF closes every past RDV as "completed",
+            // absent clients included: let the owner correct it.
+            _noShowTile(l),
+            if ((a.clientPhone ?? '').replaceAll(RegExp(r'\D'), '').isNotEmpty)
+              _whatsAppTile(l),
             ListTile(
               leading: Container(
                 width: 36,
@@ -857,13 +994,18 @@ class _AppointmentTileState extends ConsumerState<_AppointmentTile> {
 
     final timeStr = DateFormat('HH:mm').format(a.dateTime);
     final dateStr =
-        DateFormat('EEE d MMM', 'fr_FR').format(a.dateTime);
+        DateFormat('EEE d MMM', Localizations.localeOf(context).languageCode).format(a.dateTime);
 
     final (statusLabel, statusBg, statusFg) = switch (a.status) {
       'completed' => (
           l?.tr('appointments_status_completed') ?? 'Terminé',
           const Color(0xFFDCFCE7),
           const Color(0xFF16A34A)
+        ),
+      'no_show' => (
+          l?.tr('appointments_status_no_show') ?? 'Absent',
+          const Color(0xFFFFEDD5),
+          const Color(0xFFC2410C)
         ),
       'cancelled' => (
           l?.tr('appointments_status_cancelled') ?? 'Annulé',
@@ -1064,6 +1206,10 @@ class _EmptyState extends StatelessWidget {
       _Filter.completed => (
           Icons.check_circle_outline_rounded,
           l?.tr('appointments_empty_completed') ?? 'Aucun rendez-vous terminé'
+        ),
+      _Filter.noShow => (
+          Icons.person_off_outlined,
+          l?.tr('appointments_empty_no_show') ?? 'Aucun client absent'
         ),
       _Filter.cancelled => (
           Icons.cancel_outlined,
@@ -1520,7 +1666,6 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
     // `.toUtc()` would drift by the device's offset and miss conflicts.
     var cursor = DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day,
         int.parse(parts[0]), int.parse(parts[1]));
-    final iso = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     final packServices = List<String>.from(_selectedPack!['services'] ?? []);
     final services = widget.salon.services.cast<Map<String, dynamic>>();
     final simulatedBusy = <String, List<List<DateTime>>>{};
@@ -1534,7 +1679,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       final svcEnd = cursor.add(Duration(minutes: dur));
 
       final candidates = widget.teamMembers
-          .where((m) => m.isActive && m.assignedServiceNames.contains(sName) && !m.isUnavailableOnDate(_selectedDate))
+          .where((m) => m.isActive && m.assignedServiceNames.contains(sName) && !m.isUnavailableOnDate(_selectedDate) && !_hitsUnavailableSlot(m, cursor, svcEnd))
           .toList();
 
       if (candidates.isEmpty) {
@@ -1642,12 +1787,15 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
             .where((m) =>
                 m.isActive &&
                 m.assignedServiceNames.contains(sName) &&
-                !m.isUnavailableOnDate(_selectedDate))
+                !m.isUnavailableOnDate(_selectedDate) &&
+                !_hitsUnavailableSlot(m, cursor, svcEnd))
             .toList();
         if (priority.isNotEmpty) {
           candidates.sort((a, b) {
-            final aIdx = priority.indexOf(a.name);
-            final bIdx = priority.indexOf(b.name);
+            // memberPriority stores member IDs (team / services screens,
+            // client app, site, Zayna) — sorting by name never matched.
+            final aIdx = priority.indexOf(a.id);
+            final bIdx = priority.indexOf(b.id);
             return (aIdx == -1 ? 999 : aIdx).compareTo(bIdx == -1 ? 999 : bIdx);
           });
         }
@@ -1674,7 +1822,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
 
         if (assigned == null && candidates.isNotEmpty) {
           if (mounted) {
-            _showError('Aucun employé disponible pour "$sName" à ${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}');
+            _showError((AppLocalizations.of(context)?.tr('appointments_error_no_member_for') ?? 'Aucun employé disponible pour « {service} » à {time}')
+                .replaceAll('{service}', sName)
+                .replaceAll('{time}', '${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}'));
             setState(() => _loading = false);
           }
           return;
@@ -1697,6 +1847,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       // total quoted to the walk-in. `_recomputeAppliedPromo` already
       // computed `_promoDiscount` against `_totalPrice`.
       final subtotal = _totalPrice;
+      final groupId = const Uuid().v4();
       for (final b in bookings) {
         final svc = b['service'] as Map<String, dynamic>;
         final member = b['member'] as TeamMemberModel?;
@@ -1712,6 +1863,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
           salonName: widget.salon.name,
           serviceName: svc['name'] as String? ?? 'Service',
           price: finalPrice,
+          groupId: groupId,
           dateTime: DateTime.utc(
             (b['start'] as DateTime).year,
             (b['start'] as DateTime).month,
@@ -1735,7 +1887,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       widget.onCreated();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) _showError('Erreur: $e');
+      if (mounted) _showError(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.');
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -1772,13 +1924,16 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
             .where((m) =>
                 m.isActive &&
                 m.assignedServiceNames.contains(sName) &&
-                !m.isUnavailableOnDate(_selectedDate))
+                !m.isUnavailableOnDate(_selectedDate) &&
+                !_hitsUnavailableSlot(m, cursor, svcEnd))
             .toList();
         // Sort by priority ranking
         if (priority.isNotEmpty) {
           candidates.sort((a, b) {
-            final aIdx = priority.indexOf(a.name);
-            final bIdx = priority.indexOf(b.name);
+            // memberPriority stores member IDs (team / services screens,
+            // client app, site, Zayna) — sorting by name never matched.
+            final aIdx = priority.indexOf(a.id);
+            final bIdx = priority.indexOf(b.id);
             return (aIdx == -1 ? 999 : aIdx).compareTo(bIdx == -1 ? 999 : bIdx);
           });
         }
@@ -1807,7 +1962,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
 
         if (assigned == null && candidates.isNotEmpty) {
           if (mounted) {
-            _showError('Aucun employé disponible pour "$sName" à ${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}');
+            _showError((AppLocalizations.of(context)?.tr('appointments_error_no_member_for') ?? 'Aucun employé disponible pour « {service} » à {time}')
+                .replaceAll('{service}', sName)
+                .replaceAll('{time}', '${cursor.hour.toString().padLeft(2, '0')}:${cursor.minute.toString().padLeft(2, '0')}'));
             setState(() => _loading = false);
           }
           return;
@@ -1824,18 +1981,29 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
         cursor = svcEnd;
       }
 
-      // Create all appointments
+      // Create all appointments. The pack price is spread across its
+      // services pro rata of their unit prices (same as the client app):
+      // storing unit prices inflated revenue by the pack discount.
       final clientWhatsapp = _clientWhatsappE164;
+      final packPrice = (_selectedPack!['price'] as num?)?.toDouble() ?? 0.0;
+      final unitTotal = bookings.fold<double>(0, (sum, b) =>
+          sum + (((b['service'] as Map)['price'] as num?)?.toDouble() ?? 0.0));
+      final groupId = const Uuid().v4();
       for (final b in bookings) {
         final svc = b['service'] as Map<String, dynamic>;
         final member = b['member'] as TeamMemberModel?;
+        final unit = (svc['price'] as num?)?.toDouble() ?? 0.0;
+        final price = unitTotal > 0
+            ? packPrice * unit / unitTotal
+            : packPrice / bookings.length;
         final appointment = AppointmentModel(
           id: const Uuid().v4(),
           clientId: 'walk-in',
           salonId: widget.salon.id,
           salonName: widget.salon.name,
           serviceName: svc['name'] as String? ?? 'Service',
-          price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+          price: double.parse(price.toStringAsFixed(2)),
+          groupId: groupId,
           dateTime: b['start'] as DateTime,
           status: 'upcoming',
           createdAt: DateTime.now(),
@@ -1853,7 +2021,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       widget.onCreated();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) _showError('Erreur: $e');
+      if (mounted) _showError(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.');
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -1869,7 +2037,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       _showError(l?.tr('appointments_error_service') ?? 'Veuillez sélectionner un service');
       return;
     }
-    if (_selectedPack == null && !_isMultiService && _selectedMember == null) {
+    // A salon without an active team (solo owner) books unassigned RDV.
+    final hasActiveTeam = widget.teamMembers.any((m) => m.isActive);
+    if (_selectedPack == null && !_isMultiService && _selectedMember == null && hasActiveTeam) {
       _showError(l?.tr('appointments_error_employee') ?? 'Veuillez sélectionner un employé');
       return;
     }
@@ -1898,8 +2068,9 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       return;
     }
     // Check member unavailability
-    if (_selectedMember!.isUnavailableOnDate(_selectedDate)) {
-      _showError((l?.tr('appointments_error_unavailable_day') ?? '{name} est indisponible ce jour-là').replaceAll('{name}', _selectedMember!.name));
+    final member = _selectedMember;
+    if (member != null && member.isUnavailableOnDate(_selectedDate)) {
+      _showError((l?.tr('appointments_error_unavailable_day') ?? '{name} est indisponible ce jour-là').replaceAll('{name}', member.name));
       return;
     }
 
@@ -1907,7 +2078,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
     final isoDate =
         '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     final duration = _packDuration ?? (_selectedService!['duration'] as int? ?? 30);
-    final slots = _selectedMember!.unavailableSlots[isoDate] ?? [];
+    final slots = member?.unavailableSlots[isoDate] ?? const <String>[];
     if (slots.isNotEmpty) {
       final startMin = _selectedTime.hour * 60 + _selectedTime.minute;
       final endMin = startMin + duration;
@@ -1919,7 +2090,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
         final sMin = int.parse(sp[0]) * 60 + int.parse(sp[1]);
         final eMin = int.parse(ep[0]) * 60 + int.parse(ep[1]);
         if (startMin < eMin && endMin > sMin) {
-          _showError((l?.tr('appointments_error_unavailable_slot') ?? '{name} est indisponible sur ce créneau ({slot})').replaceAll('{name}', _selectedMember!.name).replaceAll('{slot}', '${parts[0]} - ${parts[1]}'));
+          _showError((l?.tr('appointments_error_unavailable_slot') ?? '{name} est indisponible sur ce créneau ({slot})').replaceAll('{name}', (member?.name ?? '')).replaceAll('{slot}', '${parts[0]} - ${parts[1]}'));
           return;
         }
       }
@@ -1951,7 +2122,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
       final newStart = dateTime;
       final newEnd = dateTime.add(Duration(minutes: duration));
       final conflict = existing.where((a) {
-        if (a.assignedMemberId != _selectedMember!.id) return false;
+        if (a.assignedMemberId != member?.id) return false;
         final aEnd = a.dateTime.add(Duration(minutes: a.durationMinutes));
         return newStart.isBefore(aEnd) && newEnd.isAfter(a.dateTime);
       }).firstOrNull;
@@ -1960,7 +2131,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
             '${conflict.dateTime.hour.toString().padLeft(2, '0')}:${conflict.dateTime.minute.toString().padLeft(2, '0')}';
         if (mounted) {
           _showError(
-              (l?.tr('appointments_error_conflict') ?? '{name} a déjà un RDV à {time}').replaceAll('{name}', _selectedMember!.name).replaceAll('{time}', conflictTime));
+              (l?.tr('appointments_error_conflict') ?? '{name} a déjà un RDV à {time}').replaceAll('{name}', (member?.name ?? '')).replaceAll('{time}', conflictTime));
           setState(() => _loading = false);
         }
         return;
@@ -1982,8 +2153,8 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
                 _clientWhatsappE164!.isNotEmpty)
             ? _clientWhatsappE164
             : null,
-        assignedMemberId: _selectedMember!.id,
-        assignedMemberName: _selectedMember!.name,
+        assignedMemberId: member?.id,
+        assignedMemberName: member?.name,
       );
 
       await DatabaseService().createAppointment(appointment);
@@ -2124,7 +2295,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${_selectedServices.length} services · ${_totalDuration}min · ${CurrencyHelper.format(_totalPrice, widget.salon.currency)}',
+                    '${(AppLocalizations.of(context)?.tr('appointments_n_services') ?? '{n} services').replaceAll('{n}', '${_selectedServices.length}')} · ${_totalDuration} min · ${CurrencyHelper.format(_totalPrice, widget.salon.currency)}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -2267,7 +2438,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
                           color: AppColors.brand950,
                         )),
                     const SizedBox(height: 2),
-                    Text('${packServices.length} services · ${totalDur}min · ${CurrencyHelper.format(price, widget.salon.currency)}',
+                    Text('${(AppLocalizations.of(context)?.tr('appointments_n_services') ?? '{n} services').replaceAll('{n}', '${packServices.length}')} · ${totalDur} min · ${CurrencyHelper.format(price, widget.salon.currency)}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.brand700,
@@ -2288,7 +2459,7 @@ class _OwnerAddAppointmentSheetState extends State<OwnerAddAppointmentSheet> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final bottom = MediaQuery.of(context).viewInsets.bottom;
-    final dateStr = DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
+    final dateStr = DateFormat('EEE d MMM yyyy', Localizations.localeOf(context).languageCode).format(_selectedDate);
     final timeStr =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
 
@@ -2930,4 +3101,27 @@ class _BlacklistTileState extends State<_BlacklistTile> {
       onTap: _toggleBlacklist,
     );
   }
+}
+
+/// True when [start, end) (wall-clock-UTC) overlaps one of the member's
+/// hourly unavailability slots ("HH:mm-HH:mm") on that day. Pack and
+/// multi-service auto-assignment used to ignore these slots.
+bool _hitsUnavailableSlot(TeamMemberModel m, DateTime start, DateTime end) {
+  final iso = '${start.year}-${start.month.toString().padLeft(2, '0')}'
+      '-${start.day.toString().padLeft(2, '0')}';
+  final slots = m.unavailableSlots[iso] ?? const <String>[];
+  if (slots.isEmpty) return false;
+  final sMin = start.hour * 60 + start.minute;
+  final eMin = sMin + end.difference(start).inMinutes;
+  for (final slot in slots) {
+    final parts = slot.split('-');
+    if (parts.length != 2) continue;
+    final a = parts[0].split(':');
+    final b = parts[1].split(':');
+    if (a.length != 2 || b.length != 2) continue;
+    final from = (int.tryParse(a[0]) ?? 0) * 60 + (int.tryParse(a[1]) ?? 0);
+    final to = (int.tryParse(b[0]) ?? 0) * 60 + (int.tryParse(b[1]) ?? 0);
+    if (sMin < to && eMin > from) return true;
+  }
+  return false;
 }

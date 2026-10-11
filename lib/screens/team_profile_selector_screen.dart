@@ -13,7 +13,6 @@ import '../providers/owner_providers.dart';
 import '../providers/team_providers.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
-import '../widgets/employee_code_widget.dart';
 import '../widgets/member_avatar.dart';
 
 /// Save FCM token for a team member so Cloud Functions can send individual push notifications.
@@ -261,7 +260,6 @@ class _MemberTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l = AppLocalizations.of(context);
     // New gérant accounts have no PIN (they authenticate on their own
     // device via the WhatsApp login code). Old accounts created before
     // that change still carry a `pinHash` — keep prompting for them so
@@ -322,37 +320,9 @@ class _MemberTile extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          // Share-code button — full width, explicit label.
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => showEmployeeCodeSheet(
-                context: context,
-                salonId: member.salonId,
-                memberId: member.id,
-                memberName: member.name,
-                initialCode: member.loginCode,
-              ),
-              icon: const Icon(Icons.key_rounded, size: 16),
-              label: Text(
-                l?.tr('selector_share_code') ?? 'Partager le code de connexion',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.brand300,
-                side: BorderSide(
-                    color: AppColors.brand600.withValues(alpha: 0.4), width: 1),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
+          // No "share login code" button here: this selector is visible to
+          // whoever holds the shared device (an employee could read the
+          // gérant's code). Codes are shared from the owner's Team screen.
         ],
       ),
     );

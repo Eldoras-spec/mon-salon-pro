@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show FieldValue;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -277,10 +278,15 @@ class _SalonBody extends StatelessWidget {
       );
       final url = await storageRef.getDownloadURL();
 
-      // Put new cover as first image, keep existing gallery images
+      // The cover is images[0], and the gallery shows ALL images. Replace
+      // slot 0 only when it is itself a previous cover upload (and delete
+      // that file); otherwise insert in front — overwriting slot 0 used to
+      // silently drop the first gallery photo and orphan its file.
       final updatedImages = List<String>.from(salon.images);
-      if (updatedImages.isNotEmpty) {
+      if (updatedImages.isNotEmpty && updatedImages[0].contains('%2Fcover_')) {
+        final old = updatedImages[0];
         updatedImages[0] = url;
+        FirebaseStorage.instance.refFromURL(old).delete().catchError((_) {});
       } else {
         updatedImages.insert(0, url);
       }
@@ -793,9 +799,18 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
       ];
       final fullAddress = addressParts.join(', ');
 
-      // Forward geocoding if GPS wasn't used or coords changed
+      // Forward geocoding when GPS wasn't used, or when the typed address
+      // changed without a fresh GPS fix (otherwise the map pin stays on the
+      // old address forever).
       double? lat = _latitude;
       double? lng = _longitude;
+      final gpsMoved = _latitude != widget.salon.latitude ||
+          _longitude != widget.salon.longitude;
+      final addressChanged = fullAddress != widget.salon.address;
+      if (addressChanged && !gpsMoved) {
+        lat = null;
+        lng = null;
+      }
       if (lat == null || lng == null) {
         try {
           final locations = await locationFromAddress(fullAddress);
@@ -804,6 +819,10 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
             lng = locations.first.longitude;
           }
         } catch (_) {}
+        // Geocoder miss on a salon that already had a pin: keep the old pin
+        // rather than blocking the save.
+        lat ??= _latitude;
+        lng ??= _longitude;
         if (lat == null || lng == null) {
           if (!mounted) return;
           final l = AppLocalizations.of(context);
@@ -821,39 +840,14 @@ class _EditInfoSheetState extends State<_EditInfoSheet> {
         }
       }
 
-      final updated = SalonModel(
-        id: widget.salon.id,
-        ownerId: widget.salon.ownerId,
+      final updated = widget.salon.copyWith(
         name: name,
         city: city,
-        country: _country.text.trim().isNotEmpty ? _country.text.trim() : 'Maroc',
+        country: _country.text.trim().isNotEmpty ? _country.text.trim() : widget.salon.country,
         address: fullAddress,
         description: _description.text.trim(),
-        category: widget.salon.category,
-        currency: widget.salon.currency,
-        rating: widget.salon.rating,
-        reviewCount: widget.salon.reviewCount,
-        images: widget.salon.images,
-        logoUrl: widget.salon.logoUrl,
-        phone: widget.salon.phone,
-        workingHours: widget.salon.workingHours,
-        services: widget.salon.services,
-        serviceCategories: widget.salon.serviceCategories,
-        servicePacks: widget.salon.servicePacks,
         latitude: lat,
         longitude: lng,
-        closedDates: widget.salon.closedDates,
-        createdAt: widget.salon.createdAt,
-        socialLinks: widget.salon.socialLinks,
-        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
-        aiPromosEnabled: widget.salon.aiPromosEnabled,
-        aiPromoConfig: widget.salon.aiPromoConfig,
-        googleReviewReward: widget.salon.googleReviewReward,
-        slug: widget.salon.slug,
-        isPremium: widget.salon.isPremium,
-        galleryStorageUsed: widget.salon.galleryStorageUsed,
-        salonType: widget.salon.salonType,
-        timezone: widget.salon.timezone,
       );
       await DatabaseService().saveSalon(updated);
       widget.onSaved();
@@ -1054,13 +1048,10 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
         'close': data?['close'] ?? '18:00',
       };
     }
-    // Pre-fill with the salon's stored timezone — fall back to default if
-    // the stored value isn't in the curated list (defensive: keeps the
-    // dropdown happy even for unusual TZs typed in by hand).
-    final stored = widget.salon.timezone;
-    final isCurated = TimezoneHelper.commonTimezones
-        .any((t) => t.iana == stored);
-    _timezone = isCurated ? stored : TimezoneHelper.defaultTimezone;
+    // Pre-fill with the salon's stored timezone. The dropdown uses
+    // optionsIncluding(), so an IANA outside the curated list is kept as-is
+    // instead of being silently reset to Casablanca on save.
+    _timezone = widget.salon.timezone;
     // Drop past closures (salon TZ) — once a day passes it's auto-removed here
     // (and persisted on the next save).
     final tzNow = TimezoneHelper.salonNow(_timezone);
@@ -1125,37 +1116,8 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
   Future<void> _save() async {
     setState(() => _loading = true);
     try {
-      final updated = SalonModel(
-        id: widget.salon.id,
-        ownerId: widget.salon.ownerId,
-        name: widget.salon.name,
-        city: widget.salon.city,
-        country: widget.salon.country,
-        address: widget.salon.address,
-        description: widget.salon.description,
-        category: widget.salon.category,
-        rating: widget.salon.rating,
-        reviewCount: widget.salon.reviewCount,
-        images: widget.salon.images,
-        logoUrl: widget.salon.logoUrl,
-        phone: widget.salon.phone,
+      final updated = widget.salon.copyWith(
         workingHours: Map<String, dynamic>.from(_hours),
-        services: widget.salon.services,
-        serviceCategories: widget.salon.serviceCategories,
-        servicePacks: widget.salon.servicePacks,
-        latitude: widget.salon.latitude,
-        longitude: widget.salon.longitude,
-        createdAt: widget.salon.createdAt,
-        socialLinks: widget.salon.socialLinks,
-        currency: widget.salon.currency,
-        rewardPointsEnabled: widget.salon.rewardPointsEnabled,
-        aiPromosEnabled: widget.salon.aiPromosEnabled,
-        aiPromoConfig: widget.salon.aiPromoConfig,
-        googleReviewReward: widget.salon.googleReviewReward,
-        slug: widget.salon.slug,
-        isPremium: widget.salon.isPremium,
-        galleryStorageUsed: widget.salon.galleryStorageUsed,
-        salonType: widget.salon.salonType,
         timezone: _timezone,
         closedDates: _closedDates.toList(),
       );
@@ -1350,7 +1312,7 @@ class _EditHoursSheetState extends State<_EditHoursSheet> {
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.secondary800),
                         dropdownColor: Colors.white,
-                        items: TimezoneHelper.commonTimezones
+                        items: TimezoneHelper.optionsIncluding(_timezone)
                             .map((t) => DropdownMenuItem<String>(
                                   value: t.iana,
                                   child: Text(
@@ -1660,8 +1622,10 @@ class _GallerySectionState extends State<_GallerySection> {
       await DatabaseService().updateSalonImages(widget.salon.id, _images);
 
       // Update storage usage
-      final newUsage = currentUsage + fileSize;
-      await DatabaseService().updateSalonField(widget.salon.id, 'galleryStorageUsed', newUsage);
+      // Atomic increment: an absolute value computed from a stale snapshot
+      // drifted upward over time ("Stockage plein" shown wrongly).
+      await DatabaseService().updateSalonField(
+          widget.salon.id, 'galleryStorageUsed', FieldValue.increment(fileSize));
 
       setState(() {});
     } catch (e) {
@@ -1700,12 +1664,20 @@ class _GallerySectionState extends State<_GallerySection> {
     setState(() => _uploading = true);
     try {
       final url = _images[index];
-      // Delete from Storage
+      // Delete from Storage, and give the freed bytes back to the quota
+      // counter (it was only ever incremented).
+      int freed = 0;
       try {
-        await FirebaseStorage.instance.refFromURL(url).delete();
+        final ref = FirebaseStorage.instance.refFromURL(url);
+        freed = (await ref.getMetadata()).size ?? 0;
+        await ref.delete();
       } catch (_) {}
       _images.removeAt(index);
       await DatabaseService().updateSalonImages(widget.salon.id, _images);
+      if (freed > 0) {
+        await DatabaseService().updateSalonField(widget.salon.id,
+            'galleryStorageUsed', FieldValue.increment(-freed));
+      }
       setState(() {});
     } catch (e) {
       if (mounted) {

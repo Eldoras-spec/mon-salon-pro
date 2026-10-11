@@ -21,7 +21,7 @@ class PlanConfig {
 
   /// Free plan: max number of team members (gerant + member docs under
   /// `salons/{id}/teamMembers`). Owner is not counted — only team docs.
-  static const int freeTeamMemberCap = 2;
+  static const int freeTeamMemberCap = 5;
 
   /// Monthly subscription prices per plan per currency.
   /// Aligned with Apple App Store Connect overrides (2026-04-24). Native
@@ -58,7 +58,7 @@ class PlanConfig {
   };
 
   /// Length of the Essentiel free trial in days.
-  static const int essentielTrialDays = 90; // 3 months
+  static const int essentielTrialDays = 30; // 1 month (store intro offer)
 
   /// Country ISO-2 → local currency mapping.
   /// WAEMU (Western African CFA franc) uses XOF.
@@ -73,7 +73,8 @@ class PlanConfig {
     'US': 'USD',
     // WAEMU / CEMAC zones
     'SN': 'XOF', 'CI': 'XOF', 'BF': 'XOF', 'ML': 'XOF', 'NE': 'XOF',
-    'TG': 'XOF', 'BJ': 'XOF', 'CM': 'XOF', 'GA': 'XOF', 'CG': 'XOF',
+    'TG': 'XOF', 'BJ': 'XOF',
+    'CM': 'XAF', 'GA': 'XAF', 'CG': 'XAF', 'TD': 'XAF', 'CF': 'XAF',
     'GB': 'GBP',
     'CA': 'CAD',
   };

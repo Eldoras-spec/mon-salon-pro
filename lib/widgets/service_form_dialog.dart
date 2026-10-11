@@ -12,10 +12,10 @@ import '../theme/app_colors.dart';
 import '../theme/app_constants.dart';
 import '../models/team_member_model.dart';
 import '../services/app_localizations.dart';
-import '../services/auth_service.dart';
 import 'member_avatar.dart';
 import 'service_options_tutorial_dialog.dart';
 import '../utils/currency_helper.dart';
+import '../utils/number_format.dart';
 import '../utils/media_compressor.dart';
 
 /// Shared service creation/editing dialog.
@@ -85,7 +85,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _nameCtrl = TextEditingController(text: e?['name'] as String? ?? '');
     _priceCtrl = TextEditingController(
       text: e != null && (e['price'] as num?) != null && (e['price'] as num) > 0
-          ? (e['price'] as num).toStringAsFixed(0)
+          ? formatDecimal(e['price'] as num)
           : '',
     );
     _descCtrl = TextEditingController(text: e?['description'] as String? ?? '');
@@ -106,7 +106,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     _paymentMode = rawMode == 'fixed_above' ? 'none' : rawMode;
     final pv = e?['paymentValue'];
     _paymentValueCtrl = TextEditingController(
-      text: pv is num && pv > 0 ? pv.toStringAsFixed(0) : '',
+      text: pv is num && pv > 0 ? formatDecimal(pv) : '',
     );
   }
 
@@ -136,19 +136,27 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
       _scrollToMemberError();
       return;
     }
+    // Start from the existing service so fields this form doesn't own
+    // (visibleTo for private chat services, memberPriority, groupId…) are
+    // preserved — rebuilding from scratch made private services public and
+    // wiped employee priorities.
     final entry = <String, dynamic>{
+      ...?widget.existing,
       'name': _nameCtrl.text.trim(),
       'category': _category,
       'description': _descCtrl.text.trim(),
-      'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
+      'price': parseDecimal(_priceCtrl.text) ?? 0.0,
       'duration': _duration,
       'assignedMembers': _selectedMembers.toList(),
       'isComplex': _isComplex,
       'paymentMode': _paymentMode,
-      if (_paymentMode == 'percentage')
-        'paymentValue':
-            double.tryParse(_paymentValueCtrl.text.trim()) ?? 0.0,
     };
+    entry.remove('paymentValue');
+    entry.remove('options');
+    if (_paymentMode == 'percentage') {
+      entry['paymentValue'] =
+          (parseDecimal(_paymentValueCtrl.text) ?? 0.0).clamp(0.0, 100.0);
+    }
     if (_isComplex && _optionSteps.isNotEmpty) {
       entry['options'] = _optionSteps.map((step) {
         final choices = (step['choices'] as List? ?? []).map((c) {
@@ -296,7 +304,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
                             children: [
                               _label(l?.tr('salon_service_form_price') ?? 'Prix (${CurrencyHelper.symbol(widget.currency)})'),
                               const SizedBox(height: 6),
-                              _field(_priceCtrl, '0', keyboardType: TextInputType.number),
+                              _field(_priceCtrl, '0', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                             ],
                           ),
                         ),
@@ -1436,7 +1444,9 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     }
 
     try {
-      final uid = AuthService().currentUserId ?? '';
+      // Salon folder, not the signed-in uid: for a gérant session the uid
+      // isn't the salon id (wrong folder / rejected by storage rules).
+      final uid = widget.salonId;
       final ts = DateTime.now().millisecondsSinceEpoch;
       final ext = fileToUpload.path.split('.').last;
 
@@ -1459,7 +1469,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
 
       // Update storage counter
       await DatabaseService().updateSalonField(
-        widget.salonId, 'galleryStorageUsed', widget.galleryStorageUsed + fileSize,
+        widget.salonId, 'galleryStorageUsed', FieldValue.increment(fileSize),
       );
 
       // Generate and upload thumbnail for videos
@@ -1552,7 +1562,7 @@ class _ServiceFormDialogState extends State<ServiceFormDialog> {
     } catch (e) {
       progressOverlay?.remove();
       if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(AppLocalizations.of(ctx)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'), backgroundColor: Colors.red));
       }
     }
   }

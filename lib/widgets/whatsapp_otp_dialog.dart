@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 
 /// Result returned by [WhatsappOtpDialog.show] when the user successfully
@@ -107,7 +108,8 @@ class WhatsappOtpDialog extends StatefulWidget {
     } catch (e) {
       if (!context.mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Erreur: $e'),
+        content: Text(AppLocalizations.of(context)?.tr('otp_send_error') ??
+            "Erreur lors de l'envoi du code WhatsApp."),
         backgroundColor: Colors.redAccent,
       ));
       return null;
@@ -269,7 +271,8 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
       } else {
         setState(() {
           _verifying = false;
-          _errorText = 'Réponse inattendue. Réessayez.';
+          _errorText = AppLocalizations.of(context)?.tr('otp_unexpected') ??
+              'Réponse inattendue. Réessayez.';
         });
       }
     } on FirebaseFunctionsException catch (e) {
@@ -278,8 +281,9 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
       if (_attempts >= _maxAttempts) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Trop de tentatives échouées.'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)?.tr('otp_too_many') ??
+                'Trop de tentatives échouées.'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -287,7 +291,8 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
       }
       setState(() {
         _verifying = false;
-        _errorText = e.message ?? 'Code incorrect.';
+        _errorText = e.message ??
+            (AppLocalizations.of(context)?.tr('otp_wrong_code') ?? 'Code incorrect.');
       });
       // Clear the inputs so the user can re-enter cleanly.
       for (final c in _inputControllers) {
@@ -298,7 +303,8 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
       if (!mounted) return;
       setState(() {
         _verifying = false;
-        _errorText = 'Erreur: $e';
+        _errorText = AppLocalizations.of(context)?.tr('otp_unexpected') ??
+            'Réponse inattendue. Réessayez.';
       });
     }
   }
@@ -330,9 +336,10 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Vérification WhatsApp',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            Text(
+              AppLocalizations.of(context)?.tr('otp_title') ??
+                  'Vérification WhatsApp',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -418,8 +425,11 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
               onPressed: canResend ? () => _sendCode(resend: true) : null,
               child: Text(
                 canResend
-                    ? 'Renvoyer le code'
-                    : 'Renvoyer dans ${_resendTimer}s',
+                    ? (AppLocalizations.of(context)?.tr('otp_resend') ??
+                        'Renvoyer le code')
+                    : (AppLocalizations.of(context)?.tr('otp_resend_in') ??
+                            'Renvoyer dans {s}s')
+                        .replaceAll('{s}', '$_resendTimer'),
                 style: TextStyle(
                   color: canResend
                       ? AppColors.brand600
@@ -433,8 +443,9 @@ class _WhatsappOtpDialogState extends State<WhatsappOtpDialog> {
               onPressed: _verifying
                   ? null
                   : () => Navigator.of(context).pop(),
-              child: const Text('Annuler',
-                  style: TextStyle(color: AppColors.secondary500)),
+              child: Text(
+                  AppLocalizations.of(context)?.tr('common_cancel') ?? 'Annuler',
+                  style: const TextStyle(color: AppColors.secondary500)),
             ),
           ],
         ),

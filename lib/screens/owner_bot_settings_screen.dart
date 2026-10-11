@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/owner_providers.dart';
+import '../services/notification_service.dart';
 import '../services/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bot_quota_card.dart';
@@ -560,10 +561,7 @@ class _ProactivesCard extends StatelessWidget {
   });
 
   Future<void> _toggle(String key, bool value) async {
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.proactiveOptIn.$key': value});
+    await _botUpdate(salonId, {'botConfig.proactiveOptIn.$key': value});
   }
 
   /// Show the same in-app explanation Zayna would give when she returns
@@ -769,10 +767,7 @@ class _BehaviourCard extends StatelessWidget {
   const _BehaviourCard({required this.salonId, required this.cfg});
 
   Future<void> _set(String field, dynamic value) async {
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.$field': value});
+    await _botUpdate(salonId, {'botConfig.$field': value});
   }
 
   @override
@@ -1222,10 +1217,7 @@ class _PauseCard extends StatelessWidget {
       );
       if (ok != true) return;
     }
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.paused': v});
+    await _botUpdate(salonId, {'botConfig.paused': v});
   }
 
   @override
@@ -1390,21 +1382,16 @@ class _ClientCapCardState extends State<_ClientCapCard> {
       );
       if (ok != true) return;
     }
+    if (!mounted) return;
     setState(() => _enabled = v);
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(widget.salonId)
-        .update({
+    await _botUpdate(widget.salonId, {
       'botConfig.clientDailyCap.enabled': v,
       'botConfig.clientDailyCap.messagesPerDay': _value.toInt(),
     });
   }
 
   Future<void> _writeValue(int v) async {
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(widget.salonId)
-        .update({'botConfig.clientDailyCap.messagesPerDay': v});
+    await _botUpdate(widget.salonId, {'botConfig.clientDailyCap.messagesPerDay': v});
   }
 
   @override
@@ -1564,10 +1551,7 @@ class _EscalationCard extends StatelessWidget {
   ];
 
   Future<void> _toggle(String key, bool v) async {
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.escalationCases.$key': v});
+    await _botUpdate(salonId, {'botConfig.escalationCases.$key': v});
   }
 
   String _label(AppLocalizations? l, String key) {
@@ -1668,20 +1652,14 @@ class _AllergensCardState extends State<_AllergensCard> {
     final v = value.trim();
     if (v.isEmpty) return;
     if (widget.allergens.contains(v)) return;
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(widget.salonId)
-        .update({
+    await _botUpdate(widget.salonId, {
       'botConfig.allergens': FieldValue.arrayUnion([v])
     });
     _ctrl.clear();
   }
 
   Future<void> _remove(String v) async {
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(widget.salonId)
-        .update({
+    await _botUpdate(widget.salonId, {
       'botConfig.allergens': FieldValue.arrayRemove([v])
     });
   }
@@ -1792,10 +1770,7 @@ class _FaqBaseCard extends StatelessWidget {
 
   Future<void> _delete(String id) async {
     final updated = faqBase.where((q) => q['id'] != id).toList();
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.faqBase': updated});
+    await _botUpdate(salonId, {'botConfig.faqBase': updated});
   }
 
   Future<void> _editOrAdd(BuildContext context, [Map<String, dynamic>? existing]) async {
@@ -1866,10 +1841,7 @@ class _FaqBaseCard extends StatelessWidget {
     } else {
       updated.add(entry);
     }
-    await FirebaseFirestore.instance
-        .collection('salons')
-        .doc(salonId)
-        .update({'botConfig.faqBase': updated});
+    await _botUpdate(salonId, {'botConfig.faqBase': updated});
   }
 
   @override
@@ -2508,5 +2480,26 @@ class _Feature extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Every Zayna setting write goes through here: a refused / offline write
+/// used to fail silently (the switch just snapped back) — now the owner
+/// gets told.
+Future<void> _botUpdate(String salonId, Map<String, Object?> data) async {
+  try {
+    await FirebaseFirestore.instance
+        .collection('salons')
+        .doc(salonId)
+        .update(data);
+  } catch (e) {
+    final ctx = NotificationService.navigatorKey.currentContext;
+    if (ctx != null && ctx.mounted) {
+      ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(
+        content: Text(AppLocalizations.of(ctx)?.tr('common_save_error') ??
+            'Enregistrement impossible. Réessayez.'),
+        backgroundColor: Colors.red,
+      ));
+    }
   }
 }

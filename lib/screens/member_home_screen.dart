@@ -407,9 +407,9 @@ class _MyAppointmentsTab extends ConsumerWidget {
                 child: Text((l?.tr('gerant_conges_error') ?? 'Erreur: {error}')
                     .replaceAll('{error}', '$e'))),
             data: (all) {
-              final appointments = all
+              final appointments = _chronological(all
                   .where((a) => a.assignedMemberId == member.id)
-                  .toList();
+                  .toList());
               if (appointments.isEmpty) {
                 return _EmptyAppointments(
                   message: l?.tr('member_no_appointments_assigned') ??
@@ -419,8 +419,8 @@ class _MyAppointmentsTab extends ConsumerWidget {
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: appointments.length,
-                itemBuilder: (ctx, i) =>
-                    _MemberAppointmentCard(appointment: appointments[i]),
+                itemBuilder: (ctx, i) => _MemberAppointmentCard(
+                    appointment: appointments[i], member: member),
               );
             },
           ),
@@ -462,7 +462,8 @@ class _AllAppointmentsTab extends ConsumerWidget {
             error: (e, _) => Center(
                 child: Text((l?.tr('gerant_conges_error') ?? 'Erreur: {error}')
                     .replaceAll('{error}', '$e'))),
-            data: (appointments) {
+            data: (raw) {
+              final appointments = _chronological(raw);
               if (appointments.isEmpty) {
                 return _EmptyAppointments(
                   message: l?.tr('member_no_appointments_salon') ??
@@ -605,7 +606,7 @@ class _MemberAppointmentCardState extends ConsumerState<_MemberAppointmentCard> 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Erreur: $e'),
+              content: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.'),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating),
         );
@@ -620,7 +621,7 @@ class _MemberAppointmentCardState extends ConsumerState<_MemberAppointmentCard> 
     final l = AppLocalizations.of(context);
     final a = widget.appointment;
     final timeStr = DateFormat('HH:mm').format(a.dateTime);
-    final dateStr = DateFormat('EEE d MMM', 'fr_FR').format(a.dateTime);
+    final dateStr = DateFormat('EEE d MMM', Localizations.localeOf(context).languageCode).format(a.dateTime);
 
     final (statusLabel, statusBg, statusFg) = switch (a.status) {
       'completed' => (
@@ -633,13 +634,22 @@ class _MemberAppointmentCardState extends ConsumerState<_MemberAppointmentCard> 
           const Color(0xFFFEE2E2),
           const Color(0xFFDC2626)
         ),
+      'no_show' => (
+          l?.tr('appointments_status_no_show') ?? 'Absent',
+          const Color(0xFFFFEDD5),
+          const Color(0xFFC2410C)
+        ),
       _ => (l?.tr('appointments_status_upcoming') ?? 'À venir', const Color(0xFFEFF6FF), const Color(0xFF2563EB)),
     };
 
     final canAssign = widget.member != null &&
         a.status == 'upcoming' &&
         a.assignedMemberId == null;
-    final canReschedule = a.status == 'upcoming';
+    // A member only moves their OWN bookings (or unassigned ones) — not a
+    // colleague's from the "all appointments" tab.
+    final canReschedule = a.status == 'upcoming' &&
+        (a.assignedMemberId == null ||
+            a.assignedMemberId == widget.member?.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -953,6 +963,31 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
               final isOff = _recurringDaysOff.contains(weekday);
               return GestureDetector(
                 onTap: _saving ? null : () async {
+                  // Turning a weekday OFF: refuse if upcoming RDV already
+                  // fall on that weekday (they would silently stay booked).
+                  if (!isOff) {
+                    try {
+                      final upcoming = await DatabaseService()
+                          .getUpcomingAppointmentsForMember(
+                              widget.salonId, widget.member.id);
+                      final clash = upcoming
+                          .where((a) => a.dateTime.weekday == weekday)
+                          .length;
+                      if (clash > 0) {
+                        if (!context.mounted) return;
+                        final l = AppLocalizations.of(context);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text((l?.tr('appointments_error_appointments_on_day') ??
+                                  'Impossible : vous avez {count} rendez-vous ce jour')
+                              .replaceAll('{count}', '$clash')),
+                          backgroundColor: const Color(0xFFDC2626),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                        return;
+                      }
+                    } catch (_) {}
+                  }
+                  final previous = List<int>.from(_recurringDaysOff);
                   setState(() {
                     if (isOff) {
                       _recurringDaysOff.remove(weekday);
@@ -971,6 +1006,8 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                     _syncProvider(null, null, recurringDaysOff: List<int>.from(_recurringDaysOff));
                   } catch (e) {
                     debugPrint('Error saving recurring days off: $e');
+                    // Roll the UI back — it showed a day off that wasn't saved.
+                    if (mounted) setState(() => _recurringDaysOff = previous);
                   }
                 },
                 child: Container(
@@ -1023,9 +1060,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
       list.remove(hStr);
     } else {
       // Check for appointments in this hour
-      final now = DateTime.now();
-      final slotStart = DateTime(now.year, now.month, now.day, hour, 0);
-      final slotEnd = DateTime(now.year, now.month, now.day, hour + 1, 0);
+      final now = _salonNow();
+      final slotStart = DateTime.utc(now.year, now.month, now.day, hour, 0);
+      final slotEnd = DateTime.utc(now.year, now.month, now.day, hour + 1, 0);
       final appointments = await DatabaseService()
           .getAppointmentsForMemberOnDate(
               widget.salonId, widget.member.id, slotStart, slotEnd);
@@ -1076,7 +1113,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
       updated.remove(key);
     } else {
       // Check if member has appointments on this day before marking unavailable
-      final dayStart = DateTime(day.year, day.month, day.day);
+      final dayStart = DateTime.utc(day.year, day.month, day.day);
       final dayEnd = dayStart.add(const Duration(days: 1));
       final appointments = await DatabaseService()
           .getAppointmentsForMemberOnDate(
@@ -1125,7 +1162,9 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
   void _syncProvider(Set<String>? dates, Map<String, List<String>>? slots, {List<int>? recurringDaysOff}) {
     if (!mounted) return;
     final current = ref.read(activeTeamMemberProvider);
-    if (current != null) {
+    // Only mirror into the active-profile cache when editing ONESELF (the
+    // owner can now edit any member's unavailability from the team sheet).
+    if (current != null && current.id == widget.member.id) {
       ref.read(activeTeamMemberProvider.notifier).state = current.copyWith(
         unavailableDates: dates?.toList() ?? current.unavailableDates,
         unavailableSlots: slots ?? current.unavailableSlots,
@@ -1198,7 +1237,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
   @override
   Widget build(BuildContext context) {
     super.build(context); // required by AutomaticKeepAliveClientMixin
-    final loc = Localizations.localeOf(context).languageCode == 'fr' ? 'fr_FR' : 'en_US';
+    final loc = Localizations.localeOf(context).languageCode;
     final monthLabel =
         DateFormat('MMMM yyyy', loc).format(_focusedMonth);
     final unavailableThisMonth = _unavailable
@@ -1275,7 +1314,7 @@ class _UnavailabilityTabState extends ConsumerState<UnavailabilityTab>
                         size: 18, color: AppColors.brand600),
                     const SizedBox(width: 8),
                     Text(
-                      (AppLocalizations.of(context)?.tr('unavailability_today') ?? "Aujourd'hui — {date}").replaceAll('{date}', DateFormat('d MMMM', Localizations.localeOf(context).languageCode == 'fr' ? 'fr_FR' : 'en_US').format(DateTime.now())),
+                      (AppLocalizations.of(context)?.tr('unavailability_today') ?? "Aujourd'hui — {date}").replaceAll('{date}', DateFormat('d MMMM', Localizations.localeOf(context).languageCode).format(DateTime.now())),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
@@ -1945,7 +1984,7 @@ class _MemberAddAppointmentSheetState
 
     setState(() => _loading = true);
     try {
-      final dateTime = DateTime(
+      final dateTime = DateTime.utc(
         _selectedDate.year,
         _selectedDate.month,
         _selectedDate.day,
@@ -1988,16 +2027,29 @@ class _MemberAddAppointmentSheetState
           chain = _selectedServices;
         }
         var cursor = dateTime;
+        // Pack: spread the pack price pro rata of unit prices (unit prices
+        // alone inflated revenue). Multi-service keeps unit prices.
+        final unitTotal = chain.fold<double>(
+            0, (s, c) => s + ((c['price'] as num?)?.toDouble() ?? 0.0));
+        final packPrice = (_selectedPack?['price'] as num?)?.toDouble();
+        final groupId = const Uuid().v4();
         for (final svc in chain) {
           final sName = svc['name'] as String? ?? 'Service';
           final svcDur = (svc['duration'] as int?) ?? 30;
+          final unit = (svc['price'] as num?)?.toDouble() ?? 0.0;
+          final price = packPrice == null
+              ? unit
+              : (unitTotal > 0
+                  ? packPrice * unit / unitTotal
+                  : packPrice / chain.length);
           await DatabaseService().createAppointment(AppointmentModel(
             id: const Uuid().v4(),
             clientId: 'walk-in',
             salonId: widget.salon.id,
             salonName: widget.salon.name,
             serviceName: sName,
-            price: (svc['price'] as num?)?.toDouble() ?? 0.0,
+            price: double.parse(price.toStringAsFixed(2)),
+            groupId: groupId,
             dateTime: cursor,
             status: 'upcoming',
             createdAt: DateTime.now(),
@@ -2320,7 +2372,7 @@ class _MemberAddAppointmentSheetState
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     final services = _memberServices;
     final dateStr =
-        DateFormat('EEE d MMM yyyy', 'fr_FR').format(_selectedDate);
+        DateFormat('EEE d MMM yyyy', Localizations.localeOf(context).languageCode).format(_selectedDate);
     final timeStr =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
 
@@ -2800,4 +2852,17 @@ class _MemberPeriodChips extends StatelessWidget {
       }).toList(),
     );
   }
+}
+
+/// Employee lists: today's and upcoming RDV first, soonest on top, then
+/// the history (most recent first). A plain date-desc sort buried today's
+/// bookings under appointments weeks away.
+List<AppointmentModel> _chronological(List<AppointmentModel> list) {
+  final now = DateTime.now().toUtc();
+  final today = DateTime.utc(now.year, now.month, now.day);
+  final upcoming = list.where((a) => !a.dateTime.isBefore(today)).toList()
+    ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+  final past = list.where((a) => a.dateTime.isBefore(today)).toList()
+    ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+  return [...upcoming, ...past];
 }

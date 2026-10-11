@@ -63,7 +63,7 @@ class ConversationsScreen extends ConsumerWidget {
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
-                  child: Text('Erreur: $e',
+                  child: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.',
                       style: TextStyle(color: AppColors.secondary400)),
                 ),
               ),
@@ -149,7 +149,7 @@ class _ConversationTile extends StatelessWidget {
         msgDate.day == now.day;
     final timeLabel = isToday
         ? DateFormat('HH:mm').format(msgDate)
-        : DateFormat('d MMM', 'fr_FR').format(msgDate);
+        : DateFormat('d MMM', Localizations.localeOf(context).languageCode).format(msgDate);
 
     return InkWell(
       onTap: () => Navigator.push(

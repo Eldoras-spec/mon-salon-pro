@@ -226,8 +226,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return true;
   }
 
+  void _markRead() {
+    if (widget.isClient) {
+      _svc.markReadByClient(widget.conversationId);
+    } else {
+      _svc.markReadByOwner(widget.conversationId);
+    }
+  }
+
   @override
   void dispose() {
+    _markRead();
     WidgetsBinding.instance.removeObserver(this);
     _clearActiveChat();
     if (NotificationService.activeConversationId == widget.conversationId) {
@@ -290,6 +299,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Messages arriving while the chat is open must not stay "unread":
+    // the counter was only reset in initState, so the badge kept
+    // counting them after leaving.
+    ref.listen(messagesProvider(widget.conversationId), (prev, next) {
+      final before = prev?.value?.length ?? 0;
+      final after = next.value?.length ?? 0;
+      if (after > before) _markRead();
+    });
     final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: AppColors.secondary50,
@@ -332,7 +349,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   error: (e, _) => Center(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Text('Erreur: $e',
+                      child: Text(AppLocalizations.of(context)?.tr('common_error_retry') ?? 'Une erreur est survenue. Réessayez.',
                           style:
                               TextStyle(color: AppColors.secondary400)),
                     ),
@@ -471,7 +488,7 @@ class _DateDivider extends StatelessWidget {
         date.year == now.year && date.month == now.month && date.day == now.day;
     final label = isToday
         ? (l?.tr('chat_today') ?? "Aujourd'hui")
-        : DateFormat('d MMMM yyyy', 'fr_FR').format(date);
+        : DateFormat('d MMMM yyyy', Localizations.localeOf(context).languageCode).format(date);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -842,8 +859,14 @@ class _MessageBubbleState extends State<_MessageBubble> {
       final clientId = parts[0];
       final salonId = parts.sublist(1).join('_');
 
-      final salonDoc = await FirebaseFirestore.instance.collection('salons').doc(salonId).get();
-      if (salonDoc.exists) {
+      // Read-modify-write of the services array inside a transaction: a
+      // plain get + update could overwrite a concurrent edit (services
+      // screen, Zayna owner tools). Failure is surfaced, not swallowed.
+      final salonRef = FirebaseFirestore.instance.collection('salons').doc(salonId);
+      try {
+        await FirebaseFirestore.instance.runTransaction((tx) async {
+        final salonDoc = await tx.get(salonRef);
+        if (!salonDoc.exists) return;
         // Create personalized service visible only to this client
         final services = List<Map<String, dynamic>>.from(salonDoc.data()?['services'] ?? []);
         services.add({
@@ -856,7 +879,17 @@ class _MessageBubbleState extends State<_MessageBubble> {
           if (message.imageUrl != null) 'imageUrl': message.imageUrl,
           if (assignedMember != null) 'assignedMembers': [assignedMember.name],
         });
-        await FirebaseFirestore.instance.collection('salons').doc(salonId).update({'services': services});
+        tx.update(salonRef, {'services': services});
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)?.tr('common_save_error') ??
+                'Enregistrement impossible. Réessayez.'),
+            backgroundColor: Colors.red,
+          ));
+        }
+        return;
       }
     }
 
