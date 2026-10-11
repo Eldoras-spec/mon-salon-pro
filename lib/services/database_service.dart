@@ -1167,32 +1167,62 @@ class DatabaseService {
 
   // ─── Blacklist Management ────────────────────────────────────────────────
 
+  // The salon doc is public, so entries (name + phone) live in the
+  // owner/staff-only `blacklist` sub-collection. Booking surfaces only `get`
+  // PII-free markers in `blockedKeys` (u_<uid> / p_<digits>) — keep the key
+  // format in sync with the client app, booking.js and the CF.
+  static List<String> _blacklistKeys(Map<String, dynamic> entry) {
+    final userId = (entry['userId'] as String?)?.trim() ?? '';
+    final digits = (entry['phone'] as String? ?? '').replaceAll(RegExp(r'\D'), '');
+    return [
+      if (userId.isNotEmpty && userId != 'walk-in') 'u_$userId',
+      if (digits.length >= 6) 'p_$digits',
+    ];
+  }
+
   Future<List<Map<String, dynamic>>> getBlacklist(String salonId) async {
-    final doc = await _firestore.collection('salons').doc(salonId).get();
-    final data = doc.data();
-    if (data == null || data['blacklist'] == null) return [];
-    return List<Map<String, dynamic>>.from(data['blacklist']);
+    final snap = await _firestore
+        .collection('salons')
+        .doc(salonId)
+        .collection('blacklist')
+        .get();
+    return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
   }
 
   Future<void> addToBlacklist(String salonId, Map<String, dynamic> entry) async {
-    await _firestore.collection('salons').doc(salonId).update({
-      'blacklist': FieldValue.arrayUnion([entry]),
-    });
+    final salonRef = _firestore.collection('salons').doc(salonId);
+    final batch = _firestore.batch();
+    batch.set(salonRef.collection('blacklist').doc(), entry);
+    for (final key in _blacklistKeys(entry)) {
+      batch.set(salonRef.collection('blockedKeys').doc(key), {
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 
   Future<void> removeFromBlacklist(String salonId, Map<String, dynamic> entry) async {
-    await _firestore.collection('salons').doc(salonId).update({
-      'blacklist': FieldValue.arrayRemove([entry]),
-    });
+    final salonRef = _firestore.collection('salons').doc(salonId);
+    final id = entry['id'] as String?;
+    // Another entry may block the same uid / phone — keep its markers.
+    final remaining = (await getBlacklist(salonId)).where((e) => e['id'] != id);
+    final stillBlocked = remaining.expand(_blacklistKeys).toSet();
+    final batch = _firestore.batch();
+    if (id != null) batch.delete(salonRef.collection('blacklist').doc(id));
+    for (final key in _blacklistKeys(entry)) {
+      if (!stillBlocked.contains(key)) {
+        batch.delete(salonRef.collection('blockedKeys').doc(key));
+      }
+    }
+    await batch.commit();
   }
 
   Future<bool> isBlacklisted(String salonId, {String? phone, String? userId}) async {
-    final blacklist = await getBlacklist(salonId);
-    for (final entry in blacklist) {
-      if (phone != null && entry['phone'] == phone) return true;
-      if (userId != null && entry['userId'] == userId) return true;
-    }
-    return false;
+    final keys = _blacklistKeys({'phone': phone, 'userId': userId});
+    if (keys.isEmpty) return false;
+    final markers = _firestore.collection('salons').doc(salonId).collection('blockedKeys');
+    final snaps = await Future.wait(keys.map((k) => markers.doc(k).get()));
+    return snaps.any((s) => s.exists);
   }
 
   // ─── Gallery Management ──────────────────────────────────────────────────
